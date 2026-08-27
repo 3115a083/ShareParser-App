@@ -81,6 +81,38 @@ object GuidedRuleFactory {
         }
     }
 
+    fun extractorFromSelection(
+        sourceText: String,
+        selectionStart: Int,
+        selectionEnd: Int,
+        key: String,
+        source: InputSource,
+        required: Boolean = false
+    ): ExtractorRule {
+        val start = minOf(selectionStart, selectionEnd).coerceIn(0, sourceText.length)
+        val end = maxOf(selectionStart, selectionEnd).coerceIn(0, sourceText.length)
+        require(end > start) { "Bitte zuerst einen Textbereich markieren." }
+
+        val lineStart = sourceText.lastIndexOf('\n', (start - 1).coerceAtLeast(0)).let { if (it < 0) 0 else it + 1 }
+        val lineEnd = sourceText.indexOf('\n', end).let { if (it < 0) sourceText.length else it }
+        val prefix = sourceText.substring(lineStart, start)
+        val suffix = sourceText.substring(end, lineEnd)
+        val selected = sourceText.substring(start, end)
+
+        val regex = if (prefix.isBlank() && suffix.isBlank()) {
+            "(?m)^\\s*(.+?)\\s*$"
+        } else {
+            "(?m)^${flexibleLiteral(prefix)}(.+?)${flexibleLiteral(suffix)}$"
+        }
+        return ExtractorRule(
+            key = sanitizeKey(key),
+            regex = regex,
+            required = required,
+            source = source,
+            sampleLabel = selected.take(80)
+        )
+    }
+
     fun matcherFromText(text: String): MatcherRule = MatcherRule(
         regex = Regex.escape(text.trim()),
         ignoreCase = true,
@@ -114,6 +146,13 @@ object GuidedRuleFactory {
 
     private fun separatorOf(line: String): String = listOf(":", "=", "–", "—")
         .firstOrNull { it in line } ?: ":"
+
+    private fun flexibleLiteral(value: String): String {
+        if (value.isEmpty()) return ""
+        return value.split(Regex("\\s+"))
+            .filter { it.isNotEmpty() }
+            .joinToString("\\s+") { Regex.escape(it) }
+    }
 
     private fun suggestedKey(label: String, index: Int): String {
         val normalized = sanitizeKey(
