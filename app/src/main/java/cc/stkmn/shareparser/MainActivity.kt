@@ -50,13 +50,23 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         latestIntent.value = intent
-        setContent { ShareParserApp(latestIntent.value) }
+        setContent {
+            ShareParserApp(
+                startIntent = latestIntent.value,
+                onIntentConsumed = ::clearIncomingIntent
+            )
+        }
     }
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
         latestIntent.value = intent
+    }
+
+    private fun clearIncomingIntent() {
+        latestIntent.value = null
+        setIntent(Intent())
     }
 }
 
@@ -73,7 +83,7 @@ private sealed interface Screen {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun ShareParserApp(startIntent: Intent?) {
+private fun ShareParserApp(startIntent: Intent?, onIntentConsumed: () -> Unit) {
     val context = LocalContext.current
     val repository = remember { ProfileRepository(context) }
     var profiles by remember { mutableStateOf(repository.profiles()) }
@@ -102,12 +112,14 @@ private fun ShareParserApp(startIntent: Intent?) {
     }
 
     LaunchedEffect(startIntent) {
-        val payload = startIntent?.sharedPayload()
-        val failure = startIntent?.isFailureLink() == true
+        if (startIntent == null) return@LaunchedEffect
+        val payload = startIntent.sharedPayload()
+        val failure = startIntent.isFailureLink()
         when {
             failure -> screen = Screen.Failure
             payload != null -> screen = if (profiles.isEmpty()) Screen.Editor(null, sample = payload) else Screen.Shared(payload)
         }
+        onIntentConsumed()
     }
 
     MaterialTheme(colorScheme = dynamicOrDefaultScheme()) {
