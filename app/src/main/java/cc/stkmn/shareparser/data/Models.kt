@@ -6,7 +6,7 @@ import java.util.UUID
 
 @Serializable
 data class ProfileBundle(
-    val schemaVersion: Int = 3,
+    val schemaVersion: Int = 4,
     val profile: Profile
 )
 
@@ -24,7 +24,8 @@ data class Profile(
 data class MatcherRule(
     val regex: String,
     val ignoreCase: Boolean = true,
-    val friendlyText: String = ""
+    val friendlyText: String = "",
+    val variableKey: String = ""
 )
 
 @Serializable
@@ -88,6 +89,9 @@ enum class UrlOpenMode {
 @Serializable
 enum class DateTimeLocale {
     DE_DE,
+    EN_US,
+    EN_GB,
+    ISO,
     SYSTEM
 }
 
