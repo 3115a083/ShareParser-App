@@ -1,0 +1,3 @@
+ShareParser verarbeitet Text, der aus anderen Android-Apps geteilt wird. Wiederverwendbare Profile erkennen ähnliche Eingaben, extrahieren Werte über Muster und reguläre Ausdrücke und können daraus vorausgefüllte Kalendereinträge, URLs oder neu aufgebaute Texte erzeugen.
+
+Die Verarbeitung erfolgt lokal. ShareParser enthält keine Werbung, Analyse- oder Tracking-SDKs und fordert keinen Internetzugriff an.
