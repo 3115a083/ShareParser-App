@@ -2,10 +2,12 @@ package cc.stkmn.shareparser.engine
 
 import android.Manifest
 import android.app.Activity
+import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
+import android.os.Build
 import android.provider.CalendarContract
 import androidx.core.content.ContextCompat
 import cc.stkmn.shareparser.WebViewActivity
@@ -85,7 +87,19 @@ class ActionExecutor(context: Context, private val settings: AppSettings = AppSe
         }
         if (title.isBlank()) warnings += "Titel ist leer. Bitte den Termin-Titel im Kalender prüfen."
 
-        launch(intent, "calendar", "Kalender konnte nicht geöffnet werden")
+        try {
+            launch(intent, "calendar", "Kalender konnte nicht geöffnet werden")
+        } catch (e: ProcessingException) {
+            if (!e.technicalDetails.contains("ActivityNotFoundException")) throw e
+
+            val fallback = Intent(Intent.ACTION_VIEW, CalendarContract.CONTENT_URI)
+            try {
+                launch(fallback, "calendar", "Kalender konnte nicht geöffnet werden")
+                warnings += "Deine Kalender-App unterstützt das Vorausfüllen über Android nicht. Der Kalender wurde geöffnet, der Termin muss manuell angelegt werden."
+            } catch (_: ProcessingException) {
+                throw e
+            }
+        }
         return ExecutionResult(warnings.distinct())
     }
 
@@ -181,22 +195,29 @@ class ActionExecutor(context: Context, private val settings: AppSettings = AppSe
     private fun launch(intent: Intent, failingField: String, message: String) {
         val safeIntent = Intent(intent)
         if (launchContext !is Activity) safeIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+
         try {
-            if (safeIntent.resolveActivity(appContext.packageManager) == null) {
-                throw ProcessingException(
-                    "Keine passende App für diese Aktion gefunden.",
-                    failingField,
-                    safeIntent.toUri(0)
-                )
-            }
+            // Do not call resolveActivity() here. On Android 11+ package visibility can
+            // hide an otherwise launchable external activity from PackageManager queries.
+            // startActivity() itself is allowed to resolve it and is the recommended path.
             launchContext.startActivity(safeIntent)
-        } catch (e: ProcessingException) {
-            throw e
+        } catch (e: ActivityNotFoundException) {
+            throw ProcessingException(
+                "Keine passende App für diese Aktion gefunden.",
+                failingField,
+                "${e::class.java.name}: ${e.message ?: "No activity found"}\nAndroid API: ${Build.VERSION.SDK_INT}\nIntent: ${runCatching { safeIntent.toUri(0) }.getOrDefault("unavailable")}"
+            )
+        } catch (e: SecurityException) {
+            throw ProcessingException(
+                "Android hat das Öffnen dieser Aktion aus Sicherheitsgründen blockiert.",
+                failingField,
+                "${e::class.java.name}: ${e.message ?: e.toString()}\nAndroid API: ${Build.VERSION.SDK_INT}\nIntent: ${runCatching { safeIntent.toUri(0) }.getOrDefault("unavailable")}"
+            )
         } catch (e: Exception) {
             throw ProcessingException(
                 message,
                 failingField,
-                "${e::class.java.name}: ${e.message ?: e.toString()}\nIntent: ${runCatching { safeIntent.toUri(0) }.getOrDefault("unavailable")}" 
+                "${e::class.java.name}: ${e.message ?: e.toString()}\nAndroid API: ${Build.VERSION.SDK_INT}\nIntent: ${runCatching { safeIntent.toUri(0) }.getOrDefault("unavailable")}"
             )
         }
     }
