@@ -43,7 +43,7 @@ import cc.stkmn.shareparser.data.SharedPayload
 import cc.stkmn.shareparser.ui.FailureScreen
 import cc.stkmn.shareparser.ui.HomeScreen
 import cc.stkmn.shareparser.ui.ProfileEditorScreen
-import cc.stkmn.shareparser.ui.SettingsScreen
+import cc.stkmn.shareparser.ui.RegionalSettingsScreen
 import cc.stkmn.shareparser.ui.SharedScreen
 
 class MainActivity : ComponentActivity() {
@@ -182,7 +182,7 @@ private fun ShareParserApp(startIntent: Intent?, onIntentConsumed: () -> Unit) {
                         },
                         onSettings = { screen = Screen.Settings }
                     )
-                    Screen.Settings -> SettingsScreen(repository = repository)
+                    Screen.Settings -> RegionalSettingsScreen(repository = repository)
                     is Screen.Editor -> ProfileEditorScreen(
                         existing = current.profile,
                         sample = current.sample,
