@@ -22,7 +22,6 @@ object FailureNotifier {
 
     fun show(context: Context, report: FailureReport) {
         Toast.makeText(context, report.message, Toast.LENGTH_LONG).show()
-        createChannel(context)
 
         if (Build.VERSION.SDK_INT >= 33 &&
             ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
@@ -30,28 +29,31 @@ object FailureNotifier {
             return
         }
 
-        val details = Intent(context, MainActivity::class.java).apply {
-            data = Uri.parse("shareparser://failure/${report.id}")
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
-        }
-        val pending = PendingIntent.getActivity(
-            context,
-            report.id.hashCode(),
-            details,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
-        val notification = NotificationCompat.Builder(context, CHANNEL)
-            .setSmallIcon(R.drawable.ic_notification)
-            .setContentTitle("ShareParser: Verarbeitung fehlgeschlagen")
-            .setContentText(report.message)
-            .setPriority(NotificationCompat.PRIORITY_LOW)
-            .setSilent(true)
-            .setAutoCancel(true)
-            .setTimeoutAfter(20_000)
-            .setContentIntent(pending)
-            .build()
+        runCatching {
+            createChannel(context)
+            val details = Intent(context, MainActivity::class.java).apply {
+                data = Uri.parse("shareparser://failure/${report.id}")
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            }
+            val pending = PendingIntent.getActivity(
+                context,
+                report.id.hashCode(),
+                details,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+            val notification = NotificationCompat.Builder(context, CHANNEL)
+                .setSmallIcon(R.drawable.ic_notification)
+                .setContentTitle("ShareParser: Verarbeitung fehlgeschlagen")
+                .setContentText(report.message)
+                .setPriority(NotificationCompat.PRIORITY_LOW)
+                .setSilent(true)
+                .setAutoCancel(true)
+                .setTimeoutAfter(20_000)
+                .setContentIntent(pending)
+                .build()
 
-        NotificationManagerCompat.from(context).notify(report.id.hashCode(), notification)
+            NotificationManagerCompat.from(context).notify(report.id.hashCode(), notification)
+        }
     }
 
     private fun createChannel(context: Context) {
