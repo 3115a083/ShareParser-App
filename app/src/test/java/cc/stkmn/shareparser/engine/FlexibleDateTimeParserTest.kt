@@ -22,7 +22,7 @@ class FlexibleDateTimeParserTest {
     @Test
     fun parsesShortYearAndSlashDate() {
         val result = FlexibleDateTimeParser.parse("14/12/26 12:30", reference = reference)
-        assertEquals(ZonedDateTime.of(2026, 12, 14, 12, 30, 0, 0, 0, zone).toInstant().toEpochMilli(), result.startEpochMs)
+        assertEquals(ZonedDateTime.of(2026, 12, 14, 12, 30, 0, 0, zone).toInstant().toEpochMilli(), result.startEpochMs)
     }
 
     @Test
