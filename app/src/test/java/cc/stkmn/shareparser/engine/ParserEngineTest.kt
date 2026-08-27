@@ -31,6 +31,34 @@ class ParserEngineTest {
     }
 
     @Test
+    fun extractedVariableCanTriggerProfile() {
+        val profile = Profile(
+            id = "1",
+            name = "Variable trigger",
+            extractors = listOf(
+                ExtractorRule("booking", "Buchung: ([A-Z0-9-]+)", required = false)
+            ),
+            matchers = listOf(
+                MatcherRule(regex = ".+", friendlyText = "booking erkannt", variableKey = "booking")
+            )
+        )
+        assertTrue(engine.matchingProfiles("Buchung: ICE-612", listOf(profile)).isNotEmpty())
+        assertTrue(engine.matchingProfiles("Keine Buchung enthalten", listOf(profile)).isEmpty())
+    }
+
+    @Test
+    fun variableTriggerCanRestrictExtractedValue() {
+        val profile = Profile(
+            id = "1",
+            name = "Restricted variable trigger",
+            extractors = listOf(ExtractorRule("kind", "Typ: (.+)")),
+            matchers = listOf(MatcherRule(regex = "Termin", ignoreCase = true, variableKey = "kind"))
+        )
+        assertTrue(engine.matchingProfiles("Typ: Terminbestätigung", listOf(profile)).isNotEmpty())
+        assertTrue(engine.matchingProfiles("Typ: Rechnung", listOf(profile)).isEmpty())
+    }
+
+    @Test
     fun canExtractFromMailSubjectOnly() {
         val profile = Profile(
             "1",
