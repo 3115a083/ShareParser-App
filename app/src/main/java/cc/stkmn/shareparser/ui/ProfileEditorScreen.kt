@@ -131,8 +131,12 @@ internal fun ProfileEditorScreen(
 
     fun validate(profile: Profile): String? {
         if (profile.name.isBlank()) return "Bitte einen Profilnamen eingeben."
+        val validMatcherVariables = reservedVariables + profile.extractors.map { it.key }
         profile.matchers.forEach { matcher ->
             runCatching { Regex(matcher.regex) }.getOrElse { return "Ein Erkennungsmerkmal ist ungültig: ${it.message}" }
+            if (matcher.variableKey.isNotBlank() && matcher.variableKey !in validMatcherVariables) {
+                return "Das Erkennungsmerkmal verwendet die unbekannte Variable '${matcher.variableKey}'."
+            }
         }
         val keys = mutableSetOf<String>()
         for (rule in profile.extractors) {
@@ -241,36 +245,65 @@ internal fun ProfileEditorScreen(
         item { HorizontalDivider() }
         item { SectionTitle("Wann soll dieses Profil angeboten werden?") }
         item {
-            Text("Erkennungsmerkmale sind feste Textteile, die in ähnlichen Nachrichten wieder vorkommen. Nur wenn alle ausgewählten Merkmale gefunden werden, bietet ShareParser dieses Profil an. Wähle zum Beispiel einen typischen Betreff oder Bezeichnungen wie „Datum:“ und „Buchungsnummer:“.")
+            Text("Erkennungsmerkmale sind feste Textteile oder bereits extrahierte Variablen. Nur wenn alle gewählten Merkmale passen, bietet ShareParser dieses Profil an.")
         }
         if (sample != null) {
-            item {
-                Text("Vorschläge aus dem Beispiel", style = MaterialTheme.typography.labelLarge)
-            }
+            item { Text("Vorschläge aus dem Beispiel", style = MaterialTheme.typography.labelLarge) }
             item {
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     items(GuidedRuleFactory.suggestedMatchers(sample)) { suggestion ->
-                        val selected = matchers.any { it.friendlyText == suggestion || it.regex == Regex.escape(suggestion) }
-                        item {
-                            FilterChip(
-                                selected = selected,
-                                onClick = {
-                                    if (selected) matchers.removeAll { it.friendlyText == suggestion || it.regex == Regex.escape(suggestion) }
-                                    else matchers += GuidedRuleFactory.matcherFromText(suggestion)
-                                },
-                                label = { Text(suggestion.take(36)) }
-                            )
-                        }
+                        val selected = matchers.any { it.variableKey.isBlank() && (it.friendlyText == suggestion || it.regex == Regex.escape(suggestion)) }
+                        FilterChip(
+                            selected = selected,
+                            onClick = {
+                                if (selected) matchers.removeAll { it.variableKey.isBlank() && (it.friendlyText == suggestion || it.regex == Regex.escape(suggestion)) }
+                                else matchers += GuidedRuleFactory.matcherFromText(suggestion)
+                            },
+                            label = { Text(suggestion.take(36)) }
+                        )
+                    }
+                }
+            }
+        }
+        if (extractors.isNotEmpty()) {
+            item { Text("Variablen als Trigger", style = MaterialTheme.typography.labelLarge) }
+            item {
+                Text("Aktiviere eine Variable, wenn das Profil nur angeboten werden soll, sobald diese Information erfolgreich erkannt wurde.", style = MaterialTheme.typography.bodySmall)
+            }
+            item {
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    items(extractors, key = { it.id }) { rule ->
+                        val selected = matchers.any { it.variableKey == rule.key }
+                        FilterChip(
+                            selected = selected,
+                            onClick = {
+                                if (selected) {
+                                    matchers.removeAll { it.variableKey == rule.key }
+                                } else if (rule.key.isNotBlank()) {
+                                    matchers += MatcherRule(
+                                        regex = ".+",
+                                        ignoreCase = true,
+                                        friendlyText = "Variable '${rule.key}' erkannt",
+                                        variableKey = rule.key
+                                    )
+                                }
+                            },
+                            label = { Text(variableLabel(rule.key)) }
+                        )
                     }
                 }
             }
         }
         if (matchers.isNotEmpty()) {
             item { Text("Aktive Merkmale", style = MaterialTheme.typography.labelLarge) }
-            itemsIndexed(matchers, key = { index, matcher -> "${matcher.regex}-$index" }) { _, matcher ->
+            itemsIndexed(matchers, key = { index, matcher -> "${matcher.variableKey}-${matcher.regex}-$index" }) { _, matcher ->
                 Card(Modifier.fillMaxWidth()) {
                     Row(Modifier.padding(horizontal = 12.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Text(matcher.friendlyText.ifBlank { matcher.regex }, modifier = Modifier.weight(1f))
+                        Text(
+                            if (matcher.variableKey.isNotBlank()) "Variable ${variableLabel(matcher.variableKey)} muss erkannt werden"
+                            else matcher.friendlyText.ifBlank { matcher.regex },
+                            modifier = Modifier.weight(1f)
+                        )
                         IconButton(onClick = { matchers.remove(matcher) }) { Icon(Icons.Outlined.Delete, "Merkmal entfernen") }
                     }
                 }
@@ -338,9 +371,7 @@ internal fun ProfileEditorScreen(
                     }
                 )
             }
-            item {
-                Text("Schnellauswahl für typische Zeilen", style = MaterialTheme.typography.labelLarge)
-            }
+            item { Text("Schnellauswahl für typische Zeilen", style = MaterialTheme.typography.labelLarge) }
             items(GuidedRuleFactory.candidates(sample).filter { it.source == InputSource.TEXT }.take(20)) { candidate ->
                 Card(Modifier.fillMaxWidth()) {
                     Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -375,9 +406,7 @@ internal fun ProfileEditorScreen(
                 }
             }
         }
-        item {
-            Text("Jede Variable kann später per Klick in Titel, URL, Nachricht, Ort, Datum oder andere Zielfelder eingesetzt werden.")
-        }
+        item { Text("Jede Variable kann später per Klick in Titel, URL, Nachricht, Ort, Datum oder andere Zielfelder eingesetzt werden. Sie kann außerdem oben als Profil-Trigger aktiviert werden.") }
         if (extractors.isEmpty()) {
             item { Text("Noch keine eigenen Variablen. Betreff und gesamter Text sind bereits als eingebaute Variablen verfügbar.", style = MaterialTheme.typography.bodySmall) }
         }
@@ -389,8 +418,29 @@ internal fun ProfileEditorScreen(
                 parser = parser,
                 highlighted = highlightField == rule.key,
                 advanced = advanced,
-                onChange = { changed -> if (index >= 0) extractors[index] = changed },
-                onDelete = { if (index >= 0) extractors.removeAt(index) }
+                onChange = { changed ->
+                    if (index >= 0) {
+                        val oldKey = extractors[index].key
+                        extractors[index] = changed
+                        if (oldKey != changed.key) {
+                            for (matcherIndex in matchers.indices) {
+                                if (matchers[matcherIndex].variableKey == oldKey) {
+                                    matchers[matcherIndex] = matchers[matcherIndex].copy(
+                                        variableKey = changed.key,
+                                        friendlyText = "Variable '${changed.key}' erkannt"
+                                    )
+                                }
+                            }
+                        }
+                    }
+                },
+                onDelete = {
+                    if (index >= 0) {
+                        val key = extractors[index].key
+                        extractors.removeAt(index)
+                        matchers.removeAll { it.variableKey == key }
+                    }
+                }
             )
         }
 
@@ -490,16 +540,18 @@ internal fun ProfileEditorScreen(
                     AssistChip(
                         onClick = {
                             val json = repository.export(buildProfile())
-                            context.startActivity(
-                                Intent.createChooser(
-                                    Intent(Intent.ACTION_SEND).apply {
-                                        type = "application/json"
-                                        putExtra(Intent.EXTRA_TEXT, json)
-                                        putExtra(Intent.EXTRA_SUBJECT, "ShareParser Profil: ${name.ifBlank { "Profil" }}")
-                                    },
-                                    "Profil teilen"
+                            runCatching {
+                                context.startActivity(
+                                    Intent.createChooser(
+                                        Intent(Intent.ACTION_SEND).apply {
+                                            type = "application/json"
+                                            putExtra(Intent.EXTRA_TEXT, json)
+                                            putExtra(Intent.EXTRA_SUBJECT, "ShareParser Profil: ${name.ifBlank { "Profil" }}")
+                                        },
+                                        "Profil teilen"
+                                    )
                                 )
-                            )
+                            }.onFailure { validationMessage = "Teilen fehlgeschlagen: ${it.message}" }
                         },
                         label = { Text("Teilen") },
                         leadingIcon = { Icon(Icons.Outlined.Share, null) }
