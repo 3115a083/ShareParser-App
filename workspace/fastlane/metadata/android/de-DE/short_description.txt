@@ -1,0 +1,1 @@
+Geteilten Text erkennen, extrahieren und flexibel weiterverarbeiten.

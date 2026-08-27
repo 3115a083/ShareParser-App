@@ -1,0 +1,3 @@
+ShareParser receives text shared from other Android apps and processes it with reusable local profiles. Profiles can extract values with patterns and regular expressions, transform those values, open pre-filled calendar entries, construct URLs or share rebuilt text to another app.
+
+Processing is local. ShareParser contains no ads, analytics or trackers and does not request Internet access.
