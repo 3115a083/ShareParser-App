@@ -24,6 +24,11 @@ android {
 
     buildFeatures { compose = true }
     packaging { resources.excludes += "/META-INF/{AL2.0,LGPL2.1}" }
+
+    lint {
+        abortOnError = true
+        fatal += "StaticFieldLeak"
+    }
 }
 
 kotlin {
