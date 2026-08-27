@@ -6,14 +6,16 @@ import kotlinx.serialization.json.Json
 import java.io.File
 import java.util.UUID
 
-class ProfileRepository(private val context: Context) {
+class ProfileRepository(context: Context) {
+    private val appContext = context.applicationContext
+
     private val json = Json {
         prettyPrint = true
         ignoreUnknownKeys = true
         classDiscriminator = "type"
     }
-    private val file get() = File(context.filesDir, "profiles.json")
-    private val failureFile get() = File(context.filesDir, "failure.json")
+    private val file get() = File(appContext.filesDir, "profiles.json")
+    private val failureFile get() = File(appContext.filesDir, "failure.json")
 
     fun profiles(): List<Profile> = runCatching {
         if (!file.exists()) emptyList() else json.decodeFromString<List<Profile>>(file.readText())
