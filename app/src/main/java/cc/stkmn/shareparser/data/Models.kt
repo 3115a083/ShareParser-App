@@ -2,10 +2,11 @@ package cc.stkmn.shareparser.data
 
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import java.util.UUID
 
 @Serializable
 data class ProfileBundle(
-    val schemaVersion: Int = 2,
+    val schemaVersion: Int = 3,
     val profile: Profile
 )
 
@@ -22,7 +23,8 @@ data class Profile(
 @Serializable
 data class MatcherRule(
     val regex: String,
-    val ignoreCase: Boolean = true
+    val ignoreCase: Boolean = true,
+    val friendlyText: String = ""
 )
 
 @Serializable
@@ -39,7 +41,9 @@ data class ExtractorRule(
     val group: Int = 1,
     val required: Boolean = false,
     val source: InputSource = InputSource.COMBINED,
-    val transforms: List<ValueTransform> = listOf(ValueTransform.Trim)
+    val transforms: List<ValueTransform> = listOf(ValueTransform.Trim),
+    val id: String = UUID.randomUUID().toString(),
+    val sampleLabel: String = ""
 )
 
 @Serializable
@@ -76,6 +80,23 @@ enum class CaseMode {
 }
 
 @Serializable
+enum class UrlOpenMode {
+    BROWSER,
+    WEBVIEW
+}
+
+@Serializable
+enum class DateTimeLocale {
+    DE_DE,
+    SYSTEM
+}
+
+@Serializable
+data class AppSettings(
+    val dateTimeLocale: DateTimeLocale = DateTimeLocale.DE_DE
+)
+
+@Serializable
 sealed class ProcessingAction {
     abstract val id: String
     abstract val friendlyName: String
@@ -94,7 +115,8 @@ sealed class ProcessingAction {
         val endTemplate: String = "",
         val startPattern: String = "",
         val endPattern: String = "",
-        val allDay: Boolean = false
+        val allDay: Boolean = false,
+        val calendarNameTemplate: String = ""
     ) : ProcessingAction()
 
     @Serializable
@@ -103,7 +125,8 @@ sealed class ProcessingAction {
         override val id: String,
         override val friendlyName: String,
         override val icon: String = "link",
-        val urlTemplate: String = "https://example.com/?q={{input|url}}"
+        val urlTemplate: String = "https://example.com/?q={{input|url}}",
+        val openMode: UrlOpenMode = UrlOpenMode.BROWSER
     ) : ProcessingAction()
 
     @Serializable
