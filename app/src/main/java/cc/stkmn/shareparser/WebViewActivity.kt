@@ -2,7 +2,9 @@ package cc.stkmn.shareparser
 
 import android.net.Uri
 import android.os.Bundle
+import android.view.ViewGroup
 import android.webkit.CookieManager
+import android.webkit.RenderProcessGoneDetail
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
@@ -18,7 +20,7 @@ class WebViewActivity : ComponentActivity() {
         val url = intent.getStringExtra(EXTRA_URL).orEmpty()
         val uri = runCatching { Uri.parse(url) }.getOrNull()
         if (uri?.scheme !in setOf("http", "https") || uri?.host.isNullOrBlank()) {
-            Toast.makeText(this, "Die Web-Adresse ist ungültig.", Toast.LENGTH_LONG).show()
+            safeToast("Die Web-Adresse ist ungültig.")
             finish()
             return
         }
@@ -32,14 +34,23 @@ class WebViewActivity : ComponentActivity() {
                 settings.setGeolocationEnabled(false)
                 settings.mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
                 settings.safeBrowsingEnabled = true
-                webViewClient = WebViewClient()
+                webViewClient = object : WebViewClient() {
+                    override fun onRenderProcessGone(view: WebView?, detail: RenderProcessGoneDetail?): Boolean {
+                        // If the Chromium renderer dies and this callback returns false,
+                        // Android terminates the app process. Samsung devices can surface
+                        // this as "app closed because it has a bug". Clean up and close
+                        // only the in-app browser instead.
+                        runCatching { (view?.parent as? ViewGroup)?.removeView(view) }
+                        runCatching { view?.destroy() }
+                        if (webView === view) webView = null
+                        safeToast("Die In-App-Webansicht wurde beendet. Bitte öffne den Link im Browser-Modus.")
+                        finish()
+                        return true
+                    }
+                }
             }
-        } catch (e: Exception) {
-            Toast.makeText(
-                this,
-                "Die In-App-Webansicht ist auf diesem Gerät nicht verfügbar. Bitte nutze den Browser-Modus.",
-                Toast.LENGTH_LONG
-            ).show()
+        } catch (_: Throwable) {
+            safeToast("Die In-App-Webansicht ist auf diesem Gerät nicht verfügbar. Bitte nutze den Browser-Modus.")
             finish()
             return
         }
@@ -48,7 +59,7 @@ class WebViewActivity : ComponentActivity() {
         webView = view
         setContentView(view)
         runCatching { view.loadUrl(url) }.onFailure {
-            Toast.makeText(this, "Die Seite konnte nicht geladen werden.", Toast.LENGTH_LONG).show()
+            safeToast("Die Seite konnte nicht geladen werden.")
             finish()
         }
 
@@ -58,11 +69,16 @@ class WebViewActivity : ComponentActivity() {
         }
     }
 
+    private fun safeToast(message: String) {
+        runCatching { Toast.makeText(applicationContext, message, Toast.LENGTH_LONG).show() }
+    }
+
     override fun onDestroy() {
         webView?.let { view ->
             runCatching { view.stopLoading() }
             runCatching { view.loadUrl("about:blank") }
             runCatching { view.clearHistory() }
+            runCatching { (view.parent as? ViewGroup)?.removeView(view) }
             runCatching { view.removeAllViews() }
             runCatching { view.destroy() }
         }
