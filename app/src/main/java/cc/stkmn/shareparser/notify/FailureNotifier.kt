@@ -21,7 +21,7 @@ object FailureNotifier {
     private const val CHANNEL = "processing_errors"
 
     fun show(context: Context, report: FailureReport) {
-        Toast.makeText(context, report.message, Toast.LENGTH_LONG).show()
+        runCatching { Toast.makeText(context.applicationContext, report.message, Toast.LENGTH_LONG).show() }
 
         if (Build.VERSION.SDK_INT >= 33 &&
             ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
@@ -31,17 +31,17 @@ object FailureNotifier {
 
         runCatching {
             createChannel(context)
-            val details = Intent(context, MainActivity::class.java).apply {
+            val details = Intent(context.applicationContext, MainActivity::class.java).apply {
                 data = Uri.parse("shareparser://failure/${report.id}")
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
             }
             val pending = PendingIntent.getActivity(
-                context,
+                context.applicationContext,
                 report.id.hashCode(),
                 details,
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
             )
-            val notification = NotificationCompat.Builder(context, CHANNEL)
+            val notification = NotificationCompat.Builder(context.applicationContext, CHANNEL)
                 .setSmallIcon(R.drawable.ic_notification)
                 .setContentTitle("ShareParser: Verarbeitung fehlgeschlagen")
                 .setContentText(report.message)
@@ -52,13 +52,13 @@ object FailureNotifier {
                 .setContentIntent(pending)
                 .build()
 
-            NotificationManagerCompat.from(context).notify(report.id.hashCode(), notification)
+            NotificationManagerCompat.from(context.applicationContext).notify(report.id.hashCode(), notification)
         }
     }
 
     private fun createChannel(context: Context) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val manager = context.getSystemService(NotificationManager::class.java)
+            val manager = context.applicationContext.getSystemService(NotificationManager::class.java)
             if (manager.getNotificationChannel(CHANNEL) == null) {
                 manager.createNotificationChannel(
                     NotificationChannel(

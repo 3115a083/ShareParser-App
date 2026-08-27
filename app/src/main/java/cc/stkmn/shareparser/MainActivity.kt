@@ -2,6 +2,7 @@ package cc.stkmn.shareparser
 
 import android.Manifest
 import android.content.Intent
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -51,7 +52,13 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        latestIntent.value = intent
+        CrashRecorder.install(this)
+        val pendingCrash = CrashRecorder.consumePending(this)
+        latestIntent.value = if (pendingCrash && intent.action == Intent.ACTION_MAIN) {
+            Intent(Intent.ACTION_VIEW, Uri.parse("shareparser://failure/crash"))
+        } else {
+            intent
+        }
         setContent {
             ShareParserApp(
                 startIntent = latestIntent.value,
