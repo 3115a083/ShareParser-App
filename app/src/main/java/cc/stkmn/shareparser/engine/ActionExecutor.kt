@@ -1,6 +1,7 @@
 package cc.stkmn.shareparser.engine
 
 import android.Manifest
+import android.app.Activity
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -9,6 +10,7 @@ import android.provider.CalendarContract
 import androidx.core.content.ContextCompat
 import cc.stkmn.shareparser.WebViewActivity
 import cc.stkmn.shareparser.data.AppSettings
+import cc.stkmn.shareparser.data.DateTimeLocale
 import cc.stkmn.shareparser.data.ProcessingAction
 import cc.stkmn.shareparser.data.UrlOpenMode
 import java.time.LocalDate
@@ -19,6 +21,7 @@ import java.util.Locale
 
 class ActionExecutor(context: Context, private val settings: AppSettings = AppSettings()) {
     private val appContext = context.applicationContext
+    private val launchContext = context
 
     data class ExecutionResult(val warnings: List<String> = emptyList())
 
@@ -82,7 +85,7 @@ class ActionExecutor(context: Context, private val settings: AppSettings = AppSe
         }
         if (title.isBlank()) warnings += "Titel ist leer. Bitte den Termin-Titel im Kalender prüfen."
 
-        launch(intent, "calendar")
+        launch(intent, "calendar", "Kalender konnte nicht geöffnet werden")
         return ExecutionResult(warnings.distinct())
     }
 
@@ -98,7 +101,7 @@ class ActionExecutor(context: Context, private val settings: AppSettings = AppSe
             CalendarContract.Calendars.ACCOUNT_NAME
         )
         val candidates = mutableListOf<Pair<Long, List<String>>>()
-        runCatching {
+        try {
             appContext.contentResolver.query(
                 CalendarContract.Calendars.CONTENT_URI,
                 projection,
@@ -108,15 +111,11 @@ class ActionExecutor(context: Context, private val settings: AppSettings = AppSe
             )?.use { cursor ->
                 while (cursor.moveToNext()) {
                     val id = cursor.getLong(0)
-                    val labels = listOfNotNull(
-                        cursor.getString(1),
-                        cursor.getString(2),
-                        cursor.getString(3)
-                    )
+                    val labels = listOfNotNull(cursor.getString(1), cursor.getString(2), cursor.getString(3))
                     candidates += id to labels
                 }
             }
-        }.onFailure {
+        } catch (e: Exception) {
             warnings += "Zielkalender '$name' konnte nicht abgefragt werden."
             return null
         }
@@ -148,7 +147,7 @@ class ActionExecutor(context: Context, private val settings: AppSettings = AppSe
         }
 
         when (action.openMode) {
-            UrlOpenMode.BROWSER -> launch(Intent(Intent.ACTION_VIEW, uri), "url")
+            UrlOpenMode.BROWSER -> launch(Intent(Intent.ACTION_VIEW, uri), "url", "Link konnte nicht im Browser geöffnet werden")
             UrlOpenMode.WEBVIEW -> {
                 if (scheme !in setOf("http", "https")) {
                     throw ProcessingException(
@@ -158,8 +157,9 @@ class ActionExecutor(context: Context, private val settings: AppSettings = AppSe
                     )
                 }
                 launch(
-                    Intent(appContext, WebViewActivity::class.java).putExtra(WebViewActivity.EXTRA_URL, url),
-                    "url"
+                    Intent(launchContext, WebViewActivity::class.java).putExtra(WebViewActivity.EXTRA_URL, url),
+                    "url",
+                    "Link konnte nicht in ShareParser geöffnet werden"
                 )
             }
         }
@@ -174,28 +174,47 @@ class ActionExecutor(context: Context, private val settings: AppSettings = AppSe
             putExtra(Intent.EXTRA_TEXT, text)
             if (subject.isNotBlank()) putExtra(Intent.EXTRA_SUBJECT, subject)
         }
-        launch(Intent.createChooser(intent, action.friendlyName), "share")
+        launch(Intent.createChooser(intent, action.friendlyName), "share", "Teilen-Dialog konnte nicht geöffnet werden")
         return ExecutionResult()
     }
 
-    private fun launch(intent: Intent, failingField: String) {
-        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        if (intent.resolveActivity(appContext.packageManager) == null) {
+    private fun launch(intent: Intent, failingField: String, message: String) {
+        val safeIntent = Intent(intent)
+        if (launchContext !is Activity) safeIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        try {
+            if (safeIntent.resolveActivity(appContext.packageManager) == null) {
+                throw ProcessingException(
+                    "Keine passende App für diese Aktion gefunden.",
+                    failingField,
+                    safeIntent.toUri(0)
+                )
+            }
+            launchContext.startActivity(safeIntent)
+        } catch (e: ProcessingException) {
+            throw e
+        } catch (e: Exception) {
             throw ProcessingException(
-                "Keine passende App für diese Aktion gefunden.",
+                message,
                 failingField,
-                intent.toUri(0)
+                "${e::class.java.name}: ${e.message ?: e.toString()}\nIntent: ${runCatching { safeIntent.toUri(0) }.getOrDefault("unavailable")}" 
             )
         }
-        appContext.startActivity(intent)
     }
 
     private fun parseExplicit(value: String, pattern: String): Long {
-        val formatter = DateTimeFormatter.ofPattern(pattern, Locale.getDefault())
+        val formatter = DateTimeFormatter.ofPattern(pattern, localeForSettings())
         return runCatching {
             LocalDateTime.parse(value.trim(), formatter).atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
         }.recoverCatching {
             LocalDate.parse(value.trim(), formatter).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
         }.getOrThrow()
+    }
+
+    private fun localeForSettings(): Locale = when (settings.dateTimeLocale) {
+        DateTimeLocale.DE_DE -> Locale.GERMANY
+        DateTimeLocale.EN_US -> Locale.US
+        DateTimeLocale.EN_GB -> Locale.UK
+        DateTimeLocale.ISO -> Locale.ROOT
+        DateTimeLocale.SYSTEM -> Locale.getDefault()
     }
 }
