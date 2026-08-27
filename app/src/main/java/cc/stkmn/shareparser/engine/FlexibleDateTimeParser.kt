@@ -18,7 +18,7 @@ object FlexibleDateTimeParser {
         val warnings: List<String> = emptyList()
     )
 
-    private val numericDate = Regex("(?<!\\d)(\\d{1,2})\\s*[./-]\\s*(\\d{1,2})(?:\\s*[./-]\\s*(\\d{2,4}))?\\.?", RegexOption.IGNORE_CASE)
+    private val numericDate = Regex("(?<!\\d)(\\d{1,2})\\s*[./-]\\s*(\\d{1,2})(?:\\s*[./-]\\s*(\\d{2,4})(?!\\s*:))?\\.?", RegexOption.IGNORE_CASE)
     private val namedDate = Regex("(?<!\\d)(\\d{1,2})\\.?\\s+(januar|jan|februar|feb|märz|maerz|mrz|april|apr|mai|juni|jun|juli|jul|august|aug|september|sep|sept|oktober|okt|november|nov|dezember|dez)(?:\\s+(\\d{2,4}))?", RegexOption.IGNORE_CASE)
     private val timeRange = Regex("(?<!\\d)([01]?\\d|2[0-3])(?:[:.]([0-5]\\d))?\\s*(?:uhr)?\\s*(?:-|–|—|bis)\\s*([01]?\\d|2[0-3])(?:[:.]([0-5]\\d))?\\s*(?:uhr)?(?!\\d)", RegexOption.IGNORE_CASE)
     private val singleTime = Regex("(?<!\\d)([01]?\\d|2[0-3])(?:[:.]([0-5]\\d))?\\s*(?:uhr)?(?!\\d)", RegexOption.IGNORE_CASE)
