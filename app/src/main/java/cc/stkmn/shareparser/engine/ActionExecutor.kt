@@ -1,7 +1,6 @@
 package cc.stkmn.shareparser.engine
 
 import android.Manifest
-import android.app.Activity
 import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
@@ -23,7 +22,6 @@ import java.util.Locale
 
 class ActionExecutor(context: Context, private val settings: AppSettings = AppSettings()) {
     private val appContext = context.applicationContext
-    private val launchContext = context
 
     data class ExecutionResult(val warnings: List<String> = emptyList())
 
@@ -45,11 +43,14 @@ class ActionExecutor(context: Context, private val settings: AppSettings = AppSe
         val endText = render(action.endTemplate)
         val calendarName = render(action.calendarNameTemplate)
 
-        val intent = Intent(Intent.ACTION_INSERT).setData(CalendarContract.Events.CONTENT_URI)
+        // Some OEM calendar apps, including Samsung Calendar versions, match the
+        // documented MIME type more reliably when it is explicit on the intent.
+        val intent = Intent(Intent.ACTION_INSERT)
+            .setDataAndType(CalendarContract.Events.CONTENT_URI, "vnd.android.cursor.dir/event")
             .putExtra(CalendarContract.Events.TITLE, title)
             .putExtra(CalendarContract.Events.DESCRIPTION, description)
             .putExtra(CalendarContract.Events.EVENT_LOCATION, location)
-            .putExtra(CalendarContract.Events.ALL_DAY, action.allDay)
+            .putExtra(CalendarContract.EXTRA_EVENT_ALL_DAY, action.allDay)
 
         if (action.startPattern.isNotBlank()) {
             if (startText.isBlank()) {
@@ -129,7 +130,7 @@ class ActionExecutor(context: Context, private val settings: AppSettings = AppSe
                     candidates += id to labels
                 }
             }
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             warnings += "Zielkalender '$name' konnte nicht abgefragt werden."
             return null
         }
@@ -161,7 +162,10 @@ class ActionExecutor(context: Context, private val settings: AppSettings = AppSe
         }
 
         when (action.openMode) {
-            UrlOpenMode.BROWSER -> launch(Intent(Intent.ACTION_VIEW, uri), "url", "Link konnte nicht im Browser geöffnet werden")
+            UrlOpenMode.BROWSER -> {
+                val browserIntent = Intent(Intent.ACTION_VIEW, uri).addCategory(Intent.CATEGORY_BROWSABLE)
+                launch(browserIntent, "url", "Link konnte nicht im Browser geöffnet werden")
+            }
             UrlOpenMode.WEBVIEW -> {
                 if (scheme !in setOf("http", "https")) {
                     throw ProcessingException(
@@ -171,7 +175,7 @@ class ActionExecutor(context: Context, private val settings: AppSettings = AppSe
                     )
                 }
                 launch(
-                    Intent(launchContext, WebViewActivity::class.java).putExtra(WebViewActivity.EXTRA_URL, url),
+                    Intent(appContext, WebViewActivity::class.java).putExtra(WebViewActivity.EXTRA_URL, url),
                     "url",
                     "Link konnte nicht in ShareParser geöffnet werden"
                 )
@@ -193,34 +197,35 @@ class ActionExecutor(context: Context, private val settings: AppSettings = AppSe
     }
 
     private fun launch(intent: Intent, failingField: String, message: String) {
-        val safeIntent = Intent(intent)
-        if (launchContext !is Activity) safeIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        val safeIntent = Intent(intent).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
 
         try {
-            // Do not call resolveActivity() here. On Android 11+ package visibility can
-            // hide an otherwise launchable external activity from PackageManager queries.
-            // startActivity() itself is allowed to resolve it and is the recommended path.
-            launchContext.startActivity(safeIntent)
+            // Use the application context for all launches. This avoids retaining or
+            // reusing a stale share-target Activity after another app was opened.
+            appContext.startActivity(safeIntent)
         } catch (e: ActivityNotFoundException) {
             throw ProcessingException(
                 "Keine passende App für diese Aktion gefunden.",
                 failingField,
-                "${e::class.java.name}: ${e.message ?: "No activity found"}\nAndroid API: ${Build.VERSION.SDK_INT}\nIntent: ${runCatching { safeIntent.toUri(0) }.getOrDefault("unavailable")}"
+                diagnostic(e, safeIntent)
             )
         } catch (e: SecurityException) {
             throw ProcessingException(
                 "Android hat das Öffnen dieser Aktion aus Sicherheitsgründen blockiert.",
                 failingField,
-                "${e::class.java.name}: ${e.message ?: e.toString()}\nAndroid API: ${Build.VERSION.SDK_INT}\nIntent: ${runCatching { safeIntent.toUri(0) }.getOrDefault("unavailable")}"
+                diagnostic(e, safeIntent)
             )
         } catch (e: Exception) {
-            throw ProcessingException(
-                message,
-                failingField,
-                "${e::class.java.name}: ${e.message ?: e.toString()}\nAndroid API: ${Build.VERSION.SDK_INT}\nIntent: ${runCatching { safeIntent.toUri(0) }.getOrDefault("unavailable")}"
-            )
+            throw ProcessingException(message, failingField, diagnostic(e, safeIntent))
         }
     }
+
+    private fun diagnostic(error: Throwable, intent: Intent): String =
+        "${error::class.java.name}: ${error.message ?: error.toString()}\n" +
+            "Android API: ${Build.VERSION.SDK_INT}\n" +
+            "Manufacturer: ${Build.MANUFACTURER}\n" +
+            "Model: ${Build.MODEL}\n" +
+            "Intent: ${runCatching { intent.toUri(0) }.getOrDefault("unavailable")}"
 
     private fun parseExplicit(value: String, pattern: String): Long {
         val formatter = DateTimeFormatter.ofPattern(pattern, localeForSettings())
