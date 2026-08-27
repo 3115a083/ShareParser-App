@@ -32,11 +32,14 @@ jobs:
           set -euo pipefail
           manifest="app/src/main/AndroidManifest.xml"
           grep -q 'android:allowBackup="false"' "$manifest"
+          grep -q 'android:fullBackupContent="false"' "$manifest"
           grep -q 'android:hasFragileUserData="false"' "$manifest"
-          if grep -Eq 'android.permission.(INTERNET|READ_EXTERNAL_STORAGE|WRITE_EXTERNAL_STORAGE|MANAGE_EXTERNAL_STORAGE)' "$manifest"; then
-            echo "Unexpected network or broad storage permission found in AndroidManifest.xml"
+          if grep -Eq 'android.permission.(READ_EXTERNAL_STORAGE|WRITE_EXTERNAL_STORAGE|MANAGE_EXTERNAL_STORAGE)' "$manifest"; then
+            echo "Unexpected broad storage permission found in AndroidManifest.xml"
             exit 1
           fi
+          grep -q 'android.permission.INTERNET' "$manifest"
+          grep -q 'android:exported="false"' "$manifest"
       - name: Unit tests, lint and debug APK
         run: gradle :app:testDebugUnitTest :app:lintDebug :app:assembleDebug --stacktrace
       - name: Upload debug APK

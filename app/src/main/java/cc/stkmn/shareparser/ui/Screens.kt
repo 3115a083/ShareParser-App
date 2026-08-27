@@ -1,5 +1,9 @@
 package cc.stkmn.shareparser.ui
 
+import android.Manifest
+import android.content.pm.PackageManager
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -17,20 +21,26 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Add
+import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.FileOpen
+import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material.icons.outlined.Tune
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.ElevatedButton
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.RadioButton
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -44,6 +54,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
+import cc.stkmn.shareparser.data.AppSettings
+import cc.stkmn.shareparser.data.DateTimeLocale
 import cc.stkmn.shareparser.data.FailureReport
 import cc.stkmn.shareparser.data.ProcessingAction
 import cc.stkmn.shareparser.data.Profile
@@ -53,66 +66,173 @@ import cc.stkmn.shareparser.engine.ActionExecutor
 import cc.stkmn.shareparser.engine.ParserEngine
 import cc.stkmn.shareparser.engine.ProcessingException
 import cc.stkmn.shareparser.notify.FailureNotifier
+import cc.stkmn.shareparser.notify.WarningNotifier
 import java.util.UUID
 
 @Composable
 internal fun HomeScreen(
     profiles: List<Profile>,
+    importError: String?,
     onEdit: (Profile) -> Unit,
     onCreate: () -> Unit,
-    onImport: () -> Unit
+    onImport: () -> Unit,
+    onToggle: (Profile, Boolean) -> Unit,
+    onDelete: (Profile) -> Unit,
+    onSettings: () -> Unit
 ) {
-    if (profiles.isEmpty()) {
-        Column(
-            Modifier.fillMaxSize().padding(32.dp),
-            verticalArrangement = Arrangement.Center,
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Icon(Icons.Outlined.Share, null, modifier = Modifier.size(64.dp))
-            Spacer(Modifier.height(20.dp))
-            Text("Erstelle dein erstes Profil", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
-            Spacer(Modifier.height(8.dp))
-            Text("Ein Profil erkennt ähnliche Texte, extrahiert Werte und bietet passende Aktionen an.")
-            Spacer(Modifier.height(24.dp))
-            Button(onClick = onCreate) {
-                Icon(Icons.Outlined.Add, null)
-                Spacer(Modifier.width(8.dp))
-                Text("Profil erstellen")
-            }
-            Spacer(Modifier.height(8.dp))
-            OutlinedButton(onClick = onImport) {
-                Icon(Icons.Outlined.FileOpen, null)
-                Spacer(Modifier.width(8.dp))
-                Text("Profil importieren")
-            }
-        }
-        return
+    var deleteCandidate by remember { mutableStateOf<Profile?>(null) }
+    deleteCandidate?.let { profile ->
+        AlertDialog(
+            onDismissRequest = { deleteCandidate = null },
+            title = { Text("Profil löschen?") },
+            text = { Text("„${profile.name}“ wird dauerhaft aus ShareParser entfernt.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    onDelete(profile)
+                    deleteCandidate = null
+                }) { Text("Löschen") }
+            },
+            dismissButton = { TextButton(onClick = { deleteCandidate = null }) { Text("Abbrechen") } }
+        )
     }
 
-    LazyColumn(contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
         item {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Text("Profile", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
-                TextButton(onClick = onImport) {
-                    Icon(Icons.Outlined.FileOpen, null)
-                    Spacer(Modifier.width(4.dp))
-                    Text("Import")
+                Column(Modifier.weight(1f)) {
+                    Text("Profile", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
+                    Text("Bestimme, wie geteilte Texte erkannt und weiterverarbeitet werden.")
                 }
             }
         }
-        items(profiles, key = { it.id }) { profile ->
-            Card(onClick = { onEdit(profile) }, modifier = Modifier.fillMaxWidth()) {
-                Column(Modifier.padding(16.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(profile.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
-                        Text(if (profile.enabled) "Aktiv" else "Aus", style = MaterialTheme.typography.labelMedium)
+        item {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedButton(onClick = onImport) {
+                    Icon(Icons.Outlined.FileOpen, null)
+                    Spacer(Modifier.width(6.dp))
+                    Text("Importieren")
+                }
+                OutlinedButton(onClick = onSettings) {
+                    Icon(Icons.Outlined.Settings, null)
+                    Spacer(Modifier.width(6.dp))
+                    Text("Einstellungen")
+                }
+            }
+        }
+        importError?.let { message ->
+            item { Text(message, color = MaterialTheme.colorScheme.error) }
+        }
+
+        if (profiles.isEmpty()) {
+            item {
+                Card(Modifier.fillMaxWidth()) {
+                    Column(
+                        Modifier.padding(24.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Icon(Icons.Outlined.Share, null, modifier = Modifier.size(52.dp))
+                        Text("Noch kein Profil", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
+                        Text("Erstelle ein Profil direkt hier oder teile eine Beispiel-Mail mit ShareParser. Aus dem Beispiel kannst du Felder ohne Regex auswählen.")
+                        Button(onClick = onCreate) {
+                            Icon(Icons.Outlined.Add, null)
+                            Spacer(Modifier.width(6.dp))
+                            Text("Profil erstellen")
+                        }
                     }
-                    Spacer(Modifier.height(4.dp))
-                    Text("${profile.extractors.size} Felder · ${profile.actions.size} Aktionen", style = MaterialTheme.typography.bodyMedium)
+                }
+            }
+        } else {
+            items(profiles, key = { it.id }) { profile ->
+                Card(Modifier.fillMaxWidth()) {
+                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Column(Modifier.weight(1f)) {
+                                Text(profile.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                                Text("${profile.extractors.size} Variablen · ${profile.actions.size} Aktionen", style = MaterialTheme.typography.bodySmall)
+                            }
+                            Switch(
+                                checked = profile.enabled,
+                                onCheckedChange = { onToggle(profile, it) }
+                            )
+                        }
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            TextButton(onClick = { onEdit(profile) }) {
+                                Icon(Icons.Outlined.Edit, null)
+                                Spacer(Modifier.width(4.dp))
+                                Text("Bearbeiten")
+                            }
+                            TextButton(onClick = { deleteCandidate = profile }) {
+                                Icon(Icons.Outlined.Delete, null)
+                                Spacer(Modifier.width(4.dp))
+                                Text("Löschen")
+                            }
+                        }
+                    }
                 }
             }
         }
         item { Spacer(Modifier.height(72.dp)) }
+    }
+}
+
+@Composable
+internal fun SettingsScreen(repository: ProfileRepository) {
+    var settings by remember { mutableStateOf(repository.settings()) }
+
+    fun select(locale: DateTimeLocale) {
+        settings = AppSettings(dateTimeLocale = locale)
+        repository.saveSettings(settings)
+    }
+
+    LazyColumn(
+        contentPadding = PaddingValues(16.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp)
+    ) {
+        item {
+            Text("Datum und Uhrzeit", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
+        }
+        item {
+            Text("Diese Einstellung steuert, wie freie Datums- und Zeitangaben für Kalenderaktionen interpretiert werden.")
+        }
+        item {
+            Card(Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(16.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        RadioButton(
+                            selected = settings.dateTimeLocale == DateTimeLocale.DE_DE,
+                            onClick = { select(DateTimeLocale.DE_DE) }
+                        )
+                        Column {
+                            Text("Deutsch (Deutschland)", fontWeight = FontWeight.SemiBold)
+                            Text("Empfohlen für deutsche E-Mails und Nachrichten.", style = MaterialTheme.typography.bodySmall)
+                        }
+                    }
+                    Text(
+                        "Beispiele: 14.12.2026, 14/12/26, 14.12., morgen, nächsten Montag, 12-14, 12 Uhr bis 14 Uhr, 12:00 Uhr bis 14:00 Uhr.",
+                        modifier = Modifier.padding(start = 48.dp)
+                    )
+                }
+            }
+        }
+        item {
+            Card(Modifier.fillMaxWidth()) {
+                Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                    RadioButton(
+                        selected = settings.dateTimeLocale == DateTimeLocale.SYSTEM,
+                        onClick = { select(DateTimeLocale.SYSTEM) }
+                    )
+                    Column {
+                        Text("Geräteeinstellung", fontWeight = FontWeight.SemiBold)
+                        Text("Verwendet die Gerätesprache für Textvergleiche. Die flexiblen deutschen Zahlenformate bleiben weiterhin verfügbar.", style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -130,15 +250,17 @@ internal fun SharedScreen(
     val matches = remember(payload, profiles) { parser.matchingProfiles(payload, profiles) }
     var selected by remember(payload, profiles) { mutableStateOf<Profile?>(matches.singleOrNull()) }
     var showActionPicker by remember { mutableStateOf(false) }
+    var pendingCalendarExecution by remember { mutableStateOf<Pair<Profile, ProcessingAction.Calendar>?>(null) }
 
     val extraction = remember(payload, selected) {
         selected?.let { profile -> runCatching { parser.extract(payload, profile) } }
     }
 
-    fun runAction(profile: Profile, action: ProcessingAction) {
+    fun executeNow(profile: Profile, action: ProcessingAction) {
         try {
             val extracted = parser.extract(payload, profile)
-            ActionExecutor(context).execute(action, extracted)
+            val result = ActionExecutor(context, repository.settings()).execute(action, extracted)
+            WarningNotifier.show(context, result.warnings)
         } catch (e: Exception) {
             val processing = e as? ProcessingException
             val report = FailureReport(
@@ -157,6 +279,24 @@ internal fun SharedScreen(
         }
     }
 
+    val calendarPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
+        val pending = pendingCalendarExecution
+        pendingCalendarExecution = null
+        if (pending != null) executeNow(pending.first, pending.second)
+    }
+
+    fun runAction(profile: Profile, action: ProcessingAction) {
+        if (action is ProcessingAction.Calendar &&
+            action.calendarNameTemplate.isNotBlank() &&
+            ContextCompat.checkSelfPermission(context, Manifest.permission.READ_CALENDAR) != PackageManager.PERMISSION_GRANTED
+        ) {
+            pendingCalendarExecution = profile to action
+            calendarPermissionLauncher.launch(Manifest.permission.READ_CALENDAR)
+        } else {
+            executeNow(profile, action)
+        }
+    }
+
     LaunchedEffect(selected?.id) {
         showActionPicker = selected?.actions?.size?.let { it > 1 } == true
     }
@@ -165,8 +305,7 @@ internal fun SharedScreen(
         ModalBottomSheet(onDismissRequest = { showActionPicker = false }) {
             Column(Modifier.padding(horizontal = 16.dp).padding(bottom = 32.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("Wie weiterverarbeiten?", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
-                Text(selected!!.name, style = MaterialTheme.typography.bodyMedium)
-                Spacer(Modifier.height(4.dp))
+                Text(selected!!.name)
                 selected!!.actions.forEach { action ->
                     ElevatedButton(
                         onClick = {
@@ -194,7 +333,7 @@ internal fun SharedScreen(
                         SelectionContainer { Text(payload.subject) }
                     }
                     Text("Text", style = MaterialTheme.typography.labelMedium)
-                    SelectionContainer { Text(payload.text, maxLines = 16) }
+                    SelectionContainer { Text(payload.text, maxLines = 18) }
                     Text("Typ: ${payload.mimeType}", style = MaterialTheme.typography.bodySmall)
                 }
             }
@@ -205,7 +344,7 @@ internal fun SharedScreen(
                 Card(Modifier.fillMaxWidth()) {
                     Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         Text("Kein Profil passt", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                        Text("Erstelle direkt aus diesem Beispiel ein neues Profil. Der geteilte Text bleibt dabei nur lokal auf dem Gerät.")
+                        Text("Erstelle aus diesem Beispiel ein Profil. Du kannst anschließend einzelne Zeilen als Variablen markieren, ShareParser erzeugt die Regeln automatisch.")
                         Button(onClick = onCreateFromSample, modifier = Modifier.fillMaxWidth()) {
                             Icon(Icons.Outlined.Add, null)
                             Spacer(Modifier.width(8.dp))
@@ -221,7 +360,7 @@ internal fun SharedScreen(
                     ListItem(
                         leadingContent = { Icon(Icons.Outlined.Tune, null) },
                         headlineContent = { Text(profile.name) },
-                        supportingContent = { Text("${profile.extractors.size} Felder · ${profile.actions.size} Aktionen") }
+                        supportingContent = { Text("${profile.extractors.size} Variablen · ${profile.actions.size} Aktionen") }
                     )
                 }
             }
@@ -232,9 +371,7 @@ internal fun SharedScreen(
                         Text("Profil", style = MaterialTheme.typography.labelMedium)
                         Text(selected!!.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                     }
-                    if (matches.size > 1) {
-                        TextButton(onClick = { selected = null }) { Text("Wechseln") }
-                    }
+                    if (matches.size > 1) TextButton(onClick = { selected = null }) { Text("Wechseln") }
                 }
             }
 
@@ -242,10 +379,8 @@ internal fun SharedScreen(
             if (result != null && result.isSuccess) {
                 val values = result.getOrThrow()
                 val custom = values.filterKeys { it !in setOf("input", "text", "subject") }
-                if (custom.isEmpty()) {
-                    item { Text("Dieses Profil verwendet nur die eingebauten Werte {{subject}}, {{text}} und {{input}}.") }
-                } else {
-                    item { Text("Extrahierte Werte", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold) }
+                if (custom.isNotEmpty()) {
+                    item { Text("Erkannte Variablen", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold) }
                     custom.forEach { (key, value) ->
                         item {
                             Card(Modifier.fillMaxWidth()) {
