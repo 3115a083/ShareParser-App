@@ -1,34 +1,63 @@
 # ShareParser
 
-Privacy-first Android text transformation utility.
+ShareParser is a privacy-first Android utility for turning shared text into useful actions.
 
-ShareParser receives text from Android's Sharesheet, matches it against reusable profiles, extracts structured values and lets the user hand the transformed result to another Android feature or app.
+It receives text from Android's Sharesheet, selects a reusable profile, extracts structured values and transforms the result into a calendar event, parameterized URL or rebuilt message for another app.
 
-## Current development preview
+## Current MVP
 
-The repository contains the first runnable architecture and UI foundation for version `0.1.0`.
+The repository contains the first functional profile-builder milestone.
 
-Implemented foundation:
+### Share flow
 
-- `ACTION_SEND` / `text/*` receiver
-- Material 3 / Jetpack Compose UI with dynamic color on Android 12+
-- Local profiles, no account and no cloud service
-- Profile matchers using regular expressions
-- Named extractors with required/optional semantics
-- Template variables such as `{{title}}`, `{{customer|url}}`, `{{value|trim}}`
-- Processing engine supporting multiple actions per profile
-- Calendar hand-off using `CalendarContract.ACTION_INSERT`, without calendar permission
-- Parameterized URL hand-off
-- Rebuilt text hand-off through Android Sharesheet
-- Friendly names and Material icon identifiers for actions
-- Versioned JSON profile import/export model
-- Failure reports stored locally
-- Toast + silent low-priority notification on processing failure
-- Failure notification expires after 20 seconds and opens diagnostics
-- No `INTERNET` permission, analytics, ads, trackers or background service
-- Adaptive provisional share + gear launcher icon
+- receives `ACTION_SEND` for `text/*` and JSON
+- keeps mail subject and body separate as `{{subject}}` and `{{text}}`
+- combines both as `{{input}}`
+- matches enabled profiles using regular expressions
+- shows every shared field before processing
+- lets the user choose among matching profiles
+- automatically opens an action picker when a profile has multiple processing actions
+- supports creating a new profile directly from an unmatched shared example
+- handles new shares while the activity is already open (`singleTop` / `onNewIntent`)
 
-The guided editor in this first checkpoint intentionally exposes a small subset of the model. The data model and execution engine already support multiple extractors and Calendar, URL and Share actions. The next UI milestone is the visual block editor for adding/reordering all of these without editing JSON.
+### Profile builder
+
+- profile name and enable/disable switch
+- optional profile recognition regex
+- any number of named extraction fields
+- extraction source can be subject, body, or both
+- regex capture-group extraction
+- required/optional fields
+- live extraction preview when editing from a shared example
+- transformation blocks: trim, regex replace/remove, prefix, suffix, upper/lower case
+- any number of processing actions
+- friendly action names
+- selectable Material icons
+- direct JSON editor for advanced users
+- profile JSON can be copied, shared or saved as a file
+- profile JSON can be imported through Android's document picker
+
+### Processing actions
+
+**Calendar** uses Android's calendar insert intent. No calendar permission is required. Title, description, location, start and end can be templated. Common German and ISO date formats are recognized automatically, or an explicit `DateTimeFormatter` pattern can be configured.
+
+**URL** builds a URL from variables and opens it through Android. Allowed schemes are `http`, `https`, `geo`, `mailto` and `tel`.
+
+**Share** builds a new subject/body and sends it through the Android Sharesheet to another app.
+
+Template examples:
+
+```text
+{{subject}}
+{{booking|trim}}
+https://example.com/?id={{booking|url}}
+Termin: {{customer}}
+{{text}}
+```
+
+### Failure handling
+
+Processing errors create an immediate Toast plus a silent low-priority notification. The notification expires after 20 seconds and opens a local diagnostic report. From that report the affected profile can be opened with the failing field highlighted.
 
 ## Architecture
 
@@ -36,13 +65,29 @@ The guided editor in this first checkpoint intentionally exposes a small subset 
 Android Sharesheet
       |
       v
-Profile matcher -> Extractors -> named values -> selected ProcessingAction
-                                            |-> Calendar intent
-                                            |-> URL intent
-                                            `-> Share intent
+SharedPayload(subject, text)
+      |
+Profile matcher
+      |
+Extractor rules -> transformation blocks -> named values
+      |
+Action picker
+      |-------------------|------------------|
+Calendar insert       URL intent       transformed Share
 ```
 
-Profiles are serialized as versioned JSON and can therefore be shared, downloaded, imported and reviewed as plain text.
+Profiles and failure reports are stored locally as JSON. No server is required.
+
+## Privacy and energy use
+
+ShareParser has no `INTERNET` permission, analytics, ads, trackers, Play Services dependency, background service or periodic jobs. Processing only runs when the user opens ShareParser or explicitly shares content to it. Android backup is disabled so locally derived profile and failure data is not uploaded through app backup.
+
+## Android support
+
+- minimum: Android 8.0 / API 26
+- target/compile SDK: 36
+- Jetpack Compose + Material 3
+- dynamic color on Android 12+
 
 ## Build
 
@@ -53,27 +98,27 @@ Requirements:
 - Gradle 8.13
 
 ```bash
-gradle :app:assembleDebug
+gradle :app:testDebugUnitTest :app:lintDebug :app:assembleDebug
 ```
 
-Android Studio can import the repository directly and use Gradle 8.13.
+GitHub Actions runs unit tests, lint and creates a debug APK for pushes and pull requests.
 
 ## F-Droid direction
 
-The app is deliberately designed for F-Droid compatibility:
+The project is deliberately structured for F-Droid:
 
-- Apache-2.0 licensed source
+- Apache-2.0 source license
 - no proprietary SDKs
-- no Play Services dependency
 - no telemetry
-- no remote build-time code generation service
-- source-only profile format
+- no remote runtime dependency
+- plain, inspectable profile files
+- Fastlane-compatible store metadata under `fastlane/metadata/android`
 
-Before an F-Droid submission, versioned release tags, changelogs, reproducible release builds and final store metadata still need to be completed.
+Before the first F-Droid submission, release signing, reproducible release builds, screenshots, changelogs, tagged releases and final metadata still need to be completed.
 
-## Privacy
+## Provisional icon
 
-Shared text and profiles remain on-device. ShareParser itself does not request network access. Data only leaves ShareParser when the user explicitly launches a URL, calendar insertion or shares transformed text to another app.
+The adaptive launcher icon combines Android's share-node motif with a processing gear to represent “share → parse/transform”. It is intentionally provisional and can be replaced without changing app identity.
 
 ## License
 
