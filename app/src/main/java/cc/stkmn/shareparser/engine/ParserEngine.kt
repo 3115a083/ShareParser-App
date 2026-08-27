@@ -53,17 +53,25 @@ class ParserEngine {
     }
 
     private fun extractOne(input: String, rule: ExtractorRule): String? {
-        val options = setOf(RegexOption.MULTILINE)
         val match = try {
-            Regex(rule.regex, options).find(input)
+            Regex(rule.regex, setOf(RegexOption.MULTILINE)).find(input)
         } catch (e: Exception) {
             throw ProcessingException(
                 "Ungültiger regulärer Ausdruck für '${rule.key}'.",
                 rule.key,
                 e.message ?: e.toString()
             )
+        } ?: return null
+
+        if (rule.group !in match.groupValues.indices) {
+            throw ProcessingException(
+                "Capture Group ${rule.group} existiert für '${rule.key}' nicht.",
+                rule.key,
+                "Regex '${rule.regex}' produced ${match.groupValues.size} groups including group 0"
+            )
         }
-        var value = match?.groups?.getOrNull(rule.group)?.value ?: return null
+
+        var value = match.groups[rule.group]?.value ?: return null
         for (transform in rule.transforms) {
             value = applyTransform(value, transform, rule.key)
         }
