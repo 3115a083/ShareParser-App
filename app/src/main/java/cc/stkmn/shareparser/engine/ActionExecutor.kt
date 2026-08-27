@@ -13,7 +13,9 @@ import java.time.format.DateTimeFormatter
 import java.time.format.DateTimeParseException
 import java.util.Locale
 
-class ActionExecutor(private val context: Context) {
+class ActionExecutor(context: Context) {
+    private val appContext = context.applicationContext
+
     fun execute(action: ProcessingAction, values: Map<String, String>) {
         when (action) {
             is ProcessingAction.Calendar -> openCalendar(action, values)
@@ -77,14 +79,14 @@ class ActionExecutor(private val context: Context) {
 
     private fun launch(intent: Intent, failingField: String) {
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        if (intent.resolveActivity(context.packageManager) == null) {
+        if (intent.resolveActivity(appContext.packageManager) == null) {
             throw ProcessingException(
                 "Keine passende App für diese Aktion gefunden.",
                 failingField,
                 intent.toUri(0)
             )
         }
-        context.startActivity(intent)
+        appContext.startActivity(intent)
     }
 
     private fun renderOptional(template: String, values: Map<String, String>): String? =
