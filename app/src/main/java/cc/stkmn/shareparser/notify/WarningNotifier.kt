@@ -18,7 +18,7 @@ object WarningNotifier {
     fun show(context: Context, warnings: List<String>) {
         if (warnings.isEmpty()) return
         val message = warnings.joinToString(" ")
-        Toast.makeText(context, message, Toast.LENGTH_LONG).show()
+        runCatching { Toast.makeText(context.applicationContext, message, Toast.LENGTH_LONG).show() }
 
         if (Build.VERSION.SDK_INT >= 33 &&
             ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
@@ -26,7 +26,7 @@ object WarningNotifier {
 
         runCatching {
             createChannel(context)
-            val notification = NotificationCompat.Builder(context, CHANNEL)
+            val notification = NotificationCompat.Builder(context.applicationContext, CHANNEL)
                 .setSmallIcon(R.drawable.ic_notification)
                 .setContentTitle("ShareParser: Bitte Angaben prüfen")
                 .setContentText(message)
@@ -36,13 +36,13 @@ object WarningNotifier {
                 .setAutoCancel(true)
                 .setTimeoutAfter(20_000)
                 .build()
-            NotificationManagerCompat.from(context).notify(message.hashCode(), notification)
+            NotificationManagerCompat.from(context.applicationContext).notify(message.hashCode(), notification)
         }
     }
 
     private fun createChannel(context: Context) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val manager = context.getSystemService(NotificationManager::class.java)
+            val manager = context.applicationContext.getSystemService(NotificationManager::class.java)
             if (manager.getNotificationChannel(CHANNEL) == null) {
                 manager.createNotificationChannel(
                     NotificationChannel(
