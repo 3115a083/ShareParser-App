@@ -42,7 +42,7 @@ class ProfileRepository(context: Context) {
 
     fun decodeBundle(text: String, assignNewId: Boolean = false): Profile {
         val bundle = json.decodeFromString<ProfileBundle>(text)
-        require(bundle.schemaVersion in 1..3) { "Unsupported profile schema ${bundle.schemaVersion}" }
+        require(bundle.schemaVersion in 1..4) { "Unsupported profile schema ${bundle.schemaVersion}" }
         return if (assignNewId) bundle.profile.copy(id = UUID.randomUUID().toString()) else bundle.profile
     }
 
