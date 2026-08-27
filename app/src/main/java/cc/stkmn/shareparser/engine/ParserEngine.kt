@@ -9,13 +9,20 @@ import cc.stkmn.shareparser.data.ValueTransform
 
 class ParserEngine {
     fun matchingProfiles(payload: SharedPayload, profiles: List<Profile>): List<Profile> = profiles.filter { profile ->
-        profile.enabled && profile.matchers.all { matcher ->
+        if (!profile.enabled) return@filter false
+        val triggerValues = availableValues(payload, profile)
+        profile.matchers.all { matcher ->
             runCatching {
                 val options = buildSet {
                     add(RegexOption.MULTILINE)
                     if (matcher.ignoreCase) add(RegexOption.IGNORE_CASE)
                 }
-                Regex(matcher.regex, options).containsMatchIn(payload.combined)
+                val source = if (matcher.variableKey.isBlank()) {
+                    payload.combined
+                } else {
+                    triggerValues[matcher.variableKey] ?: return@runCatching false
+                }
+                Regex(matcher.regex, options).containsMatchIn(source)
             }.getOrDefault(false)
         }
     }
@@ -24,11 +31,7 @@ class ParserEngine {
         matchingProfiles(SharedPayload(text = input), profiles)
 
     fun extract(payload: SharedPayload, profile: Profile): Map<String, String> {
-        val values = linkedMapOf(
-            "input" to payload.combined,
-            "text" to payload.text,
-            "subject" to payload.subject
-        )
+        val values = builtInValues(payload)
         for (rule in profile.extractors) {
             val value = extractOne(sourceFor(payload, rule.source), rule)
             if (value == null && rule.required) {
@@ -45,6 +48,22 @@ class ParserEngine {
 
     fun extract(input: String, profile: Profile): Map<String, String> =
         extract(SharedPayload(text = input), profile)
+
+    private fun availableValues(payload: SharedPayload, profile: Profile): Map<String, String> {
+        val values = builtInValues(payload)
+        profile.extractors.forEach { rule ->
+            runCatching { extractOne(sourceFor(payload, rule.source), rule) }
+                .getOrNull()
+                ?.let { values[rule.key] = it }
+        }
+        return values
+    }
+
+    private fun builtInValues(payload: SharedPayload) = linkedMapOf(
+        "input" to payload.combined,
+        "text" to payload.text,
+        "subject" to payload.subject
+    )
 
     private fun sourceFor(payload: SharedPayload, source: InputSource): String = when (source) {
         InputSource.COMBINED -> payload.combined
