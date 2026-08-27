@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.ArrowBack
+import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
@@ -36,13 +37,13 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.unit.dp
 import cc.stkmn.shareparser.data.Profile
 import cc.stkmn.shareparser.data.ProfileRepository
 import cc.stkmn.shareparser.data.SharedPayload
 import cc.stkmn.shareparser.ui.FailureScreen
 import cc.stkmn.shareparser.ui.HomeScreen
 import cc.stkmn.shareparser.ui.ProfileEditorScreen
+import cc.stkmn.shareparser.ui.SettingsScreen
 import cc.stkmn.shareparser.ui.SharedScreen
 
 class MainActivity : ComponentActivity() {
@@ -73,6 +74,7 @@ class MainActivity : ComponentActivity() {
 
 private sealed interface Screen {
     data object Home : Screen
+    data object Settings : Screen
     data class Editor(
         val profile: Profile?,
         val sample: SharedPayload? = null,
@@ -88,7 +90,7 @@ private fun ShareParserApp(startIntent: Intent?, onIntentConsumed: () -> Unit) {
     val context = LocalContext.current
     val repository = remember { ProfileRepository(context) }
     var profiles by remember { mutableStateOf(repository.profiles()) }
-    var screen by remember { mutableStateOf<Screen>(initialScreen(startIntent, profiles)) }
+    var screen by remember { mutableStateOf<Screen>(initialScreen(startIntent)) }
     var importError by remember { mutableStateOf<String?>(null) }
 
     val notificationPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { }
@@ -131,6 +133,7 @@ private fun ShareParserApp(startIntent: Intent?, onIntentConsumed: () -> Unit) {
                         Text(
                             when (val current = screen) {
                                 Screen.Home -> "ShareParser"
+                                Screen.Settings -> "Einstellungen"
                                 is Screen.Editor -> if (current.profile == null) "Profil erstellen" else "Profil bearbeiten"
                                 is Screen.Shared -> "Geteilter Inhalt"
                                 Screen.Failure -> "Fehlerbericht"
@@ -139,8 +142,15 @@ private fun ShareParserApp(startIntent: Intent?, onIntentConsumed: () -> Unit) {
                     },
                     navigationIcon = {
                         if (screen !is Screen.Home) {
-                            IconButton(onClick = { screen = if (profiles.isEmpty()) Screen.Editor(null) else Screen.Home }) {
-                                Icon(Icons.Outlined.ArrowBack, "Zurück")
+                            IconButton(onClick = { screen = Screen.Home }) {
+                                Icon(Icons.Outlined.ArrowBack, "Zurück zur Profilübersicht")
+                            }
+                        }
+                    },
+                    actions = {
+                        if (screen is Screen.Home) {
+                            IconButton(onClick = { screen = Screen.Settings }) {
+                                Icon(Icons.Outlined.Settings, "Einstellungen")
                             }
                         }
                     }
@@ -158,10 +168,21 @@ private fun ShareParserApp(startIntent: Intent?, onIntentConsumed: () -> Unit) {
                 when (val current = screen) {
                     Screen.Home -> HomeScreen(
                         profiles = profiles,
+                        importError = importError,
                         onEdit = { screen = Screen.Editor(it) },
                         onCreate = { screen = Screen.Editor(null) },
-                        onImport = { importLauncher.launch(arrayOf("application/json", "text/json", "text/plain")) }
+                        onImport = { importLauncher.launch(arrayOf("application/json", "text/json", "text/plain")) },
+                        onToggle = { profile, enabled ->
+                            repository.setEnabled(profile.id, enabled)
+                            profiles = repository.profiles()
+                        },
+                        onDelete = { profile ->
+                            repository.delete(profile.id)
+                            profiles = repository.profiles()
+                        },
+                        onSettings = { screen = Screen.Settings }
                     )
+                    Screen.Settings -> SettingsScreen(repository = repository)
                     is Screen.Editor -> ProfileEditorScreen(
                         existing = current.profile,
                         sample = current.sample,
@@ -173,7 +194,7 @@ private fun ShareParserApp(startIntent: Intent?, onIntentConsumed: () -> Unit) {
                         },
                         onDeleted = {
                             profiles = repository.profiles()
-                            screen = if (profiles.isEmpty()) Screen.Editor(null) else Screen.Home
+                            screen = Screen.Home
                         }
                     )
                     is Screen.Shared -> SharedScreen(
@@ -192,23 +213,15 @@ private fun ShareParserApp(startIntent: Intent?, onIntentConsumed: () -> Unit) {
                         )
                     }
                 }
-                if (importError != null && screen is Screen.Home) {
-                    Text(
-                        text = importError.orEmpty(),
-                        color = MaterialTheme.colorScheme.error,
-                        modifier = Modifier.padding(16.dp)
-                    )
-                }
             }
         }
     }
 }
 
-private fun initialScreen(intent: Intent?, profiles: List<Profile>): Screen {
+private fun initialScreen(intent: Intent?): Screen {
     if (intent?.isFailureLink() == true) return Screen.Failure
-    val payload = intent?.sharedPayload()
-    if (payload != null) return if (profiles.isEmpty()) Screen.Editor(null, sample = payload) else Screen.Shared(payload)
-    return if (profiles.isEmpty()) Screen.Editor(null) else Screen.Home
+    intent?.sharedPayload()?.let { return Screen.Shared(it) }
+    return Screen.Home
 }
 
 private fun Intent.sharedPayload(): SharedPayload? {
