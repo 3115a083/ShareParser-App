@@ -26,6 +26,17 @@ jobs:
       - uses: gradle/actions/setup-gradle@v6
         with:
           gradle-version: '8.13'
+      - name: Verify privacy and uninstall invariants
+        shell: bash
+        run: |
+          set -euo pipefail
+          manifest="app/src/main/AndroidManifest.xml"
+          grep -q 'android:allowBackup="false"' "$manifest"
+          grep -q 'android:hasFragileUserData="false"' "$manifest"
+          if grep -Eq 'android.permission.(INTERNET|READ_EXTERNAL_STORAGE|WRITE_EXTERNAL_STORAGE|MANAGE_EXTERNAL_STORAGE)' "$manifest"; then
+            echo "Unexpected network or broad storage permission found in AndroidManifest.xml"
+            exit 1
+          fi
       - name: Unit tests, lint and debug APK
         run: gradle :app:testDebugUnitTest :app:lintDebug :app:assembleDebug --stacktrace
       - name: Upload debug APK
