@@ -23,11 +23,14 @@ jobs:
           distribution: temurin
           java-version: '17'
           verify-signature: true
-      - name: Restore stable debug signing key
-        uses: actions/cache@v4
-        with:
-          path: ~/.android/debug.keystore
-          key: shareparser-debug-keystore-v1
+      - name: Install deterministic debug signing key
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$HOME/.android"
+          base64 --decode ci/shareparser-debug.keystore.b64 > "$HOME/.android/debug.keystore"
+          chmod 600 "$HOME/.android/debug.keystore"
+          keytool -list -keystore "$HOME/.android/debug.keystore" -storepass android -alias androiddebugkey >/dev/null
       - uses: gradle/actions/setup-gradle@v6
         with:
           gradle-version: '8.13'
