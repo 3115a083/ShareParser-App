@@ -4,6 +4,7 @@ import cc.stkmn.shareparser.data.CaseMode
 import cc.stkmn.shareparser.data.ExtractorRule
 import cc.stkmn.shareparser.data.InputSource
 import cc.stkmn.shareparser.data.MatcherRule
+import cc.stkmn.shareparser.data.ParseDirection
 import cc.stkmn.shareparser.data.Profile
 import cc.stkmn.shareparser.data.SharedPayload
 import cc.stkmn.shareparser.data.ValueTransform
@@ -18,6 +19,16 @@ class ParserEngineTest {
     fun extractsRegexGroup() {
         val profile = Profile("1", "Mail", extractors = listOf(ExtractorRule("mailSubject", "(?m)^Subject: (.+)$", required = true)))
         assertEquals("Train 42", engine.extract("Subject: Train 42\nBody", profile)["mailSubject"])
+    }
+
+    @Test
+    fun bottomUpParsingUsesLastMatchingValue() {
+        val input = "Datum: 01.01.2026\nAntworttext\n--- ursprüngliche Mail ---\nDatum: 14.12.2026"
+        val rule = ExtractorRule("datum", "(?m)^Datum: (.+)$", required = true)
+        val top = Profile("top", "Top", extractors = listOf(rule), parseDirection = ParseDirection.TOP_DOWN)
+        val bottom = Profile("bottom", "Bottom", extractors = listOf(rule), parseDirection = ParseDirection.BOTTOM_UP)
+        assertEquals("01.01.2026", engine.extract(input, top)["datum"])
+        assertEquals("14.12.2026", engine.extract(input, bottom)["datum"])
     }
 
     @Test
