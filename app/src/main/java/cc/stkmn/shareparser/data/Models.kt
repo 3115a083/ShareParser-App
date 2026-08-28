@@ -6,7 +6,7 @@ import java.util.UUID
 
 @Serializable
 data class ProfileBundle(
-    val schemaVersion: Int = 6,
+    val schemaVersion: Int = 7,
     val profile: Profile
 )
 
@@ -49,6 +49,7 @@ data class ExtractorRule(
     val group: Int = 1,
     val required: Boolean = false,
     val source: InputSource = InputSource.COMBINED,
+    val sourceVariableKey: String = "",
     val transforms: List<ValueTransform> = listOf(ValueTransform.Trim),
     val id: String = UUID.randomUUID().toString(),
     val sampleLabel: String = ""
@@ -117,6 +118,13 @@ enum class ShareSelectionMode {
 }
 
 @Serializable
+enum class TextFileMode {
+    SHARE,
+    OPEN,
+    SAVE
+}
+
+@Serializable
 enum class LauncherIcon {
     LOGO_1,
     LOGO_2,
@@ -130,7 +138,8 @@ enum class LauncherIcon {
 data class AppSettings(
     val dateTimeLocale: DateTimeLocale = DateTimeLocale.SYSTEM,
     val shareSelectionMode: ShareSelectionMode = ShareSelectionMode.APP,
-    val launcherIcon: LauncherIcon = LauncherIcon.LOGO_5
+    val launcherIcon: LauncherIcon = LauncherIcon.LOGO_1,
+    val defaultSaveTreeUri: String = ""
 )
 
 @Serializable
@@ -177,7 +186,11 @@ sealed class ProcessingAction {
         override val icon: String = "share",
         val textTemplate: String = "{{text}}",
         val subjectTemplate: String = "{{subject}}",
-        val mimeType: String = "text/plain"
+        val mimeType: String = "text/plain",
+        val asFile: Boolean = false,
+        val fileMode: TextFileMode = TextFileMode.SHARE,
+        val fileNameTemplate: String = "ShareParser.txt",
+        val relativePathTemplate: String = ""
     ) : ProcessingAction()
 }
 
@@ -187,7 +200,8 @@ data class SharedPayload(
     val subject: String = "",
     val mimeType: String = "text/plain",
     val sourcePackage: String = "",
-    val sourceApp: String = ""
+    val sourceApp: String = "",
+    val fileName: String = ""
 ) {
     val combined: String
         get() = buildString {
