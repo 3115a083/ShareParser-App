@@ -38,7 +38,7 @@ class ShareOverlayService : Service() {
     }
 
     private fun show(id: String) {
-        dismiss(removePending = false)
+        removeOverlayOnly()
         val pending = PendingShareStore(this).get(id) ?: run {
             stopSelf()
             return
@@ -103,21 +103,27 @@ class ShareOverlayService : Service() {
         windowManager = getSystemService(WindowManager::class.java)
         runCatching { windowManager?.addView(root, params) }
             .onSuccess { overlay = root }
-            .onFailure { stopSelf() }
+            .onFailure {
+                PendingShareStore(this).remove(id)
+                stopSelf()
+            }
+    }
+
+    private fun removeOverlayOnly() {
+        overlay?.let { view -> runCatching { windowManager?.removeView(view) } }
+        overlay = null
     }
 
     private fun dismiss(removePending: Boolean) {
         handler.removeCallbacksAndMessages(null)
-        overlay?.let { view -> runCatching { windowManager?.removeView(view) } }
-        overlay = null
+        removeOverlayOnly()
         if (removePending) pendingId?.let { PendingShareStore(this).remove(it) }
         pendingId = null
         stopSelf()
     }
 
     override fun onDestroy() {
-        overlay?.let { view -> runCatching { windowManager?.removeView(view) } }
-        overlay = null
+        removeOverlayOnly()
         handler.removeCallbacksAndMessages(null)
         super.onDestroy()
     }
