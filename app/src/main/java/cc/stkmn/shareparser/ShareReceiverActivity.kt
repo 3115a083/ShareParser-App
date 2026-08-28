@@ -4,6 +4,7 @@ import android.content.Intent
 import android.os.Bundle
 import android.provider.Settings
 import androidx.activity.ComponentActivity
+import cc.stkmn.shareparser.data.EditorModeStore
 import cc.stkmn.shareparser.data.PendingShareStore
 import cc.stkmn.shareparser.data.ProfileRepository
 import cc.stkmn.shareparser.data.ShareSelectionMode
@@ -31,6 +32,14 @@ class ShareReceiverActivity : ComponentActivity() {
             return
         }
 
+        val pendingStore = PendingShareStore(this)
+        if (EditorModeStore(this).activeProfileId() != null) {
+            val pending = pendingStore.put(payload)
+            openApp(pending.id)
+            finish()
+            return
+        }
+
         val coordinator = ShareCoordinator(this)
         val matches = coordinator.matchingProfiles(payload)
         val choices = coordinator.choices(payload)
@@ -41,7 +50,7 @@ class ShareReceiverActivity : ComponentActivity() {
             return
         }
 
-        val pending = PendingShareStore(this).put(payload)
+        val pending = pendingStore.put(payload)
         if (matches.isEmpty() || choices.isEmpty()) {
             openApp(pending.id)
             finish()
