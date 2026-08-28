@@ -202,9 +202,12 @@ object GuidedRuleFactory {
 
     private fun flexibleLiteral(value: String): String {
         if (value.isEmpty()) return ""
-        return value.split(Regex("\\s+"))
+        // Mail and HTML content often contains Unicode separator characters such
+        // as EN SPACE (U+2002) or non-breaking spaces. Treat all separators as
+        // interchangeable whitespace so rules learned from one mail remain reusable.
+        return value.split(Regex("[\\s\\p{Z}]+"))
             .filter { it.isNotEmpty() }
-            .joinToString("\\s+") { Regex.escape(it) }
+            .joinToString("[\\s\\p{Z}]+") { Regex.escape(it) }
     }
 
     private fun suggestedKey(label: String, index: Int): String {
