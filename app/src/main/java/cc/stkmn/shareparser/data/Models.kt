@@ -6,7 +6,7 @@ import java.util.UUID
 
 @Serializable
 data class ProfileBundle(
-    val schemaVersion: Int = 4,
+    val schemaVersion: Int = 5,
     val profile: Profile
 )
 
@@ -58,7 +58,8 @@ sealed class ValueTransform {
     data class RegexReplace(
         val regex: String,
         val replacement: String = "",
-        val ignoreCase: Boolean = false
+        val ignoreCase: Boolean = false,
+        val literal: Boolean = true
     ) : ValueTransform()
 
     @Serializable
@@ -96,8 +97,16 @@ enum class DateTimeLocale {
 }
 
 @Serializable
+enum class ShareSelectionMode {
+    APP,
+    OVERLAY,
+    NOTIFICATION
+}
+
+@Serializable
 data class AppSettings(
-    val dateTimeLocale: DateTimeLocale = DateTimeLocale.DE_DE
+    val dateTimeLocale: DateTimeLocale = DateTimeLocale.SYSTEM,
+    val shareSelectionMode: ShareSelectionMode = ShareSelectionMode.APP
 )
 
 @Serializable
@@ -117,10 +126,12 @@ sealed class ProcessingAction {
         val locationTemplate: String = "",
         val startTemplate: String = "",
         val endTemplate: String = "",
+        val durationTemplate: String = "",
         val startPattern: String = "",
         val endPattern: String = "",
         val allDay: Boolean = false,
-        val calendarNameTemplate: String = ""
+        val calendarNameTemplate: String = "",
+        val calendarId: Long? = null
     ) : ProcessingAction()
 
     @Serializable
