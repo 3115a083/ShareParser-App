@@ -19,21 +19,21 @@ object LauncherIconManager {
         val normalized = normalize(selected)
 
         aliases.forEach { (icon, alias) ->
-            pm.setComponentEnabledSetting(
-                component(appContext, alias),
-                if (icon == normalized) PackageManager.COMPONENT_ENABLED_STATE_ENABLED
-                else PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
-                PackageManager.DONT_KILL_APP
+            setStateIfNeeded(
+                pm = pm,
+                component = component(appContext, alias),
+                desiredState = if (icon == normalized) PackageManager.COMPONENT_ENABLED_STATE_ENABLED
+                else PackageManager.COMPONENT_ENABLED_STATE_DISABLED
             )
         }
 
-        // Old profile/settings values from builds that exposed six icons remain readable.
+        // Old settings values from builds that exposed six icons remain readable.
         // Their aliases stay disabled and migrate visually to logo 1.
         listOf("LauncherLogo5", "LauncherLogo6").forEach { alias ->
-            pm.setComponentEnabledSetting(
-                component(appContext, alias),
-                PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
-                PackageManager.DONT_KILL_APP
+            setStateIfNeeded(
+                pm = pm,
+                component = component(appContext, alias),
+                desiredState = PackageManager.COMPONENT_ENABLED_STATE_DISABLED
             )
         }
     }
@@ -45,6 +45,15 @@ object LauncherIconManager {
         LauncherIcon.LOGO_4 -> icon
         LauncherIcon.LOGO_5,
         LauncherIcon.LOGO_6 -> LauncherIcon.LOGO_1
+    }
+
+    private fun setStateIfNeeded(pm: PackageManager, component: ComponentName, desiredState: Int) {
+        if (pm.getComponentEnabledSetting(component) == desiredState) return
+        pm.setComponentEnabledSetting(
+            component,
+            desiredState,
+            PackageManager.DONT_KILL_APP
+        )
     }
 
     private fun component(context: Context, alias: String) =
