@@ -7,7 +7,6 @@ import android.os.Build
 import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -40,15 +39,14 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
+import cc.stkmn.shareparser.AppArtwork
+import cc.stkmn.shareparser.AppArtworkImage
 import cc.stkmn.shareparser.LauncherIconManager
-import cc.stkmn.shareparser.R
 import cc.stkmn.shareparser.data.LauncherIcon
 import cc.stkmn.shareparser.data.ProfileRepository
 import cc.stkmn.shareparser.data.ShareSelectionMode
@@ -132,11 +130,10 @@ internal fun SettingsHomeScreen(
                             .clickable { saveIcon(icon) }
                             .padding(8.dp)
                     ) {
-                        Image(
-                            painter = painterResource(launcherIconResource(icon)),
+                        AppArtworkImage(
+                            assetPath = AppArtwork.launcherAsset(icon),
                             contentDescription = "App-Symbol ${selectableLauncherIcons.indexOf(icon) + 1}",
-                            modifier = Modifier.size(64.dp),
-                            contentScale = ContentScale.Fit
+                            modifier = Modifier.size(64.dp)
                         )
                         Text("${selectableLauncherIcons.indexOf(icon) + 1}", style = MaterialTheme.typography.labelMedium)
                     }
@@ -288,14 +285,6 @@ private fun folderLabel(uri: String): String = runCatching {
 private fun normalizedLauncherIcon(icon: LauncherIcon): LauncherIcon = when (icon) {
     LauncherIcon.LOGO_1, LauncherIcon.LOGO_2, LauncherIcon.LOGO_3, LauncherIcon.LOGO_4 -> icon
     LauncherIcon.LOGO_5, LauncherIcon.LOGO_6 -> LauncherIcon.LOGO_1
-}
-
-private fun launcherIconResource(icon: LauncherIcon): Int = when (normalizedLauncherIcon(icon)) {
-    LauncherIcon.LOGO_1 -> R.mipmap.app_logo_1
-    LauncherIcon.LOGO_2 -> R.mipmap.app_logo_2
-    LauncherIcon.LOGO_3 -> R.mipmap.app_logo_3
-    LauncherIcon.LOGO_4 -> R.mipmap.app_logo_4
-    LauncherIcon.LOGO_5, LauncherIcon.LOGO_6 -> R.mipmap.app_logo_1
 }
 
 @Composable
