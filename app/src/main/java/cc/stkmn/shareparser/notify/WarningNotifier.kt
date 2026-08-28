@@ -6,7 +6,6 @@ import android.app.NotificationManager
 import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
-import android.widget.Toast
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
@@ -18,7 +17,7 @@ object WarningNotifier {
     fun show(context: Context, warnings: List<String>) {
         if (warnings.isEmpty()) return
         val message = warnings.joinToString(" ")
-        runCatching { Toast.makeText(context.applicationContext, message, Toast.LENGTH_LONG).show() }
+        UserNotice.showLong(context, message)
 
         if (Build.VERSION.SDK_INT >= 33 &&
             ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
