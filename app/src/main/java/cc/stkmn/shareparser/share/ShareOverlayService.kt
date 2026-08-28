@@ -2,7 +2,9 @@ package cc.stkmn.shareparser.share
 
 import android.app.Service
 import android.content.Intent
+import android.graphics.Color
 import android.graphics.PixelFormat
+import android.graphics.drawable.GradientDrawable
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
@@ -11,9 +13,11 @@ import android.view.Gravity
 import android.view.View
 import android.view.WindowManager
 import android.widget.Button
+import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
+import cc.stkmn.shareparser.R
 import cc.stkmn.shareparser.data.PendingShareStore
 
 class ShareOverlayService : Service() {
@@ -53,47 +57,87 @@ class ShareOverlayService : Service() {
 
         val content = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(32, 28, 32, 28)
-            setBackgroundColor(0xFFF7F7F7.toInt())
+            setPadding(dp(22), dp(20), dp(22), dp(18))
+            background = roundedBackground(0xFFFDFBFF.toInt(), 24f)
+            elevation = dp(18).toFloat()
         }
+
+        val header = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        header.addView(ImageView(this).apply {
+            setImageResource(R.drawable.ic_launcher_foreground)
+            scaleType = ImageView.ScaleType.CENTER_INSIDE
+        }, LinearLayout.LayoutParams(dp(42), dp(42)).apply { marginEnd = dp(12) })
+        header.addView(LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            addView(TextView(this@ShareOverlayService).apply {
+                text = "ShareParser"
+                textSize = 20f
+                setTextColor(0xFF1C1B1F.toInt())
+                setTypeface(typeface, android.graphics.Typeface.BOLD)
+            })
+            addView(TextView(this@ShareOverlayService).apply {
+                text = "Weiterverarbeitung auswählen"
+                textSize = 13f
+                setTextColor(0xFF5F5E62.toInt())
+                setPadding(0, dp(2), 0, 0)
+            })
+        }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        content.addView(header)
+
         content.addView(TextView(this).apply {
-            text = "ShareParser"
-            textSize = 20f
-            setTextColor(0xFF111111.toInt())
+            text = pending.payload.subject.ifBlank { pending.payload.fileName }.take(80)
+            textSize = 12f
+            setTextColor(0xFF77747A.toInt())
+            visibility = if (text.isBlank()) View.GONE else View.VISIBLE
+            setPadding(0, dp(12), 0, dp(4))
         })
-        content.addView(TextView(this).apply {
-            text = "Weiterverarbeitung auswählen"
-            textSize = 14f
-            setTextColor(0xFF444444.toInt())
-            setPadding(0, 4, 0, 16)
-        })
+
         choices.take(12).forEach { choice ->
             content.addView(Button(this).apply {
                 text = choice.label(multipleProfiles)
                 isAllCaps = false
+                textSize = 15f
+                setTextColor(Color.WHITE)
+                background = roundedBackground(0xFF3168D8.toInt(), 14f)
+                setPadding(dp(14), dp(10), dp(14), dp(10))
                 setOnClickListener {
                     coordinator.executePending(id, choice.profileId, choice.actionId)
                     dismiss(removePending = false)
                 }
+            }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+                topMargin = dp(10)
             })
         }
         content.addView(Button(this).apply {
             text = "Abbrechen"
             isAllCaps = false
+            textSize = 14f
+            setTextColor(0xFF3C4043.toInt())
+            background = roundedStrokeBackground(0x00FFFFFF, 0xFFCAC4D0.toInt(), 14f)
             setOnClickListener { dismiss(removePending = true) }
+        }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+            topMargin = dp(12)
         })
 
-        val root = ScrollView(this).apply { addView(content) }
+        val root = ScrollView(this).apply {
+            clipToOutline = false
+            addView(content)
+            setPadding(dp(2), dp(2), dp(2), dp(2))
+        }
         val params = WindowManager.LayoutParams(
-            (resources.displayMetrics.widthPixels * 0.88f).toInt(),
+            (resources.displayMetrics.widthPixels * 0.86f).toInt().coerceAtMost(dp(520)),
             WindowManager.LayoutParams.WRAP_CONTENT,
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
             WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
-                WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH,
+                WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH or
+                WindowManager.LayoutParams.FLAG_DIM_BEHIND,
             PixelFormat.TRANSLUCENT
         ).apply {
-            gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
-            y = (72 * resources.displayMetrics.density).toInt()
+            gravity = Gravity.CENTER
+            dimAmount = 0.28f
         }
         root.setOnTouchListener { _, event ->
             if (event.action == android.view.MotionEvent.ACTION_OUTSIDE) dismiss(removePending = true)
@@ -108,6 +152,21 @@ class ShareOverlayService : Service() {
                 stopSelf()
             }
     }
+
+    private fun roundedBackground(color: Int, radiusDp: Float): GradientDrawable = GradientDrawable().apply {
+        shape = GradientDrawable.RECTANGLE
+        setColor(color)
+        cornerRadius = dp(radiusDp.toInt()).toFloat()
+    }
+
+    private fun roundedStrokeBackground(fill: Int, stroke: Int, radiusDp: Float): GradientDrawable = GradientDrawable().apply {
+        shape = GradientDrawable.RECTANGLE
+        setColor(fill)
+        setStroke(dp(1), stroke)
+        cornerRadius = dp(radiusDp.toInt()).toFloat()
+    }
+
+    private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
 
     private fun removeOverlayOnly() {
         overlay?.let { view -> runCatching { windowManager?.removeView(view) } }
