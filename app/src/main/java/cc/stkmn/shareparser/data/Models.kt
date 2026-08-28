@@ -160,7 +160,9 @@ sealed class ProcessingAction {
 data class SharedPayload(
     val text: String,
     val subject: String = "",
-    val mimeType: String = "text/plain"
+    val mimeType: String = "text/plain",
+    val sourcePackage: String = "",
+    val sourceApp: String = ""
 ) {
     val combined: String
         get() = buildString {
