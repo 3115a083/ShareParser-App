@@ -50,7 +50,7 @@ jobs:
             git ls-files | grep -Ei '(^|/).*(\.jks|\.keystore|\.p12|\.pfx)(\..*)?$|keystore\.b64$' || true
             exit 1
           fi
-          if grep -Rqs 'pull_request_target:' .github/workflows; then
+          if grep -REqs --include='*.yml' --include='*.yaml' '^[[:space:]]*pull_request_target:' .github/workflows; then
             echo "pull_request_target is intentionally forbidden in this repository"
             exit 1
           fi
