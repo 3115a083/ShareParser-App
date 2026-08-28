@@ -9,10 +9,15 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.ArrowBack
@@ -36,8 +41,12 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.unit.dp
+import cc.stkmn.shareparser.data.EditorModeStore
 import cc.stkmn.shareparser.data.PendingShareStore
 import cc.stkmn.shareparser.data.Profile
 import cc.stkmn.shareparser.data.ProfileRepository
@@ -111,6 +120,8 @@ private fun previousScreen(screen: Screen): Screen = when (screen) {
 private fun ShareParserApp(startIntent: Intent?, onIntentConsumed: () -> Unit) {
     val context = LocalContext.current
     val repository = remember { ProfileRepository(context) }
+    val editorMode = remember { EditorModeStore(context) }
+    val pendingShareStore = remember { PendingShareStore(context) }
     var profiles by remember { mutableStateOf(repository.profiles()) }
     var screen by remember { mutableStateOf<Screen>(if (startIntent?.isFailureLink() == true) Screen.Failure else Screen.Home) }
     var importError by remember { mutableStateOf<String?>(null) }
@@ -137,9 +148,19 @@ private fun ShareParserApp(startIntent: Intent?, onIntentConsumed: () -> Unit) {
             startIntent.isFailureLink() -> screen = Screen.Failure
             startIntent.action == MainActivity.ACTION_OPEN_PENDING_SHARE -> {
                 val id = startIntent.getStringExtra(MainActivity.EXTRA_PENDING_SHARE_ID).orEmpty()
-                val payload = PendingShareStore(context).get(id)?.payload
+                val payload = pendingShareStore.get(id)?.payload
                 if (payload != null) {
-                    screen = if (profiles.isEmpty()) Screen.Editor(null, sample = payload) else Screen.Shared(payload)
+                    val activeProfileId = editorMode.activeProfileId()
+                    val currentEditor = screen as? Screen.Editor
+                    screen = when {
+                        activeProfileId != null && currentEditor != null -> currentEditor.copy(sample = payload, highlightField = null)
+                        activeProfileId != null -> profiles.firstOrNull { it.id == activeProfileId }
+                            ?.let { Screen.Editor(it, sample = payload) }
+                            ?: if (profiles.isEmpty()) Screen.Editor(null, sample = payload) else Screen.Shared(payload)
+                        profiles.isEmpty() -> Screen.Editor(null, sample = payload)
+                        else -> Screen.Shared(payload)
+                    }
+                    pendingShareStore.remove(id)
                 }
             }
         }
@@ -147,6 +168,7 @@ private fun ShareParserApp(startIntent: Intent?, onIntentConsumed: () -> Unit) {
     }
 
     BackHandler(enabled = screen !is Screen.Home) {
+        if (screen is Screen.Editor) editorMode.clear()
         screen = previousScreen(screen)
     }
 
@@ -155,20 +177,31 @@ private fun ShareParserApp(startIntent: Intent?, onIntentConsumed: () -> Unit) {
             topBar = {
                 TopAppBar(
                     title = {
-                        Text(
-                            when (val current = screen) {
-                                Screen.Home -> "ShareParser"
-                                Screen.Settings -> "Einstellungen"
-                                Screen.RegionalSettings -> "Datum und Uhrzeit"
-                                is Screen.Editor -> if (current.profile == null) "Profil erstellen" else "Profil bearbeiten"
-                                is Screen.Shared -> "Geteilter Inhalt"
-                                Screen.Failure -> "Fehlerbericht"
-                            }
-                        )
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Image(
+                                painter = painterResource(R.drawable.ic_launcher_foreground),
+                                contentDescription = null,
+                                modifier = Modifier.size(32.dp)
+                            )
+                            Spacer(Modifier.width(10.dp))
+                            Text(
+                                when (val current = screen) {
+                                    Screen.Home -> "ShareParser"
+                                    Screen.Settings -> "Einstellungen"
+                                    Screen.RegionalSettings -> "Datum und Uhrzeit"
+                                    is Screen.Editor -> if (current.profile == null) "Profil erstellen" else "Profil bearbeiten"
+                                    is Screen.Shared -> "Geteilter Inhalt"
+                                    Screen.Failure -> "Fehlerbericht"
+                                }
+                            )
+                        }
                     },
                     navigationIcon = {
                         if (screen !is Screen.Home) {
-                            IconButton(onClick = { screen = previousScreen(screen) }) {
+                            IconButton(onClick = {
+                                if (screen is Screen.Editor) editorMode.clear()
+                                screen = previousScreen(screen)
+                            }) {
                                 Icon(Icons.Outlined.ArrowBack, "Zurück")
                             }
                         }
@@ -219,10 +252,12 @@ private fun ShareParserApp(startIntent: Intent?, onIntentConsumed: () -> Unit) {
                         highlightField = current.highlightField,
                         repository = repository,
                         onSaved = {
+                            editorMode.clear()
                             profiles = repository.profiles()
                             screen = Screen.Home
                         },
                         onDeleted = {
+                            editorMode.clear()
                             profiles = repository.profiles()
                             screen = Screen.Home
                         }

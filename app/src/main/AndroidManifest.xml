@@ -9,15 +9,31 @@
         android:allowBackup="false"
         android:fullBackupContent="false"
         android:hasFragileUserData="false"
-        android:icon="@mipmap/app_logo_5"
+        android:icon="@mipmap/app_logo_1"
         android:label="ShareParser"
-        android:roundIcon="@mipmap/app_logo_5"
+        android:roundIcon="@mipmap/app_logo_1"
         android:supportsRtl="true"
         android:theme="@style/Theme.ShareParser">
+
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.files"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
 
         <activity
             android:name=".WebViewActivity"
             android:exported="false" />
+
+        <activity
+            android:name=".SaveTextFileActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
 
         <activity
             android:name=".ActionDispatchActivity"
@@ -34,6 +50,7 @@
             android:exported="true"
             android:excludeFromRecents="true"
             android:noHistory="true"
+            android:icon="@mipmap/app_logo_1"
             android:taskAffinity="cc.stkmn.shareparser.share.receiver"
             android:theme="@android:style/Theme.Translucent.NoTitleBar">
             <intent-filter>
@@ -45,6 +62,16 @@
                 <action android:name="android.intent.action.SEND" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <data android:mimeType="application/json" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="application/xml" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="application/xhtml+xml" />
             </intent-filter>
         </activity>
 
@@ -63,7 +90,7 @@
         <activity-alias
             android:name=".LauncherLogo1"
             android:targetActivity=".MainActivity"
-            android:enabled="false"
+            android:enabled="true"
             android:exported="true"
             android:icon="@mipmap/app_logo_1"
             android:label="ShareParser">
@@ -108,29 +135,21 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity-alias>
+
+        <!-- Kept only so settings from older builds migrate cleanly to logo 1. -->
         <activity-alias
             android:name=".LauncherLogo5"
             android:targetActivity=".MainActivity"
-            android:enabled="true"
+            android:enabled="false"
             android:exported="true"
-            android:icon="@mipmap/app_logo_5"
-            android:label="ShareParser">
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-                <category android:name="android.intent.category.LAUNCHER" />
-            </intent-filter>
-        </activity-alias>
+            android:icon="@mipmap/app_logo_1"
+            android:label="ShareParser" />
         <activity-alias
             android:name=".LauncherLogo6"
             android:targetActivity=".MainActivity"
             android:enabled="false"
             android:exported="true"
-            android:icon="@mipmap/app_logo_6"
-            android:label="ShareParser">
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-                <category android:name="android.intent.category.LAUNCHER" />
-            </intent-filter>
-        </activity-alias>
+            android:icon="@mipmap/app_logo_1"
+            android:label="ShareParser" />
     </application>
 </manifest>

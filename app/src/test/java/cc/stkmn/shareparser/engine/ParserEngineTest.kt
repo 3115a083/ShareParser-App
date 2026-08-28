@@ -119,12 +119,60 @@ class ParserEngineTest {
             "Literal",
             extractors = listOf(
                 ExtractorRule(
-                    key = "text",
+                    key = "text_part",
                     regex = "Wert: (.+)",
                     transforms = listOf(ValueTransform.RegexReplace("(intern)", "", literal = true), ValueTransform.Trim)
                 )
             )
         )
-        assertEquals("Termin", engine.extract("Wert: Termin (intern)", profile)["text"])
+        assertEquals("Termin", engine.extract("Wert: Termin (intern)", profile)["text_part"])
+    }
+
+    @Test
+    fun derivedVariablesCanSplitPreviouslyExtractedValue() {
+        val splitRegex = "^\\s*(\\S+)\\s+(.+?)\\s*$"
+        val profile = Profile(
+            "1",
+            "Adresse",
+            extractors = listOf(
+                ExtractorRule("PLZ_ort", "PLZ_ort: (.+)", required = true),
+                ExtractorRule(
+                    key = "PLZ",
+                    regex = splitRegex,
+                    group = 1,
+                    required = true,
+                    sourceVariableKey = "PLZ_ort"
+                ),
+                ExtractorRule(
+                    key = "Ort",
+                    regex = splitRegex,
+                    group = 2,
+                    required = true,
+                    sourceVariableKey = "PLZ_ort"
+                )
+            )
+        )
+
+        val values = engine.extract("PLZ_ort: 59000 Lünen", profile)
+        assertEquals("59000", values["PLZ"])
+        assertEquals("Lünen", values["Ort"])
+    }
+
+    @Test
+    fun fileMetadataIsAvailableForRecognition() {
+        val profile = Profile(
+            "1",
+            "Markdown",
+            matchers = listOf(
+                MatcherRule(regex = ".+\\.md", variableKey = "file_name"),
+                MatcherRule(regex = "text/markdown", variableKey = "mime_type")
+            )
+        )
+        val payload = SharedPayload(
+            text = "# Termin",
+            mimeType = "text/markdown",
+            fileName = "termin.md"
+        )
+        assertEquals(listOf("Markdown"), engine.matchingProfiles(payload, listOf(profile)).map { it.name })
     }
 }

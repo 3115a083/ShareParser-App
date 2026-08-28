@@ -23,6 +23,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.ChevronRight
+import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material.icons.outlined.Language
 import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material.icons.outlined.PictureInPictureAlt
@@ -52,6 +53,13 @@ import cc.stkmn.shareparser.data.LauncherIcon
 import cc.stkmn.shareparser.data.ProfileRepository
 import cc.stkmn.shareparser.data.ShareSelectionMode
 import cc.stkmn.shareparser.notify.ShareSelectionNotifier
+
+private val selectableLauncherIcons = listOf(
+    LauncherIcon.LOGO_1,
+    LauncherIcon.LOGO_2,
+    LauncherIcon.LOGO_3,
+    LauncherIcon.LOGO_4
+)
 
 @Composable
 internal fun SettingsHomeScreen(
@@ -83,6 +91,18 @@ internal fun SettingsHomeScreen(
     }
 
     val notificationPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { }
+    val saveFolderLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
+        if (uri != null) {
+            runCatching {
+                context.contentResolver.takePersistableUriPermission(
+                    uri,
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                )
+            }
+            settings = settings.copy(defaultSaveTreeUri = uri.toString())
+            repository.saveSettings(settings)
+        }
+    }
 
     LazyColumn(
         contentPadding = PaddingValues(16.dp),
@@ -95,12 +115,12 @@ internal fun SettingsHomeScreen(
             Text("App-Symbol", fontWeight = FontWeight.SemiBold)
         }
         item {
-            Text("Logo 5 ist der Standard. Beim Wechsel kann der Launcher einige Sekunden brauchen, bis das neue Symbol sichtbar ist.", style = MaterialTheme.typography.bodySmall)
+            Text("Logo 1 ist der Standard und wird auch im Android-Teilen-Dialog verwendet. Beim Wechsel kann der Launcher einige Sekunden brauchen, bis das neue Symbol sichtbar ist.", style = MaterialTheme.typography.bodySmall)
         }
         item {
             LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                items(LauncherIcon.entries) { icon ->
-                    val selected = settings.launcherIcon == icon
+                items(selectableLauncherIcons) { icon ->
+                    val selected = normalizedLauncherIcon(settings.launcherIcon) == icon
                     Column(
                         horizontalAlignment = Alignment.CenterHorizontally,
                         modifier = Modifier
@@ -114,11 +134,11 @@ internal fun SettingsHomeScreen(
                     ) {
                         Image(
                             painter = painterResource(launcherIconResource(icon)),
-                            contentDescription = "App-Symbol ${icon.ordinal + 1}",
+                            contentDescription = "App-Symbol ${selectableLauncherIcons.indexOf(icon) + 1}",
                             modifier = Modifier.size(64.dp),
                             contentScale = ContentScale.Fit
                         )
-                        Text("${icon.ordinal + 1}", style = MaterialTheme.typography.labelMedium)
+                        Text("${selectableLauncherIcons.indexOf(icon) + 1}", style = MaterialTheme.typography.labelMedium)
                     }
                 }
             }
@@ -145,6 +165,35 @@ internal fun SettingsHomeScreen(
         }
 
         item {
+            Text("Textdateien", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+        }
+        item {
+            Card(Modifier.fillMaxWidth()) {
+                Row(Modifier.padding(16.dp), verticalAlignment = Alignment.Top) {
+                    Icon(Icons.Outlined.Folder, null)
+                    Column(Modifier.weight(1f).padding(start = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("Voreingestellter Speicherordner", fontWeight = FontWeight.SemiBold)
+                        Text(
+                            if (settings.defaultSaveTreeUri.isBlank())
+                                "Nicht gesetzt. Bei einer Datei-Aktion mit „Speichern“ zeigt Android den Dateidialog an."
+                            else "Aktiv: ${folderLabel(settings.defaultSaveTreeUri)}. Profile können darunter einen variablen Unterordner angeben.",
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                        OutlinedButton(onClick = { saveFolderLauncher.launch(settings.defaultSaveTreeUri.takeIf { it.isNotBlank() }?.let(Uri::parse)) }) {
+                            Text(if (settings.defaultSaveTreeUri.isBlank()) "Ordner auswählen" else "Ordner ändern")
+                        }
+                        if (settings.defaultSaveTreeUri.isNotBlank()) {
+                            OutlinedButton(onClick = {
+                                settings = settings.copy(defaultSaveTreeUri = "")
+                                repository.saveSettings(settings)
+                            }) { Text("Voreinstellung entfernen") }
+                        }
+                    }
+                }
+            }
+        }
+
+        item {
             Text("Auswahl beim Teilen", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
         }
         item {
@@ -162,7 +211,7 @@ internal fun SettingsHomeScreen(
             ChoiceCard(
                 selected = settings.shareSelectionMode == ShareSelectionMode.OVERLAY,
                 title = "Overlay über der teilenden App",
-                description = if (overlayGranted) "Overlay-Berechtigung erteilt. Die Auswahl schließt sich spätestens nach einer Minute."
+                description = if (overlayGranted) "Overlay-Berechtigung erteilt. Die Auswahl erscheint mittig und schließt sich spätestens nach einer Minute."
                 else "Benötigt die optionale Android-Berechtigung „Über anderen Apps anzeigen“.",
                 icon = { Icon(Icons.Outlined.PictureInPictureAlt, null) },
                 onClick = {
@@ -232,13 +281,21 @@ internal fun SettingsHomeScreen(
     }
 }
 
-private fun launcherIconResource(icon: LauncherIcon): Int = when (icon) {
+private fun folderLabel(uri: String): String = runCatching {
+    Uri.parse(uri).lastPathSegment?.substringAfterLast(':')?.ifBlank { "Ausgewählter Ordner" }
+}.getOrNull().orEmpty().ifBlank { "Ausgewählter Ordner" }
+
+private fun normalizedLauncherIcon(icon: LauncherIcon): LauncherIcon = when (icon) {
+    LauncherIcon.LOGO_1, LauncherIcon.LOGO_2, LauncherIcon.LOGO_3, LauncherIcon.LOGO_4 -> icon
+    LauncherIcon.LOGO_5, LauncherIcon.LOGO_6 -> LauncherIcon.LOGO_1
+}
+
+private fun launcherIconResource(icon: LauncherIcon): Int = when (normalizedLauncherIcon(icon)) {
     LauncherIcon.LOGO_1 -> R.mipmap.app_logo_1
     LauncherIcon.LOGO_2 -> R.mipmap.app_logo_2
     LauncherIcon.LOGO_3 -> R.mipmap.app_logo_3
     LauncherIcon.LOGO_4 -> R.mipmap.app_logo_4
-    LauncherIcon.LOGO_5 -> R.mipmap.app_logo_5
-    LauncherIcon.LOGO_6 -> R.mipmap.app_logo_6
+    LauncherIcon.LOGO_5, LauncherIcon.LOGO_6 -> R.mipmap.app_logo_1
 }
 
 @Composable

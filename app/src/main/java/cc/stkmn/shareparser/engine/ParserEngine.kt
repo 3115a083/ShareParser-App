@@ -38,12 +38,18 @@ class ParserEngine {
     fun extract(payload: SharedPayload, profile: Profile): Map<String, String> {
         val values = builtInValues(payload)
         for (rule in profile.extractors) {
-            val value = extractOne(sourceFor(payload, rule.source), rule, profile.parseDirection)
+            val source = extractionSource(payload, rule, values)
+            val value = if (source == null) null else extractOne(source, rule, profile.parseDirection)
             if (value == null && rule.required) {
+                val details = if (rule.sourceVariableKey.isBlank()) {
+                    "Regex did not match: ${rule.regex}"
+                } else {
+                    "Source variable '${rule.sourceVariableKey}' was unavailable or regex did not match: ${rule.regex}"
+                }
                 throw ProcessingException(
                     userMessage = "Pflichtfeld '${rule.key}' konnte nicht erkannt werden.",
                     failingField = rule.key,
-                    technicalDetails = "Regex did not match: ${rule.regex}"
+                    technicalDetails = details
                 )
             }
             if (value != null) values[rule.key] = value
@@ -57,11 +63,22 @@ class ParserEngine {
     private fun availableValues(payload: SharedPayload, profile: Profile): Map<String, String> {
         val values = builtInValues(payload)
         profile.extractors.forEach { rule ->
-            runCatching { extractOne(sourceFor(payload, rule.source), rule, profile.parseDirection) }
+            val source = extractionSource(payload, rule, values) ?: return@forEach
+            runCatching { extractOne(source, rule, profile.parseDirection) }
                 .getOrNull()
                 ?.let { values[rule.key] = it }
         }
         return values
+    }
+
+    private fun extractionSource(
+        payload: SharedPayload,
+        rule: ExtractorRule,
+        values: Map<String, String>
+    ): String? = if (rule.sourceVariableKey.isBlank()) {
+        sourceFor(payload, rule.source)
+    } else {
+        values[rule.sourceVariableKey]
     }
 
     private fun builtInValues(payload: SharedPayload) = linkedMapOf(
@@ -69,7 +86,9 @@ class ParserEngine {
         "text" to payload.text,
         "subject" to payload.subject,
         "source_app" to payload.sourceApp,
-        "source_package" to payload.sourcePackage
+        "source_package" to payload.sourcePackage,
+        "file_name" to payload.fileName,
+        "mime_type" to payload.mimeType
     )
 
     private fun sourceFor(payload: SharedPayload, source: InputSource): String = when (source) {
