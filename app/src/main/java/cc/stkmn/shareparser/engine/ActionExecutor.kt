@@ -14,9 +14,11 @@ import cc.stkmn.shareparser.data.AppSettings
 import cc.stkmn.shareparser.data.DateTimeLocale
 import cc.stkmn.shareparser.data.ProcessingAction
 import cc.stkmn.shareparser.data.UrlOpenMode
+import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.ZoneId
+import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 
@@ -41,10 +43,9 @@ class ActionExecutor(context: Context, private val settings: AppSettings = AppSe
         val location = render(action.locationTemplate)
         val startText = render(action.startTemplate)
         val endText = render(action.endTemplate)
+        val durationText = render(action.durationTemplate)
         val calendarName = render(action.calendarNameTemplate)
 
-        // Some OEM calendar apps, including Samsung Calendar versions, match the
-        // documented MIME type more reliably when it is explicit on the intent.
         val intent = Intent(Intent.ACTION_INSERT)
             .setDataAndType(CalendarContract.Events.CONTENT_URI, "vnd.android.cursor.dir/event")
             .putExtra(CalendarContract.Events.TITLE, title)
@@ -70,18 +71,38 @@ class ActionExecutor(context: Context, private val settings: AppSettings = AppSe
             val parsed = FlexibleDateTimeParser.parse(
                 startValue = startText,
                 endValue = endText,
+                durationValue = durationText,
                 allDay = action.allDay,
                 settings = settings
             )
             parsed.startEpochMs?.let { intent.putExtra(CalendarContract.EXTRA_EVENT_BEGIN_TIME, it) }
-            parsed.endEpochMs?.let { intent.putExtra(CalendarContract.EXTRA_EVENT_END_TIME, it) }
+
+            if (parsed.recurrenceStartEpochMs.isNotEmpty() && parsed.startEpochMs != null) {
+                val occurrenceDuration = parsed.durationMillis
+                    ?: parsed.endEpochMs?.let { it - parsed.startEpochMs }.takeIf { (it ?: 0L) > 0L }
+                    ?: if (action.allDay) 24L * 60L * 60L * 1000L else null
+                if (occurrenceDuration != null) {
+                    intent.putExtra(CalendarContract.Events.DURATION, toRfc2445Duration(occurrenceDuration))
+                    intent.putExtra(
+                        CalendarContract.Events.RDATE,
+                        parsed.recurrenceStartEpochMs.joinToString(",") { toRfc2445DateTime(it) }
+                    )
+                } else {
+                    warnings += "Mehrere Termine wurden erkannt, aber ohne Dauer kann Android die Wiederholung nicht vollständig vorausfüllen."
+                    parsed.endEpochMs?.let { intent.putExtra(CalendarContract.EXTRA_EVENT_END_TIME, it) }
+                }
+            } else {
+                parsed.endEpochMs?.let { intent.putExtra(CalendarContract.EXTRA_EVENT_END_TIME, it) }
+            }
             warnings += parsed.warnings
         }
 
-        if (calendarName.isNotBlank()) {
-            val calendarId = resolveCalendarId(calendarName, warnings)
-            calendarId?.let { intent.putExtra(CalendarContract.Events.CALENDAR_ID, it) }
+        val selectedCalendarId = when {
+            action.calendarId != null -> validateCalendarId(action.calendarId, calendarName, warnings)
+            calendarName.isNotBlank() -> resolveCalendarId(calendarName, warnings)
+            else -> null
         }
+        selectedCalendarId?.let { intent.putExtra(CalendarContract.Events.CALENDAR_ID, it) }
 
         if (missing.isNotEmpty()) {
             warnings += "Nicht erkannte Variablen: ${missing.joinToString(", ")}. Bitte diese Angaben im Kalender manuell ergänzen."
@@ -102,6 +123,30 @@ class ActionExecutor(context: Context, private val settings: AppSettings = AppSe
             }
         }
         return ExecutionResult(warnings.distinct())
+    }
+
+    private fun validateCalendarId(id: Long, fallbackName: String, warnings: MutableList<String>): Long? {
+        if (ContextCompat.checkSelfPermission(appContext, Manifest.permission.READ_CALENDAR) != PackageManager.PERMISSION_GRANTED) {
+            warnings += "Der ausgewählte Zielkalender konnte ohne Kalender-Leseberechtigung nicht geprüft werden."
+            return null
+        }
+        return try {
+            val found = appContext.contentResolver.query(
+                CalendarContract.Calendars.CONTENT_URI,
+                arrayOf(CalendarContract.Calendars._ID),
+                "${CalendarContract.Calendars._ID}=? AND ${CalendarContract.Calendars.VISIBLE}=1",
+                arrayOf(id.toString()),
+                null
+            )?.use { it.moveToFirst() } == true
+            if (found) id
+            else if (fallbackName.isNotBlank()) resolveCalendarId(fallbackName, warnings)
+            else {
+                warnings += "Der gespeicherte Zielkalender ist auf diesem Gerät nicht mehr verfügbar."
+                null
+            }
+        } catch (_: Exception) {
+            if (fallbackName.isNotBlank()) resolveCalendarId(fallbackName, warnings) else null
+        }
     }
 
     private fun resolveCalendarId(name: String, warnings: MutableList<String>): Long? {
@@ -200,8 +245,6 @@ class ActionExecutor(context: Context, private val settings: AppSettings = AppSe
         val safeIntent = Intent(intent).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
 
         try {
-            // Use the application context for all launches. This avoids retaining or
-            // reusing a stale share-target Activity after another app was opened.
             appContext.startActivity(safeIntent)
         } catch (e: ActivityNotFoundException) {
             throw ProcessingException(
@@ -226,6 +269,13 @@ class ActionExecutor(context: Context, private val settings: AppSettings = AppSe
             "Manufacturer: ${Build.MANUFACTURER}\n" +
             "Model: ${Build.MODEL}\n" +
             "Intent: ${runCatching { intent.toUri(0) }.getOrDefault("unavailable")}"
+
+    private fun toRfc2445Duration(durationMillis: Long): String = "PT${durationMillis / 1000L}S"
+
+    private fun toRfc2445DateTime(epochMs: Long): String =
+        DateTimeFormatter.ofPattern("yyyyMMdd'T'HHmmss'Z'", Locale.ROOT)
+            .withZone(ZoneOffset.UTC)
+            .format(Instant.ofEpochMilli(epochMs))
 
     private fun parseExplicit(value: String, pattern: String): Long {
         val formatter = DateTimeFormatter.ofPattern(pattern, localeForSettings())
