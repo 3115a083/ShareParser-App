@@ -18,22 +18,31 @@ object LauncherIconManager {
         val pm = appContext.packageManager
         val normalized = normalize(selected)
 
+        // Enable the new launcher entry first. This avoids a short state in which
+        // Samsung Launcher sees no enabled launcher component at all.
+        val selectedAlias = aliases.getValue(normalized)
+        setStateIfNeeded(
+            pm,
+            component(appContext, selectedAlias),
+            if (normalized == LauncherIcon.LOGO_1) PackageManager.COMPONENT_ENABLED_STATE_DEFAULT
+            else PackageManager.COMPONENT_ENABLED_STATE_ENABLED
+        )
+
         aliases.forEach { (icon, alias) ->
-            setStateIfNeeded(
-                pm = pm,
-                component = component(appContext, alias),
-                desiredState = if (icon == normalized) PackageManager.COMPONENT_ENABLED_STATE_ENABLED
-                else PackageManager.COMPONENT_ENABLED_STATE_DISABLED
-            )
+            if (icon != normalized) {
+                setStateIfNeeded(
+                    pm,
+                    component(appContext, alias),
+                    PackageManager.COMPONENT_ENABLED_STATE_DISABLED
+                )
+            }
         }
 
-        // Old settings values from builds that exposed six icons remain readable.
-        // Their aliases stay disabled and migrate visually to logo 1.
         listOf("LauncherLogo5", "LauncherLogo6").forEach { alias ->
             setStateIfNeeded(
-                pm = pm,
-                component = component(appContext, alias),
-                desiredState = PackageManager.COMPONENT_ENABLED_STATE_DISABLED
+                pm,
+                component(appContext, alias),
+                PackageManager.COMPONENT_ENABLED_STATE_DISABLED
             )
         }
     }
@@ -49,11 +58,7 @@ object LauncherIconManager {
 
     private fun setStateIfNeeded(pm: PackageManager, component: ComponentName, desiredState: Int) {
         if (pm.getComponentEnabledSetting(component) == desiredState) return
-        pm.setComponentEnabledSetting(
-            component,
-            desiredState,
-            PackageManager.DONT_KILL_APP
-        )
+        pm.setComponentEnabledSetting(component, desiredState, PackageManager.DONT_KILL_APP)
     }
 
     private fun component(context: Context, alias: String) =

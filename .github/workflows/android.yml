@@ -80,16 +80,28 @@ jobs:
           expected = [
               *(Path("app/src/main/res/mipmap-nodpi") / f"app_logo_{i}.png" for i in range(1, 5)),
               Path("app/src/main/res/drawable/ic_launcher_foreground.png"),
+              *(Path("app/src/main/assets/branding") / f"app_logo_{i}.png" for i in range(1, 5)),
+              Path("app/src/main/assets/branding/ic_launcher_foreground.png"),
           ]
           png_signature = b"\x89PNG\r\n\x1a\n"
           for path in expected:
               if not path.is_file():
-                  raise SystemExit(f"Missing icon resource: {path}")
-              if not path.read_bytes().startswith(png_signature):
-                  raise SystemExit(f"Icon resource is not a PNG: {path}")
+                  raise SystemExit(f"Missing icon/artwork file: {path}")
+              data = path.read_bytes()
+              if not data.startswith(png_signature):
+                  raise SystemExit(f"Artwork is not a PNG: {path}")
+              if len(data) < 33 or data[12:16] != b"IHDR":
+                  raise SystemExit(f"Artwork has an invalid PNG header: {path}")
+              width = int.from_bytes(data[16:20], "big")
+              height = int.from_bytes(data[20:24], "big")
+              if width <= 0 or height <= 0:
+                  raise SystemExit(f"Artwork has invalid dimensions: {path}")
           forbidden = list(Path("app/src/main/res/mipmap-nodpi").glob("app_logo_*.webp"))
           if forbidden:
-              raise SystemExit("Launcher WebP resources are forbidden after the Android 16 decoder regression: " + ", ".join(map(str, forbidden)))
+              raise SystemExit("Launcher WebP resources are forbidden: " + ", ".join(map(str, forbidden)))
+          settings = Path("app/src/main/java/cc/stkmn/shareparser/ui/SettingsHomeScreen.kt").read_text()
+          if "painterResource" in settings:
+              raise SystemExit("Settings icon previews must not use painterResource; Android 16 Samsung runtime regression")
           PY
       - name: Unit tests, lint and debug APK
         run: gradle :app:testDebugUnitTest :app:lintDebug :app:assembleDebug --stacktrace
