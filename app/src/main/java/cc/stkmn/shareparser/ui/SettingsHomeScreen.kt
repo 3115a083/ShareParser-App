@@ -1,13 +1,14 @@
 package cc.stkmn.shareparser.ui
 
 import android.Manifest
-import android.app.NotificationManager
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -15,7 +16,11 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material.icons.outlined.Language
@@ -34,9 +39,14 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import cc.stkmn.shareparser.LauncherIconManager
+import cc.stkmn.shareparser.R
+import cc.stkmn.shareparser.data.LauncherIcon
 import cc.stkmn.shareparser.data.ProfileRepository
 import cc.stkmn.shareparser.data.ShareSelectionMode
 import cc.stkmn.shareparser.notify.ShareSelectionNotifier
@@ -55,12 +65,54 @@ internal fun SettingsHomeScreen(
         repository.saveSettings(settings)
     }
 
+    fun saveIcon(icon: LauncherIcon) {
+        settings = settings.copy(launcherIcon = icon)
+        repository.saveSettings(settings)
+        LauncherIconManager.apply(context, icon)
+    }
+
     val notificationPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { }
 
     LazyColumn(
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
+        item {
+            Text("Darstellung", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+        }
+        item {
+            Text("App-Symbol", fontWeight = FontWeight.SemiBold)
+        }
+        item {
+            Text("Logo 5 ist der Standard. Beim Wechsel kann der Launcher einige Sekunden brauchen, bis das neue Symbol sichtbar ist.", style = MaterialTheme.typography.bodySmall)
+        }
+        item {
+            LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                items(LauncherIcon.entries) { icon ->
+                    val selected = settings.launcherIcon == icon
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        modifier = Modifier
+                            .border(
+                                width = if (selected) 2.dp else 1.dp,
+                                color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant,
+                                shape = RoundedCornerShape(14.dp)
+                            )
+                            .clickable { saveIcon(icon) }
+                            .padding(8.dp)
+                    ) {
+                        Image(
+                            painter = painterResource(launcherIconResource(icon)),
+                            contentDescription = "App-Symbol ${icon.ordinal + 1}",
+                            modifier = Modifier.size(64.dp),
+                            contentScale = ContentScale.Fit
+                        )
+                        Text("${icon.ordinal + 1}", style = MaterialTheme.typography.labelMedium)
+                    }
+                }
+            }
+        }
+
         item {
             Text("Format und Erkennung", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
         }
@@ -103,9 +155,10 @@ internal fun SettingsHomeScreen(
                 else "Benötigt die optionale Android-Berechtigung „Über anderen Apps anzeigen“.",
                 icon = { Icon(Icons.Outlined.PictureInPictureAlt, null) },
                 onClick = {
-                    saveMode(ShareSelectionMode.OVERLAY)
                     overlayGranted = Settings.canDrawOverlays(context)
-                    if (!overlayGranted) {
+                    if (overlayGranted) {
+                        saveMode(ShareSelectionMode.OVERLAY)
+                    } else {
                         runCatching {
                             context.startActivity(
                                 Intent(
@@ -117,6 +170,17 @@ internal fun SettingsHomeScreen(
                     }
                 }
             )
+        }
+        item {
+            if (!overlayGranted) {
+                OutlinedButton(
+                    onClick = {
+                        overlayGranted = Settings.canDrawOverlays(context)
+                        if (overlayGranted) saveMode(ShareSelectionMode.OVERLAY)
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) { Text("Overlay-Berechtigung erneut prüfen") }
+            }
         }
         item {
             ChoiceCard(
@@ -154,6 +218,15 @@ internal fun SettingsHomeScreen(
             ) { Text("Benachrichtigungskanal konfigurieren") }
         }
     }
+}
+
+private fun launcherIconResource(icon: LauncherIcon): Int = when (icon) {
+    LauncherIcon.LOGO_1 -> R.mipmap.app_logo_1
+    LauncherIcon.LOGO_2 -> R.mipmap.app_logo_2
+    LauncherIcon.LOGO_3 -> R.mipmap.app_logo_3
+    LauncherIcon.LOGO_4 -> R.mipmap.app_logo_4
+    LauncherIcon.LOGO_5 -> R.mipmap.app_logo_5
+    LauncherIcon.LOGO_6 -> R.mipmap.app_logo_6
 }
 
 @Composable
