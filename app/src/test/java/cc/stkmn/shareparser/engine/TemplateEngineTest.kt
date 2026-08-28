@@ -18,6 +18,31 @@ class TemplateEngineTest {
     }
 
     @Test
+    fun rendersMultipleTokensWithoutRegexInitialization() {
+        val result = TemplateEngine.render(
+            "https://example.test/{{category}}?id={{id|url}}&title={{title|trim}}",
+            mapOf("category" to "ticket", "id" to "ICE 612", "title" to " Berlin ")
+        )
+        assertEquals("https://example.test/ticket?id=ICE+612&title=Berlin", result)
+    }
+
+    @Test
+    fun variablesFindsPlainAndModifiedTokens() {
+        assertEquals(
+            setOf("date", "location", "booking-id"),
+            TemplateEngine.variables("{{date}} {{location|trim}} {{booking-id|url}}")
+        )
+    }
+
+    @Test
+    fun malformedTokenIsPreservedInsteadOfCrashingEngine() {
+        assertEquals(
+            "before {{bad|url|upper}} after",
+            TemplateEngine.render("before {{bad|url|upper}} after", mapOf("bad" to "value"))
+        )
+    }
+
+    @Test
     fun missingValueIsReported() {
         assertFailsWith<ProcessingException> {
             TemplateEngine.render("{{missing}}", emptyMap())
