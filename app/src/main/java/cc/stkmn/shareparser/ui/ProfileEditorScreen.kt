@@ -6,6 +6,7 @@ import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -27,6 +28,7 @@ import androidx.compose.material.icons.outlined.Download
 import androidx.compose.material.icons.outlined.ErrorOutline
 import androidx.compose.material.icons.outlined.ExpandMore
 import androidx.compose.material.icons.outlined.Share
+import androidx.compose.material.icons.outlined.Splitscreen
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.AssistChipDefaults
@@ -47,6 +49,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
@@ -66,6 +69,7 @@ import androidx.core.content.ContextCompat
 import cc.stkmn.shareparser.calendar.CalendarCatalog
 import cc.stkmn.shareparser.data.CalendarTargetMode
 import cc.stkmn.shareparser.data.CaseMode
+import cc.stkmn.shareparser.data.EditorModeStore
 import cc.stkmn.shareparser.data.ExtractorRule
 import cc.stkmn.shareparser.data.InputSource
 import cc.stkmn.shareparser.data.MatcherRule
@@ -74,6 +78,7 @@ import cc.stkmn.shareparser.data.ProcessingAction
 import cc.stkmn.shareparser.data.Profile
 import cc.stkmn.shareparser.data.ProfileRepository
 import cc.stkmn.shareparser.data.SharedPayload
+import cc.stkmn.shareparser.data.TextFileMode
 import cc.stkmn.shareparser.data.UrlOpenMode
 import cc.stkmn.shareparser.data.ValueTransform
 import cc.stkmn.shareparser.engine.GuidedRuleFactory
@@ -81,7 +86,15 @@ import cc.stkmn.shareparser.engine.ParserEngine
 import cc.stkmn.shareparser.engine.TemplateEngine
 import java.util.UUID
 
-private val reservedVariables = setOf("input", "text", "subject", "source_app", "source_package")
+private val reservedVariables = setOf(
+    "input",
+    "text",
+    "subject",
+    "source_app",
+    "source_package",
+    "file_name",
+    "mime_type"
+)
 
 @Composable
 internal fun ProfileEditorScreen(
@@ -96,6 +109,12 @@ internal fun ProfileEditorScreen(
     val clipboard = LocalClipboardManager.current
     val parser = remember { ParserEngine() }
     val profileId = remember(existing?.id) { existing?.id ?: UUID.randomUUID().toString() }
+    val editorModeStore = remember { EditorModeStore(context) }
+
+    DisposableEffect(profileId) {
+        editorModeStore.activate(profileId)
+        onDispose { editorModeStore.clear(profileId) }
+    }
 
     var name by remember(existing?.id) { mutableStateOf(existing?.name.orEmpty()) }
     var enabled by remember(existing?.id) { mutableStateOf(existing?.enabled ?: true) }
@@ -147,9 +166,16 @@ internal fun ProfileEditorScreen(
         if (keys.any { it.isBlank() }) return "Jede Variable braucht einen Namen."
         if (keys.any { it in reservedVariables }) return "Ein Variablenname ist bereits für eine eingebaute Variable reserviert."
         if (keys.size != keys.distinct().size) return "Jeder Variablenname darf nur einmal vorkommen."
+
+        val variablesAvailableAtStep = reservedVariables.toMutableSet()
         profile.extractors.forEach { rule ->
             runCatching { Regex(rule.regex) }.getOrElse { return "Erkennungsregel für '${rule.key}' ist ungültig: ${it.message}" }
+            if (rule.sourceVariableKey.isNotBlank() && rule.sourceVariableKey !in variablesAvailableAtStep) {
+                return "Variable '${rule.key}' nutzt '${rule.sourceVariableKey}' als Quelle. Die Quellvariable muss vorher definiert sein."
+            }
+            variablesAvailableAtStep += rule.key
         }
+
         val available = reservedVariables + keys
         profile.matchers.forEach { matcher ->
             runCatching { Regex(matcher.regex) }.getOrElse { return "Ein Profilmerkmal ist ungültig: ${it.message}" }
@@ -231,6 +257,22 @@ internal fun ProfileEditorScreen(
         contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
+        item {
+            Card(Modifier.fillMaxWidth()) {
+                Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Outlined.Share, null)
+                    Spacer(Modifier.width(10.dp))
+                    Column {
+                        Text("Bearbeitungsmodus aktiv", fontWeight = FontWeight.SemiBold)
+                        Text(
+                            "Neue Nachrichten oder Textdateien, die du jetzt an ShareParser teilst, werden direkt als Beispiel in dieses Profil geladen.",
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+                }
+            }
+        }
+
         if (highlightField != null) {
             item {
                 Card(Modifier.fillMaxWidth()) {
@@ -287,7 +329,7 @@ internal fun ProfileEditorScreen(
         item { HorizontalDivider() }
         item { SectionTitle("Profil automatisch erkennen") }
         item {
-            Text("Wähle feste Textteile, die in jeder Nachricht dieses Profils vorkommen. Alle gewählten Merkmale müssen passen. Du kannst mehrere Stellen markieren, um die Auswahl genauer zu machen.")
+            Text("Wähle feste Textteile, die teilende App oder erkannte Variablen als Merkmale. Alle gewählten Merkmale müssen passen.")
         }
 
         if (sample != null) {
@@ -306,6 +348,38 @@ internal fun ProfileEditorScreen(
                         },
                         label = { Text("Nur aus ${sample.sourceApp.ifBlank { sample.sourcePackage }}") }
                     )
+                }
+            }
+            if (sample.fileName.isNotBlank()) {
+                item {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        val fileActive = matchers.any { it.variableKey == "file_name" && it.regex == Regex.escape(sample.fileName) }
+                        FilterChip(
+                            selected = fileActive,
+                            onClick = {
+                                if (fileActive) matchers.removeAll { it.variableKey == "file_name" && it.regex == Regex.escape(sample.fileName) }
+                                else matchers += MatcherRule(
+                                    regex = Regex.escape(sample.fileName),
+                                    friendlyText = "Dateiname ${sample.fileName}",
+                                    variableKey = "file_name"
+                                )
+                            },
+                            label = { Text("Datei: ${sample.fileName.take(32)}") }
+                        )
+                        val mimeActive = matchers.any { it.variableKey == "mime_type" && it.regex == Regex.escape(sample.mimeType) }
+                        FilterChip(
+                            selected = mimeActive,
+                            onClick = {
+                                if (mimeActive) matchers.removeAll { it.variableKey == "mime_type" && it.regex == Regex.escape(sample.mimeType) }
+                                else matchers += MatcherRule(
+                                    regex = Regex.escape(sample.mimeType),
+                                    friendlyText = "Dateityp ${sample.mimeType}",
+                                    variableKey = "mime_type"
+                                )
+                            },
+                            label = { Text(sample.mimeType) }
+                        )
+                    }
                 }
             }
             if (sample.subject.isNotBlank()) {
@@ -330,7 +404,7 @@ internal fun ProfileEditorScreen(
             }
             item {
                 SelectionSourceCard(
-                    title = "Nachrichtentext",
+                    title = if (sample.fileName.isBlank()) "Nachrichtentext" else "Dateiinhalt",
                     fixedText = sample.text,
                     value = bodySelection,
                     source = InputSource.TEXT,
@@ -423,13 +497,20 @@ internal fun ProfileEditorScreen(
         if (sample != null) {
             item { HorizontalDivider() }
             item { SectionTitle("Variablen aus dem Beispiel") }
-            item { Text("Markiere einen veränderlichen Wert oben und tippe auf „Als Variable“. Bereits definierte Variablen werden im Beispiel farbig markiert. Adressen und typische „Name: Wert“-Zeilen werden zusätzlich vorgeschlagen.") }
+            item { Text("Markiere einen veränderlichen Wert oben und tippe auf „Als Variable“. Bereits definierte Variablen werden im Beispiel farbig markiert. Beispielwerte lassen sich kopieren und anschließend in Umwandlungen verwenden.") }
             items(GuidedRuleFactory.candidates(sample).filter { it.source == InputSource.TEXT }.take(30)) { candidate ->
                 Card(Modifier.fillMaxWidth()) {
                     Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
                         Column(Modifier.weight(1f)) {
                             Text(candidate.label, fontWeight = FontWeight.SemiBold)
-                            Text(candidate.value, style = MaterialTheme.typography.bodySmall)
+                            Text(
+                                candidate.value,
+                                style = MaterialTheme.typography.bodySmall,
+                                modifier = Modifier.clickable { clipboard.setText(AnnotatedString(candidate.value)) }
+                            )
+                        }
+                        IconButton(onClick = { clipboard.setText(AnnotatedString(candidate.value)) }) {
+                            Icon(Icons.Outlined.ContentCopy, "Beispielwert kopieren")
                         }
                         OutlinedButton(onClick = {
                             variableName = if (candidate.suggestedKey in reservedVariables) "${candidate.suggestedKey}_part" else candidate.suggestedKey
@@ -454,11 +535,18 @@ internal fun ProfileEditorScreen(
         }
         items(extractors, key = { it.id }) { rule ->
             val index = extractors.indexOfFirst { it.id == rule.id }
+            val previewRules = if (index >= 0) extractors.take(index + 1) else listOf(rule)
+            val availableSourceVariables = buildList {
+                addAll(reservedVariables)
+                if (index > 0) addAll(extractors.take(index).map { it.key }.filter { it.isNotBlank() })
+            }.distinct()
             ExtractorCard(
                 rule = rule,
                 sample = sample,
                 parser = parser,
                 parseDirection = parseDirection,
+                previewRules = previewRules,
+                availableSourceVariables = availableSourceVariables,
                 highlighted = highlightField == rule.key,
                 advanced = advanced,
                 onChange = { changed ->
@@ -474,7 +562,39 @@ internal fun ProfileEditorScreen(
                                     )
                                 }
                             }
+                            for (i in (index + 1) until extractors.size) {
+                                if (extractors[i].sourceVariableKey == oldKey) {
+                                    extractors[i] = extractors[i].copy(sourceVariableKey = changed.key)
+                                }
+                            }
                         }
+                    }
+                },
+                onSplit = { firstKey, secondKey, separator ->
+                    if (index >= 0 && rule.key.isNotBlank()) {
+                        val splitRegex = if (separator.isBlank()) {
+                            "^\\s*(\\S+)\\s+(.+?)\\s*$"
+                        } else {
+                            "^\\s*(.*?)\\s*${Regex.escape(separator)}\\s*(.+?)\\s*$"
+                        }
+                        val first = ExtractorRule(
+                            key = firstKey,
+                            regex = splitRegex,
+                            group = 1,
+                            required = rule.required,
+                            sourceVariableKey = rule.key,
+                            transforms = listOf(ValueTransform.Trim)
+                        )
+                        val second = ExtractorRule(
+                            key = secondKey,
+                            regex = splitRegex,
+                            group = 2,
+                            required = rule.required,
+                            sourceVariableKey = rule.key,
+                            transforms = listOf(ValueTransform.Trim)
+                        )
+                        extractors.add(index + 1, first)
+                        extractors.add(index + 2, second)
                     }
                 },
                 onDelete = {
@@ -482,6 +602,11 @@ internal fun ProfileEditorScreen(
                         val key = extractors[index].key
                         extractors.removeAt(index)
                         matchers.removeAll { it.variableKey == key }
+                        for (i in extractors.indices) {
+                            if (extractors[i].sourceVariableKey == key) {
+                                extractors[i] = extractors[i].copy(sourceVariableKey = "")
+                            }
+                        }
                     }
                 }
             )
@@ -499,12 +624,12 @@ internal fun ProfileEditorScreen(
                     DropdownMenu(expanded = addActionMenu, onDismissRequest = { addActionMenu = false }) {
                         DropdownMenuItem(text = { Text("Kalendereintrag") }, onClick = { actions += defaultCalendarAction(); addActionMenu = false })
                         DropdownMenuItem(text = { Text("URL öffnen") }, onClick = { actions += defaultUrlAction(); addActionMenu = false })
-                        DropdownMenuItem(text = { Text("Text weiterleiten") }, onClick = { actions += defaultShareAction(); addActionMenu = false })
+                        DropdownMenuItem(text = { Text("Text oder Textdatei") }, onClick = { actions += defaultShareAction(); addActionMenu = false })
                     }
                 }
             }
         }
-        val variables = listOf("subject", "text", "input", "source_app", "source_package") + extractors.map { it.key }.filter { it.isNotBlank() }
+        val variables = listOf("subject", "text", "input", "source_app", "source_package", "file_name", "mime_type") + extractors.map { it.key }.filter { it.isNotBlank() }
         items(actions, key = { it.id }) { action ->
             val index = actions.indexOfFirst { it.id == action.id }
             ActionEditorCard(
@@ -663,6 +788,58 @@ private fun VariableDialog(
 }
 
 @Composable
+private fun SplitVariableDialog(
+    sourceKey: String,
+    preview: String,
+    onConfirm: (String, String, String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    val sourceLower = sourceKey.lowercase()
+    val firstSuggested = if (sourceLower.contains("plz") && sourceLower.contains("ort")) "PLZ" else "${sourceKey}_1"
+    val secondSuggested = if (sourceLower.contains("plz") && sourceLower.contains("ort")) "Ort" else "${sourceKey}_2"
+    var firstKey by remember(sourceKey) { mutableStateOf(GuidedRuleFactory.sanitizeKey(firstSuggested)) }
+    var secondKey by remember(sourceKey) { mutableStateOf(GuidedRuleFactory.sanitizeKey(secondSuggested)) }
+    var separator by remember(sourceKey) { mutableStateOf(" ") }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("${variableLabel(sourceKey)} aufteilen") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                if (preview.isNotBlank()) Text("Beispiel: $preview", style = MaterialTheme.typography.bodySmall)
+                Text("Ein leeres Trennzeichen oder ein Leerzeichen teilt nach dem ersten Wort. Für andere Werte kannst du z. B. „,“, „-“ oder „/“ verwenden.")
+                OutlinedTextField(
+                    value = separator,
+                    onValueChange = { separator = it },
+                    label = { Text("Trennzeichen") },
+                    placeholder = { Text("Leerzeichen") },
+                    singleLine = true
+                )
+                OutlinedTextField(
+                    value = firstKey,
+                    onValueChange = { firstKey = GuidedRuleFactory.sanitizeKey(it) },
+                    label = { Text("Erste neue Variable") },
+                    singleLine = true
+                )
+                OutlinedTextField(
+                    value = secondKey,
+                    onValueChange = { secondKey = GuidedRuleFactory.sanitizeKey(it) },
+                    label = { Text("Zweite neue Variable") },
+                    singleLine = true
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = { onConfirm(firstKey, secondKey, separator); onDismiss() },
+                enabled = firstKey.isNotBlank() && secondKey.isNotBlank() && firstKey != secondKey
+            ) { Text("Aufteilen") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Abbrechen") } }
+    )
+}
+
+@Composable
 private fun SelectionSourceCard(
     title: String,
     fixedText: String,
@@ -691,8 +868,8 @@ private fun SelectionSourceCard(
                 readOnly = true,
                 visualTransformation = visualTransformation,
                 modifier = Modifier.fillMaxWidth(),
-                minLines = if (title == "Nachrichtentext") 5 else 1,
-                maxLines = if (title == "Nachrichtentext") 14 else 3
+                minLines = if (title == "Nachrichtentext" || title == "Dateiinhalt") 5 else 1,
+                maxLines = if (title == "Nachrichtentext" || title == "Dateiinhalt") 14 else 3
             )
             if (highlights.isNotEmpty()) {
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -720,33 +897,64 @@ private fun ExtractorCard(
     sample: SharedPayload?,
     parser: ParserEngine,
     parseDirection: ParseDirection,
+    previewRules: List<ExtractorRule>,
+    availableSourceVariables: List<String>,
     highlighted: Boolean,
     advanced: Boolean,
     onChange: (ExtractorRule) -> Unit,
+    onSplit: (String, String, String) -> Unit,
     onDelete: () -> Unit
 ) {
+    val clipboard = LocalClipboardManager.current
     var details by remember(rule.id) { mutableStateOf(false) }
     var transformMenu by remember { mutableStateOf(false) }
     var sourceMenu by remember { mutableStateOf(false) }
-    val preview = remember(rule, sample, parseDirection) {
+    var splitDialog by remember { mutableStateOf(false) }
+    val preview = remember(rule, sample, parseDirection, previewRules) {
         sample?.let {
+            val safePreviewRules = previewRules.map { previewRule ->
+                if (previewRule.id == rule.id) rule.copy(required = false) else previewRule.copy(required = false)
+            }
             runCatching {
                 parser.extract(
                     it,
-                    Profile("preview", "preview", extractors = listOf(rule.copy(required = false)), parseDirection = parseDirection)
+                    Profile("preview", "preview", extractors = safePreviewRules, parseDirection = parseDirection)
                 )[rule.key]
             }.getOrNull()
         }
     }
     val border = if (highlighted) Modifier.border(2.dp, MaterialTheme.colorScheme.error, RoundedCornerShape(12.dp)) else Modifier
 
+    if (splitDialog) {
+        SplitVariableDialog(
+            sourceKey = rule.key,
+            preview = preview.orEmpty(),
+            onConfirm = onSplit,
+            onDismiss = { splitDialog = false }
+        )
+    }
+
     Card(border.fillMaxWidth()) {
         Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
                     Text(rule.key.ifBlank { "Unbenannte Variable" }, fontWeight = FontWeight.SemiBold)
-                    if (preview != null) Text("Beispielwert: $preview", style = MaterialTheme.typography.bodySmall)
-                    else if (sample != null) Text("Im Beispiel nicht erkannt", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                    if (preview != null) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                "Beispielwert: $preview",
+                                style = MaterialTheme.typography.bodySmall,
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clickable { clipboard.setText(AnnotatedString(preview)) }
+                            )
+                            IconButton(onClick = { clipboard.setText(AnnotatedString(preview)) }) {
+                                Icon(Icons.Outlined.ContentCopy, "Beispielwert kopieren")
+                            }
+                        }
+                    } else if (sample != null) {
+                        Text("Im Beispiel nicht erkannt", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                    }
                 }
                 IconButton(onClick = onDelete) { Icon(Icons.Outlined.Delete, "Variable entfernen") }
             }
@@ -761,17 +969,49 @@ private fun ExtractorCard(
                 Checkbox(rule.required, { onChange(rule.copy(required = it)) })
                 Text("Pflichtfeld")
                 Spacer(Modifier.weight(1f))
+                if (rule.key.isNotBlank()) {
+                    TextButton(onClick = { splitDialog = true }) {
+                        Icon(Icons.Outlined.Splitscreen, null)
+                        Text("Aufteilen")
+                    }
+                }
                 TextButton(onClick = { details = !details }) {
                     Text(if (details) "Details ausblenden" else "Bausteine")
                     Icon(Icons.Outlined.ExpandMore, null)
                 }
             }
             if (details || advanced) {
-                OutlinedButton(onClick = { sourceMenu = true }) { Text("Quelle: ${sourceLabel(rule.source)}") }
+                OutlinedButton(onClick = { sourceMenu = true }) {
+                    Text(
+                        if (rule.sourceVariableKey.isBlank()) "Quelle: ${sourceLabel(rule.source)}"
+                        else "Quelle: ${variableLabel(rule.sourceVariableKey)}"
+                    )
+                }
                 DropdownMenu(expanded = sourceMenu, onDismissRequest = { sourceMenu = false }) {
                     InputSource.entries.forEach { sourceChoice ->
-                        DropdownMenuItem(text = { Text(sourceLabel(sourceChoice)) }, onClick = { onChange(rule.copy(source = sourceChoice)); sourceMenu = false })
+                        DropdownMenuItem(
+                            text = { Text(sourceLabel(sourceChoice)) },
+                            onClick = {
+                                onChange(rule.copy(source = sourceChoice, sourceVariableKey = ""))
+                                sourceMenu = false
+                            }
+                        )
                     }
+                    availableSourceVariables.filter { it.isNotBlank() }.forEach { variable ->
+                        DropdownMenuItem(
+                            text = { Text("Variable: ${variableLabel(variable)}") },
+                            onClick = {
+                                onChange(rule.copy(sourceVariableKey = variable))
+                                sourceMenu = false
+                            }
+                        )
+                    }
+                }
+                if (rule.sourceVariableKey.isNotBlank()) {
+                    Text(
+                        "Diese Variable wird aus '${variableLabel(rule.sourceVariableKey)}' abgeleitet. So kannst du z. B. PLZ und Ort aus einem gemeinsamen Wert erzeugen.",
+                        style = MaterialTheme.typography.bodySmall
+                    )
                 }
                 rule.transforms.forEachIndexed { index, transform ->
                     TransformEditor(
@@ -996,7 +1236,52 @@ private fun UrlActionFields(action: ProcessingAction.Url, variables: List<String
 private fun ShareActionFields(action: ProcessingAction.Share, variables: List<String>, onChange: (ProcessingAction) -> Unit) {
     TemplateField("Betreff", action.subjectTemplate, variables) { onChange(action.copy(subjectTemplate = it)) }
     TemplateField("Nachricht", action.textTemplate, variables, minLines = 4) { onChange(action.copy(textTemplate = it)) }
-    OutlinedTextField(action.mimeType, { onChange(action.copy(mimeType = it)) }, label = { Text("Inhaltstyp") }, modifier = Modifier.fillMaxWidth())
+    OutlinedTextField(action.mimeType, { onChange(action.copy(mimeType = it)) }, label = { Text("Inhaltstyp, z. B. text/plain, text/markdown, text/html") }, modifier = Modifier.fillMaxWidth())
+
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Checkbox(action.asFile, { onChange(action.copy(asFile = it)) })
+        Column {
+            Text("Als Textdatei ausgeben")
+            Text("Erzeugt aus dem transformierten Text eine Datei statt nur normalen Android-Text.", style = MaterialTheme.typography.bodySmall)
+        }
+    }
+
+    if (action.asFile) {
+        TemplateField(
+            "Dateiname",
+            action.fileNameTemplate,
+            variables,
+            placeholder = "z. B. {{datum}}-{{ort}}.md"
+        ) { onChange(action.copy(fileNameTemplate = it)) }
+        TemplateField(
+            "Unterordner, optional",
+            action.relativePathTemplate,
+            variables,
+            placeholder = "z. B. Termine/{{jahr}}"
+        ) { onChange(action.copy(relativePathTemplate = it)) }
+        Text("Datei verwenden", fontWeight = FontWeight.SemiBold)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            RadioButton(action.fileMode == TextFileMode.SHARE, { onChange(action.copy(fileMode = TextFileMode.SHARE)) })
+            Column {
+                Text("Teilen")
+                Text("Öffnet den Android-Teilen-Dialog mit der erzeugten Datei.", style = MaterialTheme.typography.bodySmall)
+            }
+        }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            RadioButton(action.fileMode == TextFileMode.OPEN, { onChange(action.copy(fileMode = TextFileMode.OPEN)) })
+            Column {
+                Text("Direkt öffnen")
+                Text("Öffnet die Datei in einer passenden App, z. B. Markdown- oder HTML-Viewer.", style = MaterialTheme.typography.bodySmall)
+            }
+        }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            RadioButton(action.fileMode == TextFileMode.SAVE, { onChange(action.copy(fileMode = TextFileMode.SAVE)) })
+            Column {
+                Text("Im Dateisystem speichern")
+                Text("Nutzt den voreingestellten Ordner aus den Einstellungen. Ohne Voreinstellung erscheint der Android-Dateidialog. Der Unterordner kann Variablen enthalten.", style = MaterialTheme.typography.bodySmall)
+            }
+        }
+    }
 }
 
 @Composable
@@ -1081,7 +1366,12 @@ private fun actionTemplates(action: ProcessingAction): List<Pair<String, String>
         "Dauer" to action.durationTemplate
     )
     is ProcessingAction.Url -> listOf("URL" to action.urlTemplate)
-    is ProcessingAction.Share -> listOf("Betreff" to action.subjectTemplate, "Nachricht" to action.textTemplate)
+    is ProcessingAction.Share -> listOf(
+        "Betreff" to action.subjectTemplate,
+        "Nachricht" to action.textTemplate,
+        "Dateiname" to action.fileNameTemplate,
+        "Unterordner" to action.relativePathTemplate
+    )
 }
 
 private fun defaultCalendarAction() = ProcessingAction.Calendar(UUID.randomUUID().toString(), "Kalender öffnen")
@@ -1108,7 +1398,7 @@ private fun actionHighlightPrefix(action: ProcessingAction): String = when (acti
 
 private fun sourceLabel(source: InputSource): String = when (source) {
     InputSource.COMBINED -> "Betreff + Text"
-    InputSource.TEXT -> "Nachrichtentext"
+    InputSource.TEXT -> "Nachrichtentext / Dateiinhalt"
     InputSource.SUBJECT -> "Betreff"
 }
 
@@ -1122,10 +1412,12 @@ private fun transformLabel(transform: ValueTransform): String = when (transform)
 
 private fun variableLabel(key: String): String = when (key) {
     "subject" -> "Betreff"
-    "text" -> "Gesamte Nachricht"
+    "text" -> "Gesamte Nachricht / Dateiinhalt"
     "input" -> "Betreff + Nachricht"
     "source_app" -> "Teilende App"
     "source_package" -> "Paketname der teilenden App"
+    "file_name" -> "Dateiname"
+    "mime_type" -> "Inhaltstyp"
     else -> key
 }
 
