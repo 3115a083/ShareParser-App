@@ -2,6 +2,7 @@ package cc.stkmn.shareparser.engine
 
 import android.Manifest
 import android.content.ActivityNotFoundException
+import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -11,6 +12,7 @@ import android.provider.CalendarContract
 import androidx.core.content.ContextCompat
 import cc.stkmn.shareparser.WebViewActivity
 import cc.stkmn.shareparser.data.AppSettings
+import cc.stkmn.shareparser.data.CalendarTargetMode
 import cc.stkmn.shareparser.data.DateTimeLocale
 import cc.stkmn.shareparser.data.ProcessingAction
 import cc.stkmn.shareparser.data.UrlOpenMode
@@ -109,6 +111,20 @@ class ActionExecutor(context: Context, private val settings: AppSettings = AppSe
         }
         if (title.isBlank()) warnings += "Titel ist leer. Bitte den Termin-Titel im Kalender prüfen."
 
+        if (action.targetMode == CalendarTargetMode.DIRECT_SAVE) {
+            return saveToSelectedCalendar(
+                action = action,
+                intent = intent,
+                selectedCalendarId = selectedCalendarId,
+                calendarName = calendarName,
+                warnings = warnings
+            )
+        }
+
+        if (selectedCalendarId != null) {
+            warnings += "Android erlaubt Kalender-Apps, die Zielkalender-Vorgabe beim Öffnen zu ignorieren. Nutze 'Zielkalender verbindlich', wenn der Kalender garantiert stimmen muss."
+        }
+
         try {
             launch(intent, "calendar", "Kalender konnte nicht geöffnet werden")
         } catch (e: ProcessingException) {
@@ -122,6 +138,77 @@ class ActionExecutor(context: Context, private val settings: AppSettings = AppSe
                 throw e
             }
         }
+        return ExecutionResult(warnings.distinct())
+    }
+
+    private fun saveToSelectedCalendar(
+        action: ProcessingAction.Calendar,
+        intent: Intent,
+        selectedCalendarId: Long?,
+        calendarName: String,
+        warnings: MutableList<String>
+    ): ExecutionResult {
+        val calendarId = selectedCalendarId ?: throw ProcessingException(
+            "Für den verbindlichen Modus muss ein verfügbarer Zielkalender ausgewählt sein.",
+            "calendar",
+            "DIRECT_SAVE requested without a valid calendar id"
+        )
+        if (ContextCompat.checkSelfPermission(appContext, Manifest.permission.WRITE_CALENDAR) != PackageManager.PERMISSION_GRANTED) {
+            throw ProcessingException(
+                "Für den verbindlichen Zielkalender fehlt die Kalender-Schreibberechtigung. Öffne das Profil und erlaube sie dort.",
+                "calendar",
+                "WRITE_CALENDAR permission missing for DIRECT_SAVE"
+            )
+        }
+
+        val begin = intent.getLongExtra(CalendarContract.EXTRA_EVENT_BEGIN_TIME, Long.MIN_VALUE)
+        if (begin == Long.MIN_VALUE) {
+            throw ProcessingException(
+                "Der Termin hat keinen sicher erkannten Startzeitpunkt und kann deshalb nicht direkt gespeichert werden.",
+                "calendar.start",
+                "DIRECT_SAVE requires EXTRA_EVENT_BEGIN_TIME"
+            )
+        }
+
+        val end = intent.getLongExtra(CalendarContract.EXTRA_EVENT_END_TIME, Long.MIN_VALUE)
+        val duration = intent.getStringExtra(CalendarContract.Events.DURATION)
+        val rdate = intent.getStringExtra(CalendarContract.Events.RDATE)
+        val defaultEnd = begin + if (action.allDay) 24L * 60L * 60L * 1000L else 60L * 60L * 1000L
+
+        val values = ContentValues().apply {
+            put(CalendarContract.Events.CALENDAR_ID, calendarId)
+            put(CalendarContract.Events.TITLE, intent.getStringExtra(CalendarContract.Events.TITLE).orEmpty())
+            put(CalendarContract.Events.DESCRIPTION, intent.getStringExtra(CalendarContract.Events.DESCRIPTION).orEmpty())
+            put(CalendarContract.Events.EVENT_LOCATION, intent.getStringExtra(CalendarContract.Events.EVENT_LOCATION).orEmpty())
+            put(CalendarContract.Events.DTSTART, begin)
+            put(CalendarContract.Events.ALL_DAY, if (action.allDay) 1 else 0)
+            put(CalendarContract.Events.EVENT_TIMEZONE, if (action.allDay) "UTC" else ZoneId.systemDefault().id)
+            if (!rdate.isNullOrBlank()) {
+                put(CalendarContract.Events.RDATE, rdate)
+                put(CalendarContract.Events.DURATION, duration ?: toRfc2445Duration(defaultEnd - begin))
+            } else {
+                val effectiveEnd = if (end != Long.MIN_VALUE && end > begin) end else defaultEnd
+                put(CalendarContract.Events.DTEND, effectiveEnd)
+                if (end == Long.MIN_VALUE) warnings += "Keine Endzeit erkannt. Für den gespeicherten Termin wurde ${if (action.allDay) "ein Tag" else "eine Stunde"} verwendet."
+            }
+        }
+
+        val eventUri = try {
+            appContext.contentResolver.insert(CalendarContract.Events.CONTENT_URI, values)
+        } catch (e: Exception) {
+            throw ProcessingException(
+                "Der Termin konnte nicht in den ausgewählten Kalender geschrieben werden.",
+                "calendar",
+                "${e::class.java.name}: ${e.message ?: e.toString()}"
+            )
+        } ?: throw ProcessingException(
+            "Der Termin konnte nicht in den ausgewählten Kalender geschrieben werden.",
+            "calendar",
+            "Calendar provider returned null from insert"
+        )
+
+        warnings += "Termin wurde verbindlich in '${calendarName.ifBlank { "den ausgewählten Kalender" }}' angelegt und zum Bearbeiten geöffnet."
+        launch(Intent(Intent.ACTION_EDIT, eventUri), "calendar", "Der gespeicherte Termin konnte nicht zum Bearbeiten geöffnet werden")
         return ExecutionResult(warnings.distinct())
     }
 
