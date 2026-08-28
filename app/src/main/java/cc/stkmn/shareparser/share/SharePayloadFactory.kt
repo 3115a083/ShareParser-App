@@ -9,6 +9,7 @@ import java.io.InputStreamReader
 
 object SharePayloadFactory {
     private const val MAX_SHARED_TEXT_CHARS = 4_000_000
+    private const val EXTRA_SOURCE_PACKAGE = "android.intent.extra.PACKAGE_NAME"
 
     fun from(activity: Activity, intent: Intent): SharedPayload? {
         if (intent.action != Intent.ACTION_SEND) return null
@@ -58,7 +59,15 @@ object SharePayloadFactory {
                 return uri.host.orEmpty()
             }
         }
-        return activity.callingPackage.orEmpty()
+
+        val directCandidates = listOfNotNull(
+            activity.callingActivity?.packageName,
+            activity.callingPackage,
+            intent.getStringExtra(EXTRA_SOURCE_PACKAGE)
+        )
+        return directCandidates.firstOrNull { candidate ->
+            candidate.isNotBlank() && candidate != activity.packageName
+        }.orEmpty()
     }
 
     private fun readSharedText(activity: Activity, uri: Uri): String = runCatching {
