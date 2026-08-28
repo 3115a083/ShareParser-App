@@ -29,6 +29,7 @@ import androidx.compose.material.icons.outlined.ExpandMore
 import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
+import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.Checkbox
@@ -63,10 +64,12 @@ import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import cc.stkmn.shareparser.calendar.CalendarCatalog
+import cc.stkmn.shareparser.data.CalendarTargetMode
 import cc.stkmn.shareparser.data.CaseMode
 import cc.stkmn.shareparser.data.ExtractorRule
 import cc.stkmn.shareparser.data.InputSource
 import cc.stkmn.shareparser.data.MatcherRule
+import cc.stkmn.shareparser.data.ParseDirection
 import cc.stkmn.shareparser.data.ProcessingAction
 import cc.stkmn.shareparser.data.Profile
 import cc.stkmn.shareparser.data.ProfileRepository
@@ -96,6 +99,7 @@ internal fun ProfileEditorScreen(
 
     var name by remember(existing?.id) { mutableStateOf(existing?.name.orEmpty()) }
     var enabled by remember(existing?.id) { mutableStateOf(existing?.enabled ?: true) }
+    var parseDirection by remember(existing?.id) { mutableStateOf(existing?.parseDirection ?: ParseDirection.TOP_DOWN) }
     val matchers = remember(existing?.id) { mutableStateListOf<MatcherRule>().apply { addAll(existing?.matchers.orEmpty()) } }
     val extractors = remember(existing?.id) { mutableStateListOf<ExtractorRule>().apply { addAll(existing?.extractors.orEmpty()) } }
     val actions = remember(existing?.id) {
@@ -133,7 +137,8 @@ internal fun ProfileEditorScreen(
         enabled = enabled,
         matchers = matchers.toList(),
         extractors = extractors.toList(),
-        actions = actions.toList()
+        actions = actions.toList(),
+        parseDirection = parseDirection
     )
 
     fun validate(profile: Profile): String? {
@@ -259,6 +264,25 @@ internal fun ProfileEditorScreen(
                 Text(if (enabled) "Profil aktiv" else "Profil deaktiviert")
             }
         }
+        item {
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text("Parsing-Reihenfolge", fontWeight = FontWeight.SemiBold)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    RadioButton(parseDirection == ParseDirection.TOP_DOWN, { parseDirection = ParseDirection.TOP_DOWN })
+                    Text("Von oben nach unten")
+                }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    RadioButton(parseDirection == ParseDirection.BOTTOM_UP, { parseDirection = ParseDirection.BOTTOM_UP })
+                    Text("Von unten nach oben")
+                }
+                Text(
+                    if (parseDirection == ParseDirection.BOTTOM_UP)
+                        "Nimmt bei mehrfach vorkommenden Feldern den letzten Treffer. Sinnvoll, wenn die ursprüngliche Mail unter einer Antwort oder Weiterleitung steht."
+                    else "Nimmt bei mehrfach vorkommenden Feldern den ersten Treffer.",
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
+        }
 
         item { HorizontalDivider() }
         item { SectionTitle("Profil automatisch erkennen") }
@@ -290,6 +314,8 @@ internal fun ProfileEditorScreen(
                         title = "Betreff",
                         fixedText = sample.subject,
                         value = subjectSelection,
+                        source = InputSource.SUBJECT,
+                        extractors = extractors,
                         onValueChange = { subjectSelection = it.copy(text = sample.subject) },
                         onVariable = {
                             val s = subjectSelection.selection
@@ -307,6 +333,8 @@ internal fun ProfileEditorScreen(
                     title = "Nachrichtentext",
                     fixedText = sample.text,
                     value = bodySelection,
+                    source = InputSource.TEXT,
+                    extractors = extractors,
                     onValueChange = { bodySelection = it.copy(text = sample.text) },
                     onVariable = {
                         val s = bodySelection.selection
@@ -395,7 +423,7 @@ internal fun ProfileEditorScreen(
         if (sample != null) {
             item { HorizontalDivider() }
             item { SectionTitle("Variablen aus dem Beispiel") }
-            item { Text("Markiere einen veränderlichen Wert oben und tippe auf „Als Variable“. ShareParser erzeugt daraus eine wiederverwendbare Regel. Adressen und typische „Name: Wert“-Zeilen werden zusätzlich vorgeschlagen.") }
+            item { Text("Markiere einen veränderlichen Wert oben und tippe auf „Als Variable“. Bereits definierte Variablen werden im Beispiel farbig markiert. Adressen und typische „Name: Wert“-Zeilen werden zusätzlich vorgeschlagen.") }
             items(GuidedRuleFactory.candidates(sample).filter { it.source == InputSource.TEXT }.take(30)) { candidate ->
                 Card(Modifier.fillMaxWidth()) {
                     Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -430,6 +458,7 @@ internal fun ProfileEditorScreen(
                 rule = rule,
                 sample = sample,
                 parser = parser,
+                parseDirection = parseDirection,
                 highlighted = highlightField == rule.key,
                 advanced = advanced,
                 onChange = { changed ->
@@ -638,12 +667,15 @@ private fun SelectionSourceCard(
     title: String,
     fixedText: String,
     value: TextFieldValue,
+    source: InputSource,
+    extractors: List<ExtractorRule>,
     onValueChange: (TextFieldValue) -> Unit,
     onVariable: () -> Unit,
     onMatcher: () -> Unit
 ) {
     val clipboard = LocalClipboardManager.current
     val selected = selectedText(fixedText, value.selection)
+    val (visualTransformation, highlights) = rememberVariableHighlighting(source, extractors)
     Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -652,15 +684,27 @@ private fun SelectionSourceCard(
                     Icon(Icons.Outlined.ContentCopy, "Text kopieren")
                 }
             }
-            Text("Text gedrückt halten und einen Bereich markieren. Der Text ist kopierbar.", style = MaterialTheme.typography.bodySmall)
+            Text("Text gedrückt halten und einen Bereich markieren. Der Text ist kopierbar. Bereits erkannte Variablen sind farbig hinterlegt.", style = MaterialTheme.typography.bodySmall)
             OutlinedTextField(
                 value = value,
                 onValueChange = onValueChange,
                 readOnly = true,
+                visualTransformation = visualTransformation,
                 modifier = Modifier.fillMaxWidth(),
                 minLines = if (title == "Nachrichtentext") 5 else 1,
                 maxLines = if (title == "Nachrichtentext") 14 else 3
             )
+            if (highlights.isNotEmpty()) {
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    items(highlights, key = { it.key }) { highlight ->
+                        AssistChip(
+                            onClick = { },
+                            label = { Text(variableLabel(highlight.key)) },
+                            colors = AssistChipDefaults.assistChipColors(containerColor = highlight.color)
+                        )
+                    }
+                }
+            }
             if (selected.isNotBlank()) Text("Markiert: $selected", style = MaterialTheme.typography.bodySmall)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedButton(onClick = onVariable, enabled = selected.isNotBlank()) { Text("Als Variable") }
@@ -675,6 +719,7 @@ private fun ExtractorCard(
     rule: ExtractorRule,
     sample: SharedPayload?,
     parser: ParserEngine,
+    parseDirection: ParseDirection,
     highlighted: Boolean,
     advanced: Boolean,
     onChange: (ExtractorRule) -> Unit,
@@ -683,9 +728,14 @@ private fun ExtractorCard(
     var details by remember(rule.id) { mutableStateOf(false) }
     var transformMenu by remember { mutableStateOf(false) }
     var sourceMenu by remember { mutableStateOf(false) }
-    val preview = remember(rule, sample) {
+    val preview = remember(rule, sample, parseDirection) {
         sample?.let {
-            runCatching { parser.extract(it, Profile("preview", "preview", extractors = listOf(rule.copy(required = false))))[rule.key] }.getOrNull()
+            runCatching {
+                parser.extract(
+                    it,
+                    Profile("preview", "preview", extractors = listOf(rule.copy(required = false)), parseDirection = parseDirection)
+                )[rule.key]
+            }.getOrNull()
         }
     }
     val border = if (highlighted) Modifier.border(2.dp, MaterialTheme.colorScheme.error, RoundedCornerShape(12.dp)) else Modifier
@@ -719,8 +769,8 @@ private fun ExtractorCard(
             if (details || advanced) {
                 OutlinedButton(onClick = { sourceMenu = true }) { Text("Quelle: ${sourceLabel(rule.source)}") }
                 DropdownMenu(expanded = sourceMenu, onDismissRequest = { sourceMenu = false }) {
-                    InputSource.entries.forEach { source ->
-                        DropdownMenuItem(text = { Text(sourceLabel(source)) }, onClick = { onChange(rule.copy(source = source)); sourceMenu = false })
+                    InputSource.entries.forEach { sourceChoice ->
+                        DropdownMenuItem(text = { Text(sourceLabel(sourceChoice)) }, onClick = { onChange(rule.copy(source = sourceChoice)); sourceMenu = false })
                     }
                 }
                 rule.transforms.forEachIndexed { index, transform ->
@@ -828,6 +878,11 @@ private fun CalendarActionFields(
     variables: List<String>,
     onChange: (ProcessingAction) -> Unit
 ) {
+    val context = LocalContext.current
+    val writePermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) onChange(action.copy(targetMode = CalendarTargetMode.DIRECT_SAVE))
+    }
+
     Text("Kalenderfelder", fontWeight = FontWeight.SemiBold)
     TemplateField("Titel", action.titleTemplate, variables) { onChange(action.copy(titleTemplate = it)) }
     TemplateField("Beschreibung", action.descriptionTemplate, variables, minLines = 3) { onChange(action.copy(descriptionTemplate = it)) }
@@ -836,6 +891,32 @@ private fun CalendarActionFields(
     TemplateField("Ende, optional", action.endTemplate, variables, placeholder = "Nur nötig, wenn der Beginn keinen Zeitraum enthält") { onChange(action.copy(endTemplate = it, endPattern = "")) }
     TemplateField("Dauer, optional", action.durationTemplate, variables, placeholder = "z. B. 1,5h, 2h, 90 Minuten, eine Stunde") { onChange(action.copy(durationTemplate = it)) }
     CalendarPickerField(action = action, onChange = { onChange(it) })
+
+    Text("Zielkalender-Verhalten", fontWeight = FontWeight.SemiBold)
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        RadioButton(action.targetMode == CalendarTargetMode.APP_EDITOR, { onChange(action.copy(targetMode = CalendarTargetMode.APP_EDITOR)) })
+        Column {
+            Text("Kalender-App vorausfüllen")
+            Text("Ohne Schreibzugriff. Die Kalender-App kann die Zielkalender-Vorgabe ignorieren.", style = MaterialTheme.typography.bodySmall)
+        }
+    }
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        RadioButton(
+            action.targetMode == CalendarTargetMode.DIRECT_SAVE,
+            {
+                if (ContextCompat.checkSelfPermission(context, Manifest.permission.WRITE_CALENDAR) == PackageManager.PERMISSION_GRANTED) {
+                    onChange(action.copy(targetMode = CalendarTargetMode.DIRECT_SAVE))
+                } else {
+                    writePermissionLauncher.launch(Manifest.permission.WRITE_CALENDAR)
+                }
+            }
+        )
+        Column {
+            Text("Zielkalender verbindlich")
+            Text("Speichert den Termin direkt im ausgewählten Kalender und öffnet ihn danach zum Bearbeiten. Benötigt Kalender-Schreibzugriff.", style = MaterialTheme.typography.bodySmall)
+        }
+    }
+
     Row(verticalAlignment = Alignment.CenterVertically) {
         Checkbox(action.allDay, { onChange(action.copy(allDay = it)) })
         Text("Ganztägig")
@@ -871,7 +952,7 @@ private fun CalendarPickerField(
     }
     DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
         DropdownMenuItem(text = { Text("Kein fester Zielkalender") }, onClick = {
-            onChange(action.copy(calendarId = null, calendarNameTemplate = "")); menu = false
+            onChange(action.copy(calendarId = null, calendarNameTemplate = "", targetMode = CalendarTargetMode.APP_EDITOR)); menu = false
         })
         choices.forEach { choice ->
             DropdownMenuItem(
@@ -888,7 +969,12 @@ private fun CalendarPickerField(
             )
         }
     }
-    Text("ShareParser speichert nur die lokale Kalender-ID und den Anzeigenamen. Der Termin wird weiterhin von deiner Kalender-App gespeichert.", style = MaterialTheme.typography.bodySmall)
+    Text(
+        if (action.targetMode == CalendarTargetMode.DIRECT_SAVE)
+            "Im verbindlichen Modus nutzt ShareParser diese lokale Kalender-ID direkt."
+        else "Beim normalen Android-Kalender-Intent ist die Kalender-ID nur eine Empfehlung an die Kalender-App.",
+        style = MaterialTheme.typography.bodySmall
+    )
 }
 
 @Composable
