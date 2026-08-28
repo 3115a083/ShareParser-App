@@ -44,6 +44,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import cc.stkmn.shareparser.LauncherIconManager
 import cc.stkmn.shareparser.R
 import cc.stkmn.shareparser.data.LauncherIcon
@@ -59,6 +61,7 @@ internal fun SettingsHomeScreen(
     val context = LocalContext.current
     var settings by remember { mutableStateOf(repository.settings()) }
     var overlayGranted by remember { mutableStateOf(Settings.canDrawOverlays(context)) }
+    var overlayPermissionRequested by remember { mutableStateOf(false) }
 
     fun saveMode(mode: ShareSelectionMode) {
         settings = settings.copy(shareSelectionMode = mode)
@@ -69,6 +72,14 @@ internal fun SettingsHomeScreen(
         settings = settings.copy(launcherIcon = icon)
         repository.saveSettings(settings)
         LauncherIconManager.apply(context, icon)
+    }
+
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
+        overlayGranted = Settings.canDrawOverlays(context)
+        if (overlayPermissionRequested && overlayGranted) {
+            saveMode(ShareSelectionMode.OVERLAY)
+            overlayPermissionRequested = false
+        }
     }
 
     val notificationPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { }
@@ -159,6 +170,7 @@ internal fun SettingsHomeScreen(
                     if (overlayGranted) {
                         saveMode(ShareSelectionMode.OVERLAY)
                     } else {
+                        overlayPermissionRequested = true
                         runCatching {
                             context.startActivity(
                                 Intent(
