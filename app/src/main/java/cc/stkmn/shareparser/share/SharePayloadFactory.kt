@@ -10,12 +10,21 @@ import java.io.InputStreamReader
 object SharePayloadFactory {
     private const val MAX_SHARED_TEXT_CHARS = 4_000_000
     private const val EXTRA_SOURCE_PACKAGE = "android.intent.extra.PACKAGE_NAME"
+    private val packagePattern = Regex("[A-Za-z][A-Za-z0-9_]*(?:\\.[A-Za-z0-9_]+)+")
+    private val supportedTextExtensions = setOf(
+        "txt", "text", "md", "markdown", "html", "htm", "xhtml", "json", "xml", "csv", "tsv", "log", "ics", "yaml", "yml"
+    )
 
     fun from(activity: Activity, intent: Intent): SharedPayload? {
         if (intent.action != Intent.ACTION_SEND) return null
 
         val streamUri = streamUri(intent)
-        val streamText = streamUri?.let { readSharedText(activity, it) }.orEmpty()
+        val fileName = streamUri?.let { displayName(activity, it) }.orEmpty()
+        val mimeType = intent.type ?: streamUri?.let { activity.contentResolver.getType(it) } ?: "text/plain"
+        val streamText = streamUri
+            ?.takeIf { isSupportedTextPayload(mimeType, fileName) }
+            ?.let { readSharedText(activity, it) }
+            .orEmpty()
         val inlineText = intent.getCharSequenceExtra(Intent.EXTRA_TEXT)?.toString()
             ?: intent.getStringExtra(Intent.EXTRA_HTML_TEXT)
             ?: ""
@@ -23,17 +32,16 @@ object SharePayloadFactory {
         val subject = intent.getCharSequenceExtra(Intent.EXTRA_SUBJECT)?.toString().orEmpty()
         if (text.isBlank() && subject.isBlank()) return null
 
-        val sourcePackage = resolveSourcePackage(activity, intent)
+        val sourcePackage = resolveSourcePackage(activity, intent, streamUri)
         val sourceApp = if (sourcePackage.isBlank()) "" else runCatching {
             val info = activity.packageManager.getApplicationInfo(sourcePackage, 0)
             activity.packageManager.getApplicationLabel(info).toString()
         }.getOrDefault(sourcePackage)
-        val fileName = streamUri?.let { displayName(activity, it) }.orEmpty()
 
         return SharedPayload(
             text = text,
             subject = subject,
-            mimeType = intent.type ?: streamUri?.let { activity.contentResolver.getType(it) } ?: "text/plain",
+            mimeType = mimeType,
             sourcePackage = sourcePackage,
             sourceApp = sourceApp,
             fileName = fileName
@@ -46,28 +54,81 @@ object SharePayloadFactory {
     @Suppress("DEPRECATION")
     private fun referrerUri(intent: Intent): Uri? = intent.getParcelableExtra(Intent.EXTRA_REFERRER)
 
-    private fun resolveSourcePackage(activity: Activity, intent: Intent): String {
-        val referrers = buildList {
-            activity.referrer?.let(::add)
-            referrerUri(intent)?.let(::add)
-            intent.getStringExtra(Intent.EXTRA_REFERRER_NAME)
-                ?.let { runCatching { Uri.parse(it) }.getOrNull() }
-                ?.let(::add)
-        }
-        referrers.forEach { uri ->
-            if (uri.scheme.equals("android-app", ignoreCase = true) && !uri.host.isNullOrBlank()) {
-                return uri.host.orEmpty()
+    @Suppress("DEPRECATION")
+    private fun resolveSourcePackage(activity: Activity, intent: Intent, streamUri: Uri?): String {
+        val candidates = linkedSetOf<String>()
+
+        fun addPackageLike(value: String?) {
+            val raw = value?.trim().orEmpty()
+            if (raw.isBlank()) return
+            if (packagePattern.matches(raw)) candidates += raw
+            runCatching { Uri.parse(raw) }.getOrNull()?.let { uri ->
+                if (uri.scheme.equals("android-app", ignoreCase = true)) uri.host?.let(candidates::add)
             }
         }
 
-        val directCandidates = listOfNotNull(
-            activity.callingActivity?.packageName,
-            activity.callingPackage,
-            intent.getStringExtra(EXTRA_SOURCE_PACKAGE)
-        )
-        return directCandidates.firstOrNull { candidate ->
-            candidate.isNotBlank() && candidate != activity.packageName
-        }.orEmpty()
+        fun addUri(uri: Uri?) {
+            if (uri == null) return
+            if (uri.scheme.equals("android-app", ignoreCase = true)) uri.host?.let(candidates::add)
+            authorityPackageCandidates(uri.authority).forEach(candidates::add)
+        }
+
+        addUri(activity.referrer)
+        addUri(referrerUri(intent))
+        addPackageLike(intent.getStringExtra(Intent.EXTRA_REFERRER_NAME))
+        addPackageLike(activity.callingActivity?.packageName)
+        addPackageLike(activity.callingPackage)
+        addPackageLike(intent.getStringExtra(EXTRA_SOURCE_PACKAGE))
+        addUri(streamUri)
+
+        intent.extras?.keySet()?.forEach { key ->
+            when (val value = intent.extras?.get(key)) {
+                is String -> if (key != Intent.EXTRA_TEXT && key != Intent.EXTRA_HTML_TEXT && key != Intent.EXTRA_SUBJECT) addPackageLike(value)
+                is Uri -> addUri(value)
+            }
+        }
+
+        return candidates
+            .asSequence()
+            .flatMap { packageAndParents(it).asSequence() }
+            .filter { it != activity.packageName && it !in ignoredSourcePackages }
+            .firstOrNull { candidate ->
+                runCatching { activity.packageManager.getApplicationInfo(candidate, 0) }.isSuccess
+            }
+            .orEmpty()
+    }
+
+    private fun authorityPackageCandidates(authority: String?): List<String> {
+        val value = authority?.trim().orEmpty()
+        if (value.isBlank() || !packagePattern.matches(value)) return emptyList()
+        return packageAndParents(value)
+    }
+
+    private fun packageAndParents(value: String): List<String> = buildList {
+        var current = value
+        while (packagePattern.matches(current)) {
+            add(current)
+            val parent = current.substringBeforeLast('.', "")
+            if (parent.isBlank() || parent == current) break
+            current = parent
+        }
+    }
+
+    private fun isSupportedTextPayload(mimeType: String, fileName: String): Boolean {
+        val normalizedMime = mimeType.substringBefore(';').trim().lowercase()
+        if (normalizedMime.startsWith("text/")) return true
+        if (normalizedMime in setOf(
+                "application/json",
+                "application/ld+json",
+                "application/xml",
+                "application/xhtml+xml",
+                "application/markdown",
+                "application/x-markdown",
+                "text/markdown"
+            )
+        ) return true
+        val extension = fileName.substringAfterLast('.', "").lowercase()
+        return extension in supportedTextExtensions
     }
 
     private fun readSharedText(activity: Activity, uri: Uri): String = runCatching {
@@ -91,4 +152,10 @@ object SharePayloadFactory {
             if (cursor.moveToFirst()) cursor.getString(0).orEmpty() else ""
         }.orEmpty()
     }.getOrDefault("")
+
+    private val ignoredSourcePackages = setOf(
+        "android",
+        "com.android.intentresolver",
+        "com.google.android.documentsui"
+    )
 }
