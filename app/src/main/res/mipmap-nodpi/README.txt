@@ -1,0 +1,1 @@
+Launcher bitmap assets in this directory are derived from the six user-provided ShareParser logo variants. Logo 5 is the default. Source artwork remains user-provided.
