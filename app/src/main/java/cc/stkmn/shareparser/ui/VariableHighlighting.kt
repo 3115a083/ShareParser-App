@@ -41,8 +41,8 @@ internal fun rememberVariableHighlighting(
             runCatching { Regex(rule.regex, setOf(RegexOption.MULTILINE)).findAll(text.text).toList() }
                 .getOrDefault(emptyList())
                 .forEach { match ->
-                    val group = match.groups.getOrNull(rule.group) ?: return@forEach
-                    if (group.range.first >= 0 && group.range.last < text.length) {
+                    val group = if (rule.group in match.groupValues.indices) match.groups[rule.group] else null
+                    if (group != null && group.range.first >= 0 && group.range.last < text.length) {
                         builder.addStyle(
                             SpanStyle(background = color, fontWeight = FontWeight.SemiBold),
                             group.range.first,
