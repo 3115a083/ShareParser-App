@@ -156,6 +156,7 @@ sealed class ProcessingAction {
     ) : ProcessingAction()
 }
 
+@Serializable
 data class SharedPayload(
     val text: String,
     val subject: String = "",
@@ -167,6 +168,13 @@ data class SharedPayload(
             append(text)
         }.trim()
 }
+
+@Serializable
+data class PendingShare(
+    val id: String,
+    val payload: SharedPayload,
+    val createdAtEpochMs: Long
+)
 
 @Serializable
 data class FailureReport(
