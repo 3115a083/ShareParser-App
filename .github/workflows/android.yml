@@ -29,7 +29,24 @@ jobs:
           distribution: temurin
           java-version: '17'
           verify-signature: true
+      - name: Read declared Gradle version
+        id: gradle-version
+        shell: bash
+        run: |
+          set -euo pipefail
+          url="$(grep '^distributionUrl=' gradle/wrapper/gradle-wrapper.properties | cut -d= -f2-)"
+          archive="${url##*/}"
+          version="${archive#gradle-}"
+          version="${version%-bin.zip}"
+          version="${version%-all.zip}"
+          if [[ -z "$version" || "$version" == "$archive" ]]; then
+            echo "Could not parse Gradle version from gradle-wrapper.properties"
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
       - uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
+        with:
+          gradle-version: ${{ steps.gradle-version.outputs.version }}
       - name: Verify privacy and repository security invariants
         shell: bash
         run: |
@@ -54,7 +71,7 @@ jobs:
             exit 1
           fi
       - name: Unit tests, lint and debug APK
-        run: sh ./gradlew :app:testDebugUnitTest :app:lintDebug :app:assembleDebug --stacktrace
+        run: gradle :app:testDebugUnitTest :app:lintDebug :app:assembleDebug --stacktrace
       - name: Upload debug APK
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
