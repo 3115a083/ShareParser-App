@@ -51,7 +51,6 @@
             android:excludeFromRecents="true"
             android:noHistory="true"
             android:icon="@mipmap/app_logo_1"
-            android:roundIcon="@mipmap/app_logo_1"
             android:taskAffinity="cc.stkmn.shareparser.share.receiver"
             android:theme="@android:style/Theme.Translucent.NoTitleBar">
             <intent-filter>
