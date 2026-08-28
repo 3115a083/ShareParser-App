@@ -5,6 +5,8 @@ on:
     branches:
       - main
   pull_request:
+    branches:
+      - main
 
 concurrency:
   group: android-ci-${{ github.event.pull_request.number || github.ref }}
@@ -16,22 +18,20 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-java@v5
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
         with:
           distribution: temurin
           java-version: '17'
           verify-signature: true
-      - name: Restore stable debug signing key
-        uses: actions/cache@v4
-        with:
-          path: ~/.android/debug.keystore
-          key: shareparser-debug-keystore-v1
-      - uses: gradle/actions/setup-gradle@v6
+      - uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
         with:
           gradle-version: '8.13'
-      - name: Verify privacy and uninstall invariants
+      - name: Verify privacy and repository security invariants
         shell: bash
         run: |
           set -euo pipefail
@@ -45,10 +45,21 @@ jobs:
           fi
           grep -q 'android.permission.INTERNET' "$manifest"
           grep -q 'android:exported="false"' "$manifest"
+          if git ls-files | grep -Eqi '(^|/).*(\.jks|\.keystore|\.p12|\.pfx)(\..*)?$|keystore\.b64$'; then
+            echo "Signing key material must never be committed to the repository"
+            git ls-files | grep -Ei '(^|/).*(\.jks|\.keystore|\.p12|\.pfx)(\..*)?$|keystore\.b64$' || true
+            exit 1
+          fi
+          if grep -REqs --include='*.yml' --include='*.yaml' '^[[:space:]]*pull_request_target:' .github/workflows; then
+            echo "pull_request_target is intentionally forbidden in this repository"
+            exit 1
+          fi
       - name: Unit tests, lint and debug APK
         run: gradle :app:testDebugUnitTest :app:lintDebug :app:assembleDebug --stacktrace
       - name: Upload debug APK
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: ShareParser-debug
+          name: ShareParser-debug-TEST-ONLY
           path: app/build/outputs/apk/debug/app-debug.apk
+          retention-days: 7
+          if-no-files-found: error

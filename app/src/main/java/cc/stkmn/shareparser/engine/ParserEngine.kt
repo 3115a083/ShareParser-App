@@ -3,28 +3,33 @@ package cc.stkmn.shareparser.engine
 import cc.stkmn.shareparser.data.CaseMode
 import cc.stkmn.shareparser.data.ExtractorRule
 import cc.stkmn.shareparser.data.InputSource
+import cc.stkmn.shareparser.data.ParseDirection
 import cc.stkmn.shareparser.data.Profile
 import cc.stkmn.shareparser.data.SharedPayload
 import cc.stkmn.shareparser.data.ValueTransform
 
 class ParserEngine {
-    fun matchingProfiles(payload: SharedPayload, profiles: List<Profile>): List<Profile> = profiles.filter { profile ->
-        if (!profile.enabled) return@filter false
-        val triggerValues = availableValues(payload, profile)
-        profile.matchers.all { matcher ->
-            runCatching {
-                val options = buildSet {
-                    add(RegexOption.MULTILINE)
-                    if (matcher.ignoreCase) add(RegexOption.IGNORE_CASE)
-                }
-                val source = if (matcher.variableKey.isBlank()) {
-                    payload.combined
-                } else {
-                    triggerValues[matcher.variableKey] ?: return@runCatching false
-                }
-                Regex(matcher.regex, options).containsMatchIn(source)
-            }.getOrDefault(false)
+    fun matchingProfiles(payload: SharedPayload, profiles: List<Profile>): List<Profile> {
+        val matched = profiles.filter { profile ->
+            if (!profile.enabled) return@filter false
+            val triggerValues = availableValues(payload, profile)
+            profile.matchers.all { matcher ->
+                runCatching {
+                    val options = buildSet {
+                        add(RegexOption.MULTILINE)
+                        if (matcher.ignoreCase) add(RegexOption.IGNORE_CASE)
+                    }
+                    val source = if (matcher.variableKey.isBlank()) {
+                        payload.combined
+                    } else {
+                        triggerValues[matcher.variableKey] ?: return@runCatching false
+                    }
+                    Regex(matcher.regex, options).containsMatchIn(source)
+                }.getOrDefault(false)
+            }
         }
+        val specific = matched.filter { it.matchers.isNotEmpty() }
+        return if (specific.isNotEmpty()) specific else matched
     }
 
     fun matchingProfiles(input: String, profiles: List<Profile>): List<Profile> =
@@ -33,7 +38,7 @@ class ParserEngine {
     fun extract(payload: SharedPayload, profile: Profile): Map<String, String> {
         val values = builtInValues(payload)
         for (rule in profile.extractors) {
-            val value = extractOne(sourceFor(payload, rule.source), rule)
+            val value = extractOne(sourceFor(payload, rule.source), rule, profile.parseDirection)
             if (value == null && rule.required) {
                 throw ProcessingException(
                     userMessage = "Pflichtfeld '${rule.key}' konnte nicht erkannt werden.",
@@ -52,7 +57,7 @@ class ParserEngine {
     private fun availableValues(payload: SharedPayload, profile: Profile): Map<String, String> {
         val values = builtInValues(payload)
         profile.extractors.forEach { rule ->
-            runCatching { extractOne(sourceFor(payload, rule.source), rule) }
+            runCatching { extractOne(sourceFor(payload, rule.source), rule, profile.parseDirection) }
                 .getOrNull()
                 ?.let { values[rule.key] = it }
         }
@@ -62,7 +67,9 @@ class ParserEngine {
     private fun builtInValues(payload: SharedPayload) = linkedMapOf(
         "input" to payload.combined,
         "text" to payload.text,
-        "subject" to payload.subject
+        "subject" to payload.subject,
+        "source_app" to payload.sourceApp,
+        "source_package" to payload.sourcePackage
     )
 
     private fun sourceFor(payload: SharedPayload, source: InputSource): String = when (source) {
@@ -71,15 +78,20 @@ class ParserEngine {
         InputSource.SUBJECT -> payload.subject
     }
 
-    private fun extractOne(input: String, rule: ExtractorRule): String? {
-        val match = try {
-            Regex(rule.regex, setOf(RegexOption.MULTILINE)).find(input)
+    private fun extractOne(input: String, rule: ExtractorRule, direction: ParseDirection): String? {
+        val regex = try {
+            Regex(rule.regex, setOf(RegexOption.MULTILINE))
         } catch (e: Exception) {
             throw ProcessingException(
                 "Ungültiger regulärer Ausdruck für '${rule.key}'.",
                 rule.key,
                 e.message ?: e.toString()
             )
+        }
+
+        val match = when (direction) {
+            ParseDirection.TOP_DOWN -> regex.find(input)
+            ParseDirection.BOTTOM_UP -> regex.findAll(input).lastOrNull()
         } ?: return null
 
         if (rule.group !in match.groupValues.indices) {
@@ -97,24 +109,31 @@ class ParserEngine {
         return value
     }
 
-    private fun applyTransform(value: String, transform: ValueTransform, key: String): String = when (transform) {
-        ValueTransform.Trim -> value.trim()
-        is ValueTransform.Prefix -> transform.value + value
-        is ValueTransform.Suffix -> value + transform.value
-        is ValueTransform.ChangeCase -> when (transform.mode) {
-            CaseMode.LOWER -> value.lowercase()
-            CaseMode.UPPER -> value.uppercase()
-        }
-        is ValueTransform.RegexReplace -> {
-            val options = if (transform.ignoreCase) setOf(RegexOption.IGNORE_CASE) else emptySet()
-            try {
-                Regex(transform.regex, options).replace(value, transform.replacement)
-            } catch (e: Exception) {
-                throw ProcessingException(
-                    "Ersetzen-Baustein für '$key' ist ungültig.",
-                    key,
-                    e.message ?: e.toString()
-                )
+    private fun applyTransform(value: String, transform: ValueTransform, key: String): String {
+        return when (transform) {
+            ValueTransform.Trim -> value.trim()
+            is ValueTransform.Prefix -> transform.value + value
+            is ValueTransform.Suffix -> value + transform.value
+            is ValueTransform.ChangeCase -> when (transform.mode) {
+                CaseMode.LOWER -> value.lowercase()
+                CaseMode.UPPER -> value.uppercase()
+            }
+            is ValueTransform.RegexReplace -> {
+                if (transform.regex.isEmpty()) {
+                    value
+                } else {
+                    val options = if (transform.ignoreCase) setOf(RegexOption.IGNORE_CASE) else emptySet()
+                    try {
+                        val pattern = if (transform.literal) Regex.escape(transform.regex) else transform.regex
+                        Regex(pattern, options).replace(value, transform.replacement)
+                    } catch (e: Exception) {
+                        throw ProcessingException(
+                            "Ersetzen-Baustein für '$key' ist ungültig.",
+                            key,
+                            e.message ?: e.toString()
+                        )
+                    }
+                }
             }
         }
     }

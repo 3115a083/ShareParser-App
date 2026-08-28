@@ -1,6 +1,8 @@
 package cc.stkmn.shareparser.ui
 
+import android.Manifest
 import android.content.Intent
+import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.border
@@ -27,12 +29,12 @@ import androidx.compose.material.icons.outlined.ExpandMore
 import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
+import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -56,13 +58,18 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
+import cc.stkmn.shareparser.calendar.CalendarCatalog
+import cc.stkmn.shareparser.data.CalendarTargetMode
 import cc.stkmn.shareparser.data.CaseMode
 import cc.stkmn.shareparser.data.ExtractorRule
 import cc.stkmn.shareparser.data.InputSource
 import cc.stkmn.shareparser.data.MatcherRule
+import cc.stkmn.shareparser.data.ParseDirection
 import cc.stkmn.shareparser.data.ProcessingAction
 import cc.stkmn.shareparser.data.Profile
 import cc.stkmn.shareparser.data.ProfileRepository
@@ -71,11 +78,11 @@ import cc.stkmn.shareparser.data.UrlOpenMode
 import cc.stkmn.shareparser.data.ValueTransform
 import cc.stkmn.shareparser.engine.GuidedRuleFactory
 import cc.stkmn.shareparser.engine.ParserEngine
+import cc.stkmn.shareparser.engine.TemplateEngine
 import java.util.UUID
 
-private val reservedVariables = setOf("input", "text", "subject")
+private val reservedVariables = setOf("input", "text", "subject", "source_app", "source_package")
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun ProfileEditorScreen(
     existing: Profile?,
@@ -88,13 +95,17 @@ internal fun ProfileEditorScreen(
     val context = LocalContext.current
     val clipboard = LocalClipboardManager.current
     val parser = remember { ParserEngine() }
+    val profileId = remember(existing?.id) { existing?.id ?: UUID.randomUUID().toString() }
 
     var name by remember(existing?.id) { mutableStateOf(existing?.name.orEmpty()) }
     var enabled by remember(existing?.id) { mutableStateOf(existing?.enabled ?: true) }
+    var parseDirection by remember(existing?.id) { mutableStateOf(existing?.parseDirection ?: ParseDirection.TOP_DOWN) }
     val matchers = remember(existing?.id) { mutableStateListOf<MatcherRule>().apply { addAll(existing?.matchers.orEmpty()) } }
     val extractors = remember(existing?.id) { mutableStateListOf<ExtractorRule>().apply { addAll(existing?.extractors.orEmpty()) } }
     val actions = remember(existing?.id) {
-        mutableStateListOf<ProcessingAction>().apply { addAll(existing?.actions ?: listOf(defaultCalendarAction())) }
+        mutableStateListOf<ProcessingAction>().apply {
+            addAll(existing?.actions?.takeIf { it.isNotEmpty() } ?: listOf(defaultCalendarAction()))
+        }
     }
 
     var advanced by remember { mutableStateOf(false) }
@@ -120,58 +131,71 @@ internal fun ProfileEditorScreen(
         }
     }
 
-    fun buildProfile(): Profile = Profile(
-        id = existing?.id ?: UUID.randomUUID().toString(),
+    fun buildProfile() = Profile(
+        id = profileId,
         name = name.trim(),
         enabled = enabled,
         matchers = matchers.toList(),
         extractors = extractors.toList(),
-        actions = actions.toList()
+        actions = actions.toList(),
+        parseDirection = parseDirection
     )
 
     fun validate(profile: Profile): String? {
         if (profile.name.isBlank()) return "Bitte einen Profilnamen eingeben."
-        val validMatcherVariables = reservedVariables + profile.extractors.map { it.key }
+        val keys = profile.extractors.map { it.key }
+        if (keys.any { it.isBlank() }) return "Jede Variable braucht einen Namen."
+        if (keys.any { it in reservedVariables }) return "Ein Variablenname ist bereits für eine eingebaute Variable reserviert."
+        if (keys.size != keys.distinct().size) return "Jeder Variablenname darf nur einmal vorkommen."
+        profile.extractors.forEach { rule ->
+            runCatching { Regex(rule.regex) }.getOrElse { return "Erkennungsregel für '${rule.key}' ist ungültig: ${it.message}" }
+        }
+        val available = reservedVariables + keys
         profile.matchers.forEach { matcher ->
-            runCatching { Regex(matcher.regex) }.getOrElse { return "Ein Erkennungsmerkmal ist ungültig: ${it.message}" }
-            if (matcher.variableKey.isNotBlank() && matcher.variableKey !in validMatcherVariables) {
-                return "Das Erkennungsmerkmal verwendet die unbekannte Variable '${matcher.variableKey}'."
+            runCatching { Regex(matcher.regex) }.getOrElse { return "Ein Profilmerkmal ist ungültig: ${it.message}" }
+            if (matcher.variableKey.isNotBlank() && matcher.variableKey !in available) {
+                return "Profilmerkmal verweist auf unbekannte Variable '${matcher.variableKey}'."
             }
         }
-        val keys = mutableSetOf<String>()
-        for (rule in profile.extractors) {
-            if (rule.key.isBlank()) return "Jede Variable braucht einen Namen."
-            if (rule.key in reservedVariables) return "'${rule.key}' ist bereits eine eingebaute Variable. Bitte einen anderen Namen wählen."
-            if (!keys.add(rule.key)) return "Variablenname '${rule.key}' wird mehrfach verwendet."
-            runCatching { Regex(rule.regex) }.getOrElse { return "Erkennungsregel für '${rule.key}' ist ungültig: ${it.message}" }
-            if (rule.group < 0) return "Capture Group für '${rule.key}' darf nicht negativ sein."
+        profile.actions.forEach { action ->
+            actionTemplates(action).forEach { (field, template) ->
+                val unknown = TemplateEngine.variables(template) - available
+                if (unknown.isNotEmpty()) return "$field verwendet unbekannte Variable: ${unknown.joinToString()}"
+            }
         }
         if (profile.actions.isEmpty()) return "Mindestens eine Weiterverarbeitung hinzufügen."
         return null
     }
 
     fun addCandidate(candidate: GuidedRuleFactory.Candidate) {
-        val key = variableName.ifBlank {
-            if (candidate.suggestedKey in reservedVariables) "${candidate.suggestedKey}_part" else candidate.suggestedKey
-        }
-        extractors += GuidedRuleFactory.extractor(candidate, key, variableRequired)
+        if (variableName.isBlank()) return
+        extractors += GuidedRuleFactory.extractor(candidate, variableName, variableRequired)
         pendingCandidate = null
         variableName = ""
         variableRequired = false
     }
 
     fun addSelection(draft: SelectionDraft) {
+        if (variableName.isBlank()) return
         extractors += GuidedRuleFactory.extractorFromSelection(
             sourceText = draft.sourceText,
             selectionStart = draft.start,
             selectionEnd = draft.end,
-            key = variableName.ifBlank { "field${extractors.size + 1}" },
+            key = variableName,
             source = draft.source,
             required = variableRequired
         )
         pendingSelection = null
         variableName = ""
         variableRequired = false
+    }
+
+    fun addMatcherSelection(sourceText: String, selection: TextRange) {
+        if (selection.collapsed) return
+        val matcher = GuidedRuleFactory.matcherFromSelection(sourceText, selection.start, selection.end)
+        if (matcher.friendlyText.isNotBlank() && matchers.none { it.variableKey.isBlank() && it.regex == matcher.regex }) {
+            matchers += matcher
+        }
     }
 
     LaunchedEffect(advanced) {
@@ -204,7 +228,6 @@ internal fun ProfileEditorScreen(
     }
 
     LazyColumn(
-        modifier = Modifier.fillMaxWidth(),
         contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
@@ -241,103 +264,49 @@ internal fun ProfileEditorScreen(
                 Text(if (enabled) "Profil aktiv" else "Profil deaktiviert")
             }
         }
+        item {
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text("Parsing-Reihenfolge", fontWeight = FontWeight.SemiBold)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    RadioButton(parseDirection == ParseDirection.TOP_DOWN, { parseDirection = ParseDirection.TOP_DOWN })
+                    Text("Von oben nach unten")
+                }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    RadioButton(parseDirection == ParseDirection.BOTTOM_UP, { parseDirection = ParseDirection.BOTTOM_UP })
+                    Text("Von unten nach oben")
+                }
+                Text(
+                    if (parseDirection == ParseDirection.BOTTOM_UP)
+                        "Nimmt bei mehrfach vorkommenden Feldern den letzten Treffer. Sinnvoll, wenn die ursprüngliche Mail unter einer Antwort oder Weiterleitung steht."
+                    else "Nimmt bei mehrfach vorkommenden Feldern den ersten Treffer.",
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
+        }
 
         item { HorizontalDivider() }
-        item { SectionTitle("Wann soll dieses Profil angeboten werden?") }
+        item { SectionTitle("Profil automatisch erkennen") }
         item {
-            Text("Erkennungsmerkmale sind feste Textteile oder bereits extrahierte Variablen. Nur wenn alle gewählten Merkmale passen, bietet ShareParser dieses Profil an.")
-        }
-        if (sample != null) {
-            item { Text("Vorschläge aus dem Beispiel", style = MaterialTheme.typography.labelLarge) }
-            item {
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    items(GuidedRuleFactory.suggestedMatchers(sample)) { suggestion ->
-                        val selected = matchers.any { it.variableKey.isBlank() && (it.friendlyText == suggestion || it.regex == Regex.escape(suggestion)) }
-                        FilterChip(
-                            selected = selected,
-                            onClick = {
-                                if (selected) matchers.removeAll { it.variableKey.isBlank() && (it.friendlyText == suggestion || it.regex == Regex.escape(suggestion)) }
-                                else matchers += GuidedRuleFactory.matcherFromText(suggestion)
-                            },
-                            label = { Text(suggestion.take(36)) }
-                        )
-                    }
-                }
-            }
-        }
-        if (extractors.isNotEmpty()) {
-            item { Text("Variablen als Trigger", style = MaterialTheme.typography.labelLarge) }
-            item {
-                Text("Aktiviere eine Variable, wenn das Profil nur angeboten werden soll, sobald diese Information erfolgreich erkannt wurde.", style = MaterialTheme.typography.bodySmall)
-            }
-            item {
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    items(extractors, key = { it.id }) { rule ->
-                        val selected = matchers.any { it.variableKey == rule.key }
-                        FilterChip(
-                            selected = selected,
-                            onClick = {
-                                if (selected) {
-                                    matchers.removeAll { it.variableKey == rule.key }
-                                } else if (rule.key.isNotBlank()) {
-                                    matchers += MatcherRule(
-                                        regex = ".+",
-                                        ignoreCase = true,
-                                        friendlyText = "Variable '${rule.key}' erkannt",
-                                        variableKey = rule.key
-                                    )
-                                }
-                            },
-                            label = { Text(variableLabel(rule.key)) }
-                        )
-                    }
-                }
-            }
-        }
-        if (matchers.isNotEmpty()) {
-            item { Text("Aktive Merkmale", style = MaterialTheme.typography.labelLarge) }
-            itemsIndexed(matchers, key = { index, matcher -> "${matcher.variableKey}-${matcher.regex}-$index" }) { _, matcher ->
-                Card(Modifier.fillMaxWidth()) {
-                    Row(Modifier.padding(horizontal = 12.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            if (matcher.variableKey.isNotBlank()) "Variable ${variableLabel(matcher.variableKey)} muss erkannt werden"
-                            else matcher.friendlyText.ifBlank { matcher.regex },
-                            modifier = Modifier.weight(1f)
-                        )
-                        IconButton(onClick = { matchers.remove(matcher) }) { Icon(Icons.Outlined.Delete, "Merkmal entfernen") }
-                    }
-                }
-            }
-        } else {
-            item { Text("Keine Merkmale gewählt. Das Profil kann bei jedem geteilten Text angeboten werden.", style = MaterialTheme.typography.bodySmall) }
-        }
-        item {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                OutlinedTextField(
-                    value = customMatcher,
-                    onValueChange = { customMatcher = it },
-                    label = { Text("Eigenes festes Textmerkmal") },
-                    placeholder = { Text("z. B. Terminbestätigung") },
-                    modifier = Modifier.weight(1f),
-                    singleLine = true
-                )
-                Spacer(Modifier.width(8.dp))
-                Button(
-                    onClick = {
-                        if (customMatcher.isNotBlank()) {
-                            matchers += GuidedRuleFactory.matcherFromText(customMatcher)
-                            customMatcher = ""
-                        }
-                    }
-                ) { Text("Hinzufügen") }
-            }
+            Text("Wähle feste Textteile, die in jeder Nachricht dieses Profils vorkommen. Alle gewählten Merkmale müssen passen. Du kannst mehrere Stellen markieren, um die Auswahl genauer zu machen.")
         }
 
         if (sample != null) {
-            item { HorizontalDivider() }
-            item { SectionTitle("Informationen aus dem Beispiel auswählen") }
-            item {
-                Text("Markiere im Betreff oder Nachrichtentext den Teil, der sich von Mail zu Mail ändern darf, und erstelle daraus eine Variable. ShareParser erzeugt die technische Erkennungsregel automatisch aus dem umgebenden Text.")
+            if (sample.sourcePackage.isNotBlank()) {
+                item {
+                    val active = matchers.any { it.variableKey == "source_package" && it.regex == Regex.escape(sample.sourcePackage) }
+                    FilterChip(
+                        selected = active,
+                        onClick = {
+                            if (active) matchers.removeAll { it.variableKey == "source_package" && it.regex == Regex.escape(sample.sourcePackage) }
+                            else matchers += MatcherRule(
+                                regex = Regex.escape(sample.sourcePackage),
+                                friendlyText = "Geteilt aus ${sample.sourceApp.ifBlank { sample.sourcePackage }}",
+                                variableKey = "source_package"
+                            )
+                        },
+                        label = { Text("Nur aus ${sample.sourceApp.ifBlank { sample.sourcePackage }}") }
+                    )
+                }
             }
             if (sample.subject.isNotBlank()) {
                 item {
@@ -345,14 +314,17 @@ internal fun ProfileEditorScreen(
                         title = "Betreff",
                         fixedText = sample.subject,
                         value = subjectSelection,
+                        source = InputSource.SUBJECT,
+                        extractors = extractors,
                         onValueChange = { subjectSelection = it.copy(text = sample.subject) },
-                        onCreate = {
-                            val selection = subjectSelection.selection
-                            if (!selection.collapsed) {
-                                variableName = ""
-                                pendingSelection = SelectionDraft(sample.subject, selection.start, selection.end, InputSource.SUBJECT)
+                        onVariable = {
+                            val s = subjectSelection.selection
+                            if (!s.collapsed) {
+                                variableName = "field${extractors.size + 1}"
+                                pendingSelection = SelectionDraft(sample.subject, s.start, s.end, InputSource.SUBJECT)
                             }
-                        }
+                        },
+                        onMatcher = { addMatcherSelection(sample.subject, subjectSelection.selection) }
                     )
                 }
             }
@@ -361,25 +333,104 @@ internal fun ProfileEditorScreen(
                     title = "Nachrichtentext",
                     fixedText = sample.text,
                     value = bodySelection,
+                    source = InputSource.TEXT,
+                    extractors = extractors,
                     onValueChange = { bodySelection = it.copy(text = sample.text) },
-                    onCreate = {
-                        val selection = bodySelection.selection
-                        if (!selection.collapsed) {
-                            variableName = ""
-                            pendingSelection = SelectionDraft(sample.text, selection.start, selection.end, InputSource.TEXT)
+                    onVariable = {
+                        val s = bodySelection.selection
+                        if (!s.collapsed) {
+                            variableName = "field${extractors.size + 1}"
+                            pendingSelection = SelectionDraft(sample.text, s.start, s.end, InputSource.TEXT)
                         }
-                    }
+                    },
+                    onMatcher = { addMatcherSelection(sample.text, bodySelection.selection) }
                 )
             }
-            item { Text("Schnellauswahl für typische Zeilen", style = MaterialTheme.typography.labelLarge) }
-            items(GuidedRuleFactory.candidates(sample).filter { it.source == InputSource.TEXT }.take(20)) { candidate ->
+            item { Text("Automatische Vorschläge", style = MaterialTheme.typography.labelLarge) }
+            item {
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    items(GuidedRuleFactory.suggestedMatchers(sample)) { suggestion ->
+                        val regex = Regex.escape(suggestion)
+                        val active = matchers.any { it.variableKey.isBlank() && it.regex == regex }
+                        FilterChip(
+                            selected = active,
+                            onClick = {
+                                if (active) matchers.removeAll { it.variableKey.isBlank() && it.regex == regex }
+                                else matchers += GuidedRuleFactory.matcherFromText(suggestion)
+                            },
+                            label = { Text(suggestion.take(36)) }
+                        )
+                    }
+                }
+            }
+        }
+
+        if (extractors.isNotEmpty()) {
+            item { Text("Erkannte Variablen als Merkmal", style = MaterialTheme.typography.labelLarge) }
+            item {
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    items(extractors, key = { it.id }) { rule ->
+                        val active = matchers.any { it.variableKey == rule.key }
+                        FilterChip(
+                            selected = active,
+                            onClick = {
+                                if (active) matchers.removeAll { it.variableKey == rule.key }
+                                else if (rule.key.isNotBlank()) matchers += MatcherRule(
+                                    regex = ".+",
+                                    friendlyText = "Variable '${rule.key}' erkannt",
+                                    variableKey = rule.key
+                                )
+                            },
+                            label = { Text(variableLabel(rule.key)) }
+                        )
+                    }
+                }
+            }
+        }
+
+        if (matchers.isNotEmpty()) {
+            item { Text("Aktive Merkmale", style = MaterialTheme.typography.labelLarge) }
+            itemsIndexed(matchers, key = { index, matcher -> "${matcher.variableKey}-${matcher.regex}-$index" }) { _, matcher ->
+                Card(Modifier.fillMaxWidth()) {
+                    Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Text(matcher.friendlyText.ifBlank { matcher.regex }, modifier = Modifier.weight(1f))
+                        IconButton(onClick = { matchers.remove(matcher) }) { Icon(Icons.Outlined.Delete, "Merkmal entfernen") }
+                    }
+                }
+            }
+        } else {
+            item { Text("Noch kein Merkmal. Ohne Merkmale dient dieses Profil nur als Fallback.", style = MaterialTheme.typography.bodySmall) }
+        }
+        item {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                OutlinedTextField(
+                    value = customMatcher,
+                    onValueChange = { customMatcher = it },
+                    label = { Text("Fester Text als Merkmal") },
+                    modifier = Modifier.weight(1f),
+                    singleLine = true
+                )
+                Spacer(Modifier.width(8.dp))
+                Button(onClick = {
+                    if (customMatcher.isNotBlank()) {
+                        matchers += GuidedRuleFactory.matcherFromText(customMatcher)
+                        customMatcher = ""
+                    }
+                }) { Text("Hinzufügen") }
+            }
+        }
+
+        if (sample != null) {
+            item { HorizontalDivider() }
+            item { SectionTitle("Variablen aus dem Beispiel") }
+            item { Text("Markiere einen veränderlichen Wert oben und tippe auf „Als Variable“. Bereits definierte Variablen werden im Beispiel farbig markiert. Adressen und typische „Name: Wert“-Zeilen werden zusätzlich vorgeschlagen.") }
+            items(GuidedRuleFactory.candidates(sample).filter { it.source == InputSource.TEXT }.take(30)) { candidate ->
                 Card(Modifier.fillMaxWidth()) {
                     Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
                         Column(Modifier.weight(1f)) {
                             Text(candidate.label, fontWeight = FontWeight.SemiBold)
                             Text(candidate.value, style = MaterialTheme.typography.bodySmall)
                         }
-                        Spacer(Modifier.width(8.dp))
                         OutlinedButton(onClick = {
                             variableName = if (candidate.suggestedKey in reservedVariables) "${candidate.suggestedKey}_part" else candidate.suggestedKey
                             pendingCandidate = candidate
@@ -394,21 +445,12 @@ internal fun ProfileEditorScreen(
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 SectionTitle("Variablen", Modifier.weight(1f))
                 TextButton(onClick = {
-                    extractors += ExtractorRule(
-                        key = "field${extractors.size + 1}",
-                        regex = "(.+)",
-                        required = false
-                    )
+                    extractors += ExtractorRule(key = "", regex = "(.+)", required = false)
                 }) {
                     Icon(Icons.Outlined.Add, null)
-                    Spacer(Modifier.width(4.dp))
                     Text("Manuell")
                 }
             }
-        }
-        item { Text("Jede Variable kann später per Klick in Titel, URL, Nachricht, Ort, Datum oder andere Zielfelder eingesetzt werden. Sie kann außerdem oben als Profil-Trigger aktiviert werden.") }
-        if (extractors.isEmpty()) {
-            item { Text("Noch keine eigenen Variablen. Betreff und gesamter Text sind bereits als eingebaute Variablen verfügbar.", style = MaterialTheme.typography.bodySmall) }
         }
         items(extractors, key = { it.id }) { rule ->
             val index = extractors.indexOfFirst { it.id == rule.id }
@@ -416,6 +458,7 @@ internal fun ProfileEditorScreen(
                 rule = rule,
                 sample = sample,
                 parser = parser,
+                parseDirection = parseDirection,
                 highlighted = highlightField == rule.key,
                 advanced = advanced,
                 onChange = { changed ->
@@ -423,9 +466,9 @@ internal fun ProfileEditorScreen(
                         val oldKey = extractors[index].key
                         extractors[index] = changed
                         if (oldKey != changed.key) {
-                            for (matcherIndex in matchers.indices) {
-                                if (matchers[matcherIndex].variableKey == oldKey) {
-                                    matchers[matcherIndex] = matchers[matcherIndex].copy(
+                            for (i in matchers.indices) {
+                                if (matchers[i].variableKey == oldKey) {
+                                    matchers[i] = matchers[i].copy(
                                         variableKey = changed.key,
                                         friendlyText = "Variable '${changed.key}' erkannt"
                                     )
@@ -451,7 +494,6 @@ internal fun ProfileEditorScreen(
                 Column {
                     TextButton(onClick = { addActionMenu = true }) {
                         Icon(Icons.Outlined.Add, null)
-                        Spacer(Modifier.width(4.dp))
                         Text("Aktion")
                     }
                     DropdownMenu(expanded = addActionMenu, onDismissRequest = { addActionMenu = false }) {
@@ -462,14 +504,13 @@ internal fun ProfileEditorScreen(
                 }
             }
         }
-        val variables = listOf("subject", "text", "input") + extractors.map { it.key }.filter { it.isNotBlank() }
+        val variables = listOf("subject", "text", "input", "source_app", "source_package") + extractors.map { it.key }.filter { it.isNotBlank() }
         items(actions, key = { it.id }) { action ->
             val index = actions.indexOfFirst { it.id == action.id }
-            val highlighted = highlightField?.startsWith(actionHighlightPrefix(action)) == true || highlightField == action.id
             ActionEditorCard(
                 action = action,
                 variables = variables,
-                highlighted = highlighted,
+                highlighted = highlightField?.startsWith(actionHighlightPrefix(action)) == true || highlightField == action.id,
                 onChange = { changed -> if (index >= 0) actions[index] = changed },
                 onDelete = { if (index >= 0) actions.removeAt(index) }
             )
@@ -500,9 +541,8 @@ internal fun ProfileEditorScreen(
                 OutlinedButton(
                     onClick = {
                         runCatching {
-                            val decoded = repository.decodeBundle(advancedJson).copy(id = existing?.id ?: buildProfile().id)
-                            val error = validate(decoded)
-                            if (error != null) kotlin.error(error)
+                            val decoded = repository.decodeBundle(advancedJson).copy(id = profileId)
+                            validate(decoded)?.let { error(it) }
                             repository.save(decoded)
                         }.onSuccess { onSaved() }
                             .onFailure { validationMessage = "JSON konnte nicht angewendet werden: ${it.message}" }
@@ -513,7 +553,6 @@ internal fun ProfileEditorScreen(
         }
 
         validationMessage?.let { message -> item { Text(message, color = MaterialTheme.colorScheme.error) } }
-
         item {
             Button(
                 onClick = {
@@ -571,12 +610,8 @@ internal fun ProfileEditorScreen(
         }
         if (existing != null) {
             item {
-                TextButton(
-                    onClick = { repository.delete(existing.id); onDeleted() },
-                    modifier = Modifier.fillMaxWidth()
-                ) {
+                TextButton(onClick = { repository.delete(existing.id); onDeleted() }, modifier = Modifier.fillMaxWidth()) {
                     Icon(Icons.Outlined.Delete, null)
-                    Spacer(Modifier.width(6.dp))
                     Text("Profil löschen")
                 }
             }
@@ -603,15 +638,12 @@ private fun VariableDialog(
     onConfirm: () -> Unit,
     onDismiss: () -> Unit
 ) {
-    LaunchedEffect(Unit) {
-        if (currentName.isBlank()) onNameChange(suggestedName)
-    }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(title) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text("Gib der Information einen kurzen Namen. Diesen Namen kannst du danach in den Ziel-Feldern auswählen.")
+                Text("Gib der Information einen Namen. Das Feld darf beim Bearbeiten vollständig geleert werden.")
                 OutlinedTextField(
                     value = currentName,
                     onValueChange = { onNameChange(GuidedRuleFactory.sanitizeKey(it)) },
@@ -621,7 +653,7 @@ private fun VariableDialog(
                 )
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Checkbox(required, onRequiredChange)
-                    Text("Pflichtfeld. Fehlt der Wert, Verarbeitung als Fehler melden.")
+                    Text("Pflichtfeld")
                 }
             }
         },
@@ -635,29 +667,49 @@ private fun SelectionSourceCard(
     title: String,
     fixedText: String,
     value: TextFieldValue,
+    source: InputSource,
+    extractors: List<ExtractorRule>,
     onValueChange: (TextFieldValue) -> Unit,
-    onCreate: () -> Unit
+    onVariable: () -> Unit,
+    onMatcher: () -> Unit
 ) {
-    val selectedText = if (!value.selection.collapsed) {
-        fixedText.substring(
-            minOf(value.selection.start, value.selection.end).coerceIn(0, fixedText.length),
-            maxOf(value.selection.start, value.selection.end).coerceIn(0, fixedText.length)
-        )
-    } else ""
+    val clipboard = LocalClipboardManager.current
+    val selected = selectedText(fixedText, value.selection)
+    val (visualTransformation, highlights) = rememberVariableHighlighting(source, extractors)
     Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(title, fontWeight = FontWeight.SemiBold)
-            Text("Text gedrückt halten und den gewünschten Wert markieren.", style = MaterialTheme.typography.bodySmall)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(title, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                IconButton(onClick = { clipboard.setText(AnnotatedString(fixedText)) }) {
+                    Icon(Icons.Outlined.ContentCopy, "Text kopieren")
+                }
+            }
+            Text("Text gedrückt halten und einen Bereich markieren. Der Text ist kopierbar. Bereits erkannte Variablen sind farbig hinterlegt.", style = MaterialTheme.typography.bodySmall)
             OutlinedTextField(
                 value = value,
                 onValueChange = onValueChange,
                 readOnly = true,
+                visualTransformation = visualTransformation,
                 modifier = Modifier.fillMaxWidth(),
                 minLines = if (title == "Nachrichtentext") 5 else 1,
-                maxLines = if (title == "Nachrichtentext") 12 else 3
+                maxLines = if (title == "Nachrichtentext") 14 else 3
             )
-            if (selectedText.isNotBlank()) Text("Markiert: $selectedText", style = MaterialTheme.typography.bodySmall)
-            OutlinedButton(onClick = onCreate, enabled = selectedText.isNotBlank()) { Text("Markierung als Variable") }
+            if (highlights.isNotEmpty()) {
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    items(highlights, key = { it.key }) { highlight ->
+                        AssistChip(
+                            onClick = { },
+                            label = { Text(variableLabel(highlight.key)) },
+                            colors = AssistChipDefaults.assistChipColors(containerColor = highlight.color)
+                        )
+                    }
+                }
+            }
+            if (selected.isNotBlank()) Text("Markiert: $selected", style = MaterialTheme.typography.bodySmall)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedButton(onClick = onVariable, enabled = selected.isNotBlank()) { Text("Als Variable") }
+                OutlinedButton(onClick = onMatcher, enabled = selected.isNotBlank()) { Text("Als Profilmerkmal") }
+            }
         }
     }
 }
@@ -667,26 +719,32 @@ private fun ExtractorCard(
     rule: ExtractorRule,
     sample: SharedPayload?,
     parser: ParserEngine,
+    parseDirection: ParseDirection,
     highlighted: Boolean,
     advanced: Boolean,
     onChange: (ExtractorRule) -> Unit,
     onDelete: () -> Unit
 ) {
-    var showDetails by remember(rule.id) { mutableStateOf(false) }
+    var details by remember(rule.id) { mutableStateOf(false) }
     var transformMenu by remember { mutableStateOf(false) }
     var sourceMenu by remember { mutableStateOf(false) }
-    val borderModifier = if (highlighted) Modifier.border(2.dp, MaterialTheme.colorScheme.error, RoundedCornerShape(12.dp)) else Modifier
-    val preview = remember(rule, sample) {
+    val preview = remember(rule, sample, parseDirection) {
         sample?.let {
-            runCatching { parser.extract(it, Profile("preview", "preview", extractors = listOf(rule.copy(required = false))))[rule.key] }.getOrNull()
+            runCatching {
+                parser.extract(
+                    it,
+                    Profile("preview", "preview", extractors = listOf(rule.copy(required = false)), parseDirection = parseDirection)
+                )[rule.key]
+            }.getOrNull()
         }
     }
+    val border = if (highlighted) Modifier.border(2.dp, MaterialTheme.colorScheme.error, RoundedCornerShape(12.dp)) else Modifier
 
-    Card(borderModifier.fillMaxWidth()) {
+    Card(border.fillMaxWidth()) {
         Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
-                    Text(rule.key.ifBlank { "Variable" }, fontWeight = FontWeight.SemiBold)
+                    Text(rule.key.ifBlank { "Unbenannte Variable" }, fontWeight = FontWeight.SemiBold)
                     if (preview != null) Text("Beispielwert: $preview", style = MaterialTheme.typography.bodySmall)
                     else if (sample != null) Text("Im Beispiel nicht erkannt", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
                 }
@@ -700,69 +758,42 @@ private fun ExtractorCard(
                 singleLine = true
             )
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Checkbox(checked = rule.required, onCheckedChange = { onChange(rule.copy(required = it)) })
+                Checkbox(rule.required, { onChange(rule.copy(required = it)) })
                 Text("Pflichtfeld")
                 Spacer(Modifier.weight(1f))
-                TextButton(onClick = { showDetails = !showDetails }) {
-                    Text(if (showDetails) "Details ausblenden" else "Bausteine")
+                TextButton(onClick = { details = !details }) {
+                    Text(if (details) "Details ausblenden" else "Bausteine")
                     Icon(Icons.Outlined.ExpandMore, null)
                 }
             }
-
-            if (showDetails || advanced) {
-                Column {
-                    OutlinedButton(onClick = { sourceMenu = true }) { Text("Quelle: ${sourceLabel(rule.source)}") }
-                    DropdownMenu(expanded = sourceMenu, onDismissRequest = { sourceMenu = false }) {
-                        InputSource.entries.forEach { source ->
-                            DropdownMenuItem(
-                                text = { Text(sourceLabel(source)) },
-                                onClick = { onChange(rule.copy(source = source)); sourceMenu = false }
-                            )
-                        }
+            if (details || advanced) {
+                OutlinedButton(onClick = { sourceMenu = true }) { Text("Quelle: ${sourceLabel(rule.source)}") }
+                DropdownMenu(expanded = sourceMenu, onDismissRequest = { sourceMenu = false }) {
+                    InputSource.entries.forEach { sourceChoice ->
+                        DropdownMenuItem(text = { Text(sourceLabel(sourceChoice)) }, onClick = { onChange(rule.copy(source = sourceChoice)); sourceMenu = false })
                     }
                 }
-                if (rule.transforms.isNotEmpty()) {
-                    Text("Umwandlungen", style = MaterialTheme.typography.labelLarge)
-                    rule.transforms.forEachIndexed { transformIndex, transform ->
-                        TransformEditor(
-                            transform = transform,
-                            onChange = { changed -> onChange(rule.copy(transforms = rule.transforms.toMutableList().apply { this[transformIndex] = changed })) },
-                            onDelete = { onChange(rule.copy(transforms = rule.transforms.toMutableList().apply { removeAt(transformIndex) })) }
-                        )
-                    }
+                rule.transforms.forEachIndexed { index, transform ->
+                    TransformEditor(
+                        transform = transform,
+                        advanced = advanced,
+                        onChange = { changed -> onChange(rule.copy(transforms = rule.transforms.toMutableList().apply { this[index] = changed })) },
+                        onDelete = { onChange(rule.copy(transforms = rule.transforms.toMutableList().apply { removeAt(index) })) }
+                    )
                 }
-                Column {
-                    TextButton(onClick = { transformMenu = true }) {
-                        Icon(Icons.Outlined.Add, null)
-                        Spacer(Modifier.width(4.dp))
-                        Text("Umwandlung hinzufügen")
-                    }
-                    DropdownMenu(expanded = transformMenu, onDismissRequest = { transformMenu = false }) {
-                        DropdownMenuItem(text = { Text("Leerzeichen am Rand entfernen") }, onClick = { onChange(rule.copy(transforms = rule.transforms + ValueTransform.Trim)); transformMenu = false })
-                        DropdownMenuItem(text = { Text("Textteil ersetzen/entfernen") }, onClick = { onChange(rule.copy(transforms = rule.transforms + ValueTransform.RegexReplace("", ""))); transformMenu = false })
-                        DropdownMenuItem(text = { Text("Text davor setzen") }, onClick = { onChange(rule.copy(transforms = rule.transforms + ValueTransform.Prefix(""))); transformMenu = false })
-                        DropdownMenuItem(text = { Text("Text danach setzen") }, onClick = { onChange(rule.copy(transforms = rule.transforms + ValueTransform.Suffix(""))); transformMenu = false })
-                        DropdownMenuItem(text = { Text("Kleinschreibung") }, onClick = { onChange(rule.copy(transforms = rule.transforms + ValueTransform.ChangeCase(CaseMode.LOWER))); transformMenu = false })
-                        DropdownMenuItem(text = { Text("Großschreibung") }, onClick = { onChange(rule.copy(transforms = rule.transforms + ValueTransform.ChangeCase(CaseMode.UPPER))); transformMenu = false })
-                    }
+                TextButton(onClick = { transformMenu = true }) { Icon(Icons.Outlined.Add, null); Text("Umwandlung hinzufügen") }
+                DropdownMenu(expanded = transformMenu, onDismissRequest = { transformMenu = false }) {
+                    DropdownMenuItem(text = { Text("Leerzeichen am Rand entfernen") }, onClick = { onChange(rule.copy(transforms = rule.transforms + ValueTransform.Trim)); transformMenu = false })
+                    DropdownMenuItem(text = { Text("Textteil entfernen oder ersetzen") }, onClick = { onChange(rule.copy(transforms = rule.transforms + ValueTransform.RegexReplace("", "", literal = true))); transformMenu = false })
+                    DropdownMenuItem(text = { Text("Text davor setzen") }, onClick = { onChange(rule.copy(transforms = rule.transforms + ValueTransform.Prefix(""))); transformMenu = false })
+                    DropdownMenuItem(text = { Text("Text danach setzen") }, onClick = { onChange(rule.copy(transforms = rule.transforms + ValueTransform.Suffix(""))); transformMenu = false })
+                    DropdownMenuItem(text = { Text("Kleinschreibung") }, onClick = { onChange(rule.copy(transforms = rule.transforms + ValueTransform.ChangeCase(CaseMode.LOWER))); transformMenu = false })
+                    DropdownMenuItem(text = { Text("Großschreibung") }, onClick = { onChange(rule.copy(transforms = rule.transforms + ValueTransform.ChangeCase(CaseMode.UPPER))); transformMenu = false })
                 }
             }
             if (advanced) {
-                OutlinedTextField(
-                    value = rule.regex,
-                    onValueChange = { onChange(rule.copy(regex = it)) },
-                    label = { Text("Regex, erweitert") },
-                    supportingText = { Text("Nur für erfahrene Nutzer. Normalerweise erzeugt ShareParser diese Regel aus dem Beispiel.") },
-                    modifier = Modifier.fillMaxWidth(),
-                    minLines = 2
-                )
-                OutlinedTextField(
-                    value = rule.group.toString(),
-                    onValueChange = { it.toIntOrNull()?.let { group -> onChange(rule.copy(group = group)) } },
-                    label = { Text("Capture Group") },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true
-                )
+                OutlinedTextField(rule.regex, { onChange(rule.copy(regex = it)) }, label = { Text("Regex, erweitert") }, modifier = Modifier.fillMaxWidth(), minLines = 2)
+                OutlinedTextField(rule.group.toString(), { text -> text.toIntOrNull()?.let { onChange(rule.copy(group = it)) } }, label = { Text("Capture Group") }, modifier = Modifier.fillMaxWidth())
             }
         }
     }
@@ -771,14 +802,15 @@ private fun ExtractorCard(
 @Composable
 private fun TransformEditor(
     transform: ValueTransform,
+    advanced: Boolean,
     onChange: (ValueTransform) -> Unit,
     onDelete: () -> Unit
 ) {
     Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(transformLabel(transform), style = MaterialTheme.typography.labelLarge, modifier = Modifier.weight(1f))
-                IconButton(onClick = onDelete) { Icon(Icons.Outlined.Delete, "Umwandlung entfernen") }
+                Text(transformLabel(transform), modifier = Modifier.weight(1f), fontWeight = FontWeight.SemiBold)
+                IconButton(onClick = onDelete) { Icon(Icons.Outlined.Delete, "Baustein entfernen") }
             }
             when (transform) {
                 ValueTransform.Trim -> Text("Entfernt Leerzeichen am Anfang und Ende.", style = MaterialTheme.typography.bodySmall)
@@ -786,8 +818,20 @@ private fun TransformEditor(
                 is ValueTransform.Suffix -> OutlinedTextField(transform.value, { onChange(transform.copy(value = it)) }, label = { Text("Text danach") }, modifier = Modifier.fillMaxWidth())
                 is ValueTransform.ChangeCase -> Text(if (transform.mode == CaseMode.LOWER) "In Kleinschreibung umwandeln" else "In Großschreibung umwandeln")
                 is ValueTransform.RegexReplace -> {
-                    OutlinedTextField(transform.regex, { onChange(transform.copy(regex = it)) }, label = { Text("Zu ersetzender Text oder Regex") }, modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(
+                        transform.regex,
+                        { onChange(transform.copy(regex = it)) },
+                        label = { Text(if (transform.literal) "Text, der entfernt/ersetzt wird" else "Regulärer Ausdruck") },
+                        supportingText = { Text(if (transform.literal) "Sonderzeichen wie ( ) [ ] . * werden wörtlich behandelt." else "Erweiterte Regex-Syntax ist aktiv.") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
                     OutlinedTextField(transform.replacement, { onChange(transform.copy(replacement = it)) }, label = { Text("Ersetzen durch, leer = entfernen") }, modifier = Modifier.fillMaxWidth())
+                    if (advanced) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Checkbox(transform.literal, { onChange(transform.copy(literal = it)) })
+                            Text("Eingabe wörtlich behandeln")
+                        }
+                    }
                 }
             }
         }
@@ -803,8 +847,8 @@ private fun ActionEditorCard(
     onDelete: () -> Unit
 ) {
     var iconMenu by remember { mutableStateOf(false) }
-    val borderModifier = if (highlighted) Modifier.border(2.dp, MaterialTheme.colorScheme.error, RoundedCornerShape(12.dp)) else Modifier
-    Card(borderModifier.fillMaxWidth()) {
+    val border = if (highlighted) Modifier.border(2.dp, MaterialTheme.colorScheme.error, RoundedCornerShape(12.dp)) else Modifier
+    Card(border.fillMaxWidth()) {
         Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(actionIcon(action.icon), null)
@@ -812,27 +856,11 @@ private fun ActionEditorCard(
                 Text(action.friendlyName, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
                 IconButton(onClick = onDelete) { Icon(Icons.Outlined.Delete, "Aktion entfernen") }
             }
-            OutlinedTextField(
-                value = action.friendlyName,
-                onValueChange = { onChange(withFriendlyName(action, it)) },
-                label = { Text("Anzeigename") },
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true
-            )
-            Column {
-                OutlinedButton(onClick = { iconMenu = true }) {
-                    Icon(actionIcon(action.icon), null)
-                    Spacer(Modifier.width(6.dp))
-                    Text("Icon auswählen")
-                }
-                DropdownMenu(expanded = iconMenu, onDismissRequest = { iconMenu = false }) {
-                    actionIcons.forEach { choice ->
-                        DropdownMenuItem(
-                            leadingIcon = { Icon(choice.vector, null) },
-                            text = { Text(choice.label) },
-                            onClick = { onChange(withIcon(action, choice.id)); iconMenu = false }
-                        )
-                    }
+            OutlinedTextField(action.friendlyName, { onChange(withFriendlyName(action, it)) }, label = { Text("Anzeigename") }, modifier = Modifier.fillMaxWidth())
+            OutlinedButton(onClick = { iconMenu = true }) { Icon(actionIcon(action.icon), null); Text("Icon auswählen") }
+            DropdownMenu(expanded = iconMenu, onDismissRequest = { iconMenu = false }) {
+                actionIcons.forEach { choice ->
+                    DropdownMenuItem(leadingIcon = { Icon(choice.vector, null) }, text = { Text(choice.label) }, onClick = { onChange(withIcon(action, choice.id)); iconMenu = false })
                 }
             }
             when (action) {
@@ -850,29 +878,45 @@ private fun CalendarActionFields(
     variables: List<String>,
     onChange: (ProcessingAction) -> Unit
 ) {
-    Text("Kalenderfelder", style = MaterialTheme.typography.labelLarge)
+    val context = LocalContext.current
+    val writePermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) onChange(action.copy(targetMode = CalendarTargetMode.DIRECT_SAVE))
+    }
+
+    Text("Kalenderfelder", fontWeight = FontWeight.SemiBold)
     TemplateField("Titel", action.titleTemplate, variables) { onChange(action.copy(titleTemplate = it)) }
     TemplateField("Beschreibung", action.descriptionTemplate, variables, minLines = 3) { onChange(action.copy(descriptionTemplate = it)) }
     TemplateField("Ort", action.locationTemplate, variables) { onChange(action.copy(locationTemplate = it)) }
-    TemplateField(
-        "Beginn oder Zeitraum",
-        action.startTemplate,
-        variables,
-        placeholder = "Füge z. B. Datum und Uhrzeit ein. Auch 'morgen 12-14' wird erkannt."
-    ) { onChange(action.copy(startTemplate = it, startPattern = "")) }
-    TemplateField(
-        "Ende, optional",
-        action.endTemplate,
-        variables,
-        placeholder = "Nur nötig, wenn der Beginn keinen Zeitraum enthält."
-    ) { onChange(action.copy(endTemplate = it, endPattern = "")) }
-    TemplateField(
-        "Zielkalender, optional",
-        action.calendarNameTemplate,
-        variables,
-        placeholder = "z. B. Arbeit"
-    ) { onChange(action.copy(calendarNameTemplate = it)) }
-    Text("Bei einem Zielkalender fragt ShareParser beim ersten Ausführen nach Kalender-Lesezugriff und versucht einen Kalender mit diesem Namen auszuwählen. Falls die Kalender-App das nicht übernimmt, erscheint ein Hinweis zur manuellen Auswahl.", style = MaterialTheme.typography.bodySmall)
+    TemplateField("Beginn oder Zeitraum", action.startTemplate, variables, placeholder = "z. B. {{datum}} {{zeit}} oder morgen 12-14") { onChange(action.copy(startTemplate = it, startPattern = "")) }
+    TemplateField("Ende, optional", action.endTemplate, variables, placeholder = "Nur nötig, wenn der Beginn keinen Zeitraum enthält") { onChange(action.copy(endTemplate = it, endPattern = "")) }
+    TemplateField("Dauer, optional", action.durationTemplate, variables, placeholder = "z. B. 1,5h, 2h, 90 Minuten, eine Stunde") { onChange(action.copy(durationTemplate = it)) }
+    CalendarPickerField(action = action, onChange = { onChange(it) })
+
+    Text("Zielkalender-Verhalten", fontWeight = FontWeight.SemiBold)
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        RadioButton(action.targetMode == CalendarTargetMode.APP_EDITOR, { onChange(action.copy(targetMode = CalendarTargetMode.APP_EDITOR)) })
+        Column {
+            Text("Kalender-App vorausfüllen")
+            Text("Ohne Schreibzugriff. Die Kalender-App kann die Zielkalender-Vorgabe ignorieren.", style = MaterialTheme.typography.bodySmall)
+        }
+    }
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        RadioButton(
+            action.targetMode == CalendarTargetMode.DIRECT_SAVE,
+            {
+                if (ContextCompat.checkSelfPermission(context, Manifest.permission.WRITE_CALENDAR) == PackageManager.PERMISSION_GRANTED) {
+                    onChange(action.copy(targetMode = CalendarTargetMode.DIRECT_SAVE))
+                } else {
+                    writePermissionLauncher.launch(Manifest.permission.WRITE_CALENDAR)
+                }
+            }
+        )
+        Column {
+            Text("Zielkalender verbindlich")
+            Text("Speichert den Termin direkt im ausgewählten Kalender und öffnet ihn danach zum Bearbeiten. Benötigt Kalender-Schreibzugriff.", style = MaterialTheme.typography.bodySmall)
+        }
+    }
+
     Row(verticalAlignment = Alignment.CenterVertically) {
         Checkbox(action.allDay, { onChange(action.copy(allDay = it)) })
         Text("Ganztägig")
@@ -880,49 +924,79 @@ private fun CalendarActionFields(
 }
 
 @Composable
-private fun UrlActionFields(
-    action: ProcessingAction.Url,
-    variables: List<String>,
-    onChange: (ProcessingAction) -> Unit
+private fun CalendarPickerField(
+    action: ProcessingAction.Calendar,
+    onChange: (ProcessingAction.Calendar) -> Unit
 ) {
-    TemplateField(
-        label = "Link",
-        value = action.urlTemplate,
-        variables = variables,
-        placeholder = "https://example.com/?id=…",
-        minLines = 2,
-        urlEncodeVariables = true
-    ) { onChange(action.copy(urlTemplate = it)) }
-    Text("Öffnen mit", style = MaterialTheme.typography.labelLarge)
+    val context = LocalContext.current
+    var choices by remember { mutableStateOf(CalendarCatalog.list(context)) }
+    var menu by remember { mutableStateOf(false) }
+    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) {
+            choices = CalendarCatalog.list(context)
+            menu = true
+        }
+    }
+
+    Text("Zielkalender, optional", fontWeight = FontWeight.SemiBold)
+    OutlinedButton(
+        onClick = {
+            if (ContextCompat.checkSelfPermission(context, Manifest.permission.READ_CALENDAR) == PackageManager.PERMISSION_GRANTED) {
+                choices = CalendarCatalog.list(context)
+                menu = true
+            } else launcher.launch(Manifest.permission.READ_CALENDAR)
+        },
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Text(action.calendarNameTemplate.ifBlank { "Kalender auswählen" })
+    }
+    DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+        DropdownMenuItem(text = { Text("Kein fester Zielkalender") }, onClick = {
+            onChange(action.copy(calendarId = null, calendarNameTemplate = "", targetMode = CalendarTargetMode.APP_EDITOR)); menu = false
+        })
+        choices.forEach { choice ->
+            DropdownMenuItem(
+                text = {
+                    Column {
+                        Text(choice.displayName)
+                        if (choice.accountName.isNotBlank()) Text(choice.accountName, style = MaterialTheme.typography.bodySmall)
+                    }
+                },
+                onClick = {
+                    onChange(action.copy(calendarId = choice.id, calendarNameTemplate = choice.displayName))
+                    menu = false
+                }
+            )
+        }
+    }
+    Text(
+        if (action.targetMode == CalendarTargetMode.DIRECT_SAVE)
+            "Im verbindlichen Modus nutzt ShareParser diese lokale Kalender-ID direkt."
+        else "Beim normalen Android-Kalender-Intent ist die Kalender-ID nur eine Empfehlung an die Kalender-App.",
+        style = MaterialTheme.typography.bodySmall
+    )
+}
+
+@Composable
+private fun UrlActionFields(action: ProcessingAction.Url, variables: List<String>, onChange: (ProcessingAction) -> Unit) {
+    TemplateField("Link", action.urlTemplate, variables, placeholder = "https://example.com/?id={{id|url}}", minLines = 2, urlEncodeVariables = true) {
+        onChange(action.copy(urlTemplate = it))
+    }
     Row(verticalAlignment = Alignment.CenterVertically) {
-        RadioButton(selected = action.openMode == UrlOpenMode.BROWSER, onClick = { onChange(action.copy(openMode = UrlOpenMode.BROWSER)) })
+        RadioButton(action.openMode == UrlOpenMode.BROWSER, { onChange(action.copy(openMode = UrlOpenMode.BROWSER)) })
         Text("Standard-Browser")
     }
     Row(verticalAlignment = Alignment.CenterVertically) {
-        RadioButton(selected = action.openMode == UrlOpenMode.WEBVIEW, onClick = { onChange(action.copy(openMode = UrlOpenMode.WEBVIEW)) })
-        Column {
-            Text("In ShareParser öffnen")
-            Text("Abgesicherte WebView ohne JavaScript und ohne Drittanbieter-Cookies.", style = MaterialTheme.typography.bodySmall)
-        }
+        RadioButton(action.openMode == UrlOpenMode.WEBVIEW, { onChange(action.copy(openMode = UrlOpenMode.WEBVIEW)) })
+        Text("In ShareParser öffnen")
     }
 }
 
 @Composable
-private fun ShareActionFields(
-    action: ProcessingAction.Share,
-    variables: List<String>,
-    onChange: (ProcessingAction) -> Unit
-) {
+private fun ShareActionFields(action: ProcessingAction.Share, variables: List<String>, onChange: (ProcessingAction) -> Unit) {
     TemplateField("Betreff", action.subjectTemplate, variables) { onChange(action.copy(subjectTemplate = it)) }
     TemplateField("Nachricht", action.textTemplate, variables, minLines = 4) { onChange(action.copy(textTemplate = it)) }
-    OutlinedTextField(
-        value = action.mimeType,
-        onValueChange = { onChange(action.copy(mimeType = it)) },
-        label = { Text("Inhaltstyp") },
-        placeholder = { Text("text/plain") },
-        modifier = Modifier.fillMaxWidth(),
-        singleLine = true
-    )
+    OutlinedTextField(action.mimeType, { onChange(action.copy(mimeType = it)) }, label = { Text("Inhaltstyp") }, modifier = Modifier.fillMaxWidth())
 }
 
 @Composable
@@ -935,24 +1009,48 @@ private fun TemplateField(
     urlEncodeVariables: Boolean = false,
     onChange: (String) -> Unit
 ) {
+    var field by remember { mutableStateOf(TextFieldValue(value, selection = TextRange(value.length))) }
+    LaunchedEffect(value) {
+        if (value != field.text) {
+            val pos = field.selection.start.coerceAtMost(value.length)
+            field = TextFieldValue(value, selection = TextRange(pos))
+        }
+    }
+    val known = variables.toSet()
+    val detected = remember(field.text) { TemplateEngine.variables(field.text) }
+    val unknown = detected - known
+
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         OutlinedTextField(
-            value = value,
-            onValueChange = onChange,
+            value = field,
+            onValueChange = {
+                field = it
+                onChange(it.text)
+            },
             label = { Text(label) },
             placeholder = { Text(placeholder) },
-            supportingText = { Text("Du kannst festen Text schreiben und erkannte Variablen darunter einfügen.") },
+            supportingText = {
+                when {
+                    unknown.isNotEmpty() -> Text("Unbekannte Variable: ${unknown.joinToString()}")
+                    detected.isNotEmpty() -> Text("Erkannte Variablen: ${detected.joinToString { variableLabel(it) }}")
+                    else -> Text("Variablen können per Baustein oder direkt als {{name}} geschrieben werden.")
+                }
+            },
+            isError = unknown.isNotEmpty(),
             modifier = Modifier.fillMaxWidth(),
             minLines = minLines
         )
-        Text("Variable einfügen", style = MaterialTheme.typography.labelSmall)
         LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             items(variables.distinct()) { variable ->
                 AssistChip(
                     onClick = {
                         val token = if (urlEncodeVariables) "{{${variable}|url}}" else "{{${variable}}}"
-                        val separator = if (value.isNotBlank() && !value.endsWith(" ") && !urlEncodeVariables) " " else ""
-                        onChange(value + separator + token)
+                        val start = minOf(field.selection.start, field.selection.end).coerceIn(0, field.text.length)
+                        val end = maxOf(field.selection.start, field.selection.end).coerceIn(0, field.text.length)
+                        val changed = field.text.replaceRange(start, end, token)
+                        val cursor = start + token.length
+                        field = TextFieldValue(changed, selection = TextRange(cursor))
+                        onChange(changed)
                     },
                     label = { Text(variableLabel(variable)) }
                 )
@@ -966,20 +1064,29 @@ private fun SectionTitle(text: String, modifier: Modifier = Modifier) {
     Text(text, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, modifier = modifier)
 }
 
-private fun defaultCalendarAction() = ProcessingAction.Calendar(
-    id = UUID.randomUUID().toString(),
-    friendlyName = "Kalender öffnen"
-)
+private fun selectedText(text: String, selection: TextRange): String {
+    if (selection.collapsed) return ""
+    val start = minOf(selection.start, selection.end).coerceIn(0, text.length)
+    val end = maxOf(selection.start, selection.end).coerceIn(0, text.length)
+    return text.substring(start, end)
+}
 
-private fun defaultUrlAction() = ProcessingAction.Url(
-    id = UUID.randomUUID().toString(),
-    friendlyName = "Link öffnen"
-)
+private fun actionTemplates(action: ProcessingAction): List<Pair<String, String>> = when (action) {
+    is ProcessingAction.Calendar -> listOf(
+        "Kalendertitel" to action.titleTemplate,
+        "Beschreibung" to action.descriptionTemplate,
+        "Ort" to action.locationTemplate,
+        "Beginn" to action.startTemplate,
+        "Ende" to action.endTemplate,
+        "Dauer" to action.durationTemplate
+    )
+    is ProcessingAction.Url -> listOf("URL" to action.urlTemplate)
+    is ProcessingAction.Share -> listOf("Betreff" to action.subjectTemplate, "Nachricht" to action.textTemplate)
+}
 
-private fun defaultShareAction() = ProcessingAction.Share(
-    id = UUID.randomUUID().toString(),
-    friendlyName = "Text weiterleiten"
-)
+private fun defaultCalendarAction() = ProcessingAction.Calendar(UUID.randomUUID().toString(), "Kalender öffnen")
+private fun defaultUrlAction() = ProcessingAction.Url(UUID.randomUUID().toString(), "Link öffnen")
+private fun defaultShareAction() = ProcessingAction.Share(UUID.randomUUID().toString(), "Text weiterleiten")
 
 private fun withFriendlyName(action: ProcessingAction, name: String): ProcessingAction = when (action) {
     is ProcessingAction.Calendar -> action.copy(friendlyName = name)
@@ -1017,6 +1124,8 @@ private fun variableLabel(key: String): String = when (key) {
     "subject" -> "Betreff"
     "text" -> "Gesamte Nachricht"
     "input" -> "Betreff + Nachricht"
+    "source_app" -> "Teilende App"
+    "source_package" -> "Paketname der teilenden App"
     else -> key
 }
 

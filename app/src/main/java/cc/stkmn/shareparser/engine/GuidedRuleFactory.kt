@@ -14,6 +14,11 @@ object GuidedRuleFactory {
         val suggestedKey: String
     )
 
+    private val streetAddress = Regex(
+        "(?i)(?:\\b(?:am|an der|auf der|unter den|zum|zur)\\s+)?[\\p{L}][\\p{L}.'’/-]*(?:straße|strasse|str\\.?|weg|allee|platz|gasse|ring|ufer|chaussee|damm|steig|stieg|pfad|promenade)\\s+\\d{1,5}[a-zA-Z]?(?:\\s*[-/]\\s*\\d{1,5}[a-zA-Z]?)?"
+    )
+    private val postalCity = Regex("(?<!\\d)\\d{5}\\s+[\\p{L}][\\p{L} .'-]{1,50}(?!\\d)")
+
     fun candidates(payload: SharedPayload): List<Candidate> = buildList {
         if (payload.subject.isNotBlank()) {
             add(
@@ -43,11 +48,40 @@ object GuidedRuleFactory {
                         suggestedKey = suggestedKey(label, index)
                     )
                 )
+
+                streetAddress.findAll(line).forEach { match ->
+                    val address = match.value.trim()
+                    if (address.length >= 5 && address != value) {
+                        add(
+                            Candidate(
+                                label = "Adresse",
+                                value = address,
+                                source = InputSource.TEXT,
+                                sourceLine = line,
+                                suggestedKey = "adresse"
+                            )
+                        )
+                    }
+                }
+                postalCity.findAll(line).forEach { match ->
+                    val place = match.value.trim()
+                    if (place.length >= 7 && place != value) {
+                        add(
+                            Candidate(
+                                label = "PLZ und Ort",
+                                value = place,
+                                source = InputSource.TEXT,
+                                sourceLine = line,
+                                suggestedKey = "plz_ort"
+                            )
+                        )
+                    }
+                }
             }
-    }
+    }.distinctBy { Triple(it.source, it.sourceLine, it.value) }
 
     fun extractor(candidate: Candidate, key: String, required: Boolean = false): ExtractorRule {
-        val normalizedKey = sanitizeKey(key.ifBlank { candidate.suggestedKey })
+        val normalizedKey = sanitizeKey(key.ifBlank { candidate.suggestedKey }).ifBlank { candidate.suggestedKey }
         if (candidate.source == InputSource.SUBJECT) {
             return ExtractorRule(
                 key = normalizedKey,
@@ -56,6 +90,18 @@ object GuidedRuleFactory {
                 source = InputSource.SUBJECT,
                 sampleLabel = candidate.label
             )
+        }
+
+        val selectedIndex = candidate.sourceLine.indexOf(candidate.value)
+        if (selectedIndex >= 0 && candidate.value != candidate.sourceLine) {
+            return extractorFromSelection(
+                sourceText = candidate.sourceLine,
+                selectionStart = selectedIndex,
+                selectionEnd = selectedIndex + candidate.value.length,
+                key = normalizedKey,
+                source = candidate.source,
+                required = required
+            ).copy(sampleLabel = candidate.label)
         }
 
         val split = splitLabelAndValue(candidate.sourceLine)
@@ -119,6 +165,13 @@ object GuidedRuleFactory {
         friendlyText = text.trim()
     )
 
+    fun matcherFromSelection(sourceText: String, selectionStart: Int, selectionEnd: Int): MatcherRule {
+        val start = minOf(selectionStart, selectionEnd).coerceIn(0, sourceText.length)
+        val end = maxOf(selectionStart, selectionEnd).coerceIn(0, sourceText.length)
+        require(end > start) { "Bitte zuerst einen Textbereich markieren." }
+        return matcherFromText(sourceText.substring(start, end))
+    }
+
     fun suggestedMatchers(payload: SharedPayload): List<String> = buildList {
         payload.subject.trim().takeIf { it.length in 4..120 }?.let(::add)
         payload.text.lineSequence()
@@ -149,9 +202,12 @@ object GuidedRuleFactory {
 
     private fun flexibleLiteral(value: String): String {
         if (value.isEmpty()) return ""
-        return value.split(Regex("\\s+"))
+        // Mail and HTML content often contains Unicode separator characters such
+        // as EN SPACE (U+2002) or non-breaking spaces. Treat all separators as
+        // interchangeable whitespace so rules learned from one mail remain reusable.
+        return value.split(Regex("[\\s\\p{Z}]+"))
             .filter { it.isNotEmpty() }
-            .joinToString("\\s+") { Regex.escape(it) }
+            .joinToString("[\\s\\p{Z}]+") { Regex.escape(it) }
     }
 
     private fun suggestedKey(label: String, index: Int): String {
@@ -169,5 +225,4 @@ object GuidedRuleFactory {
         .trim()
         .replace(Regex("[^a-zA-Z0-9_.-]+"), "_")
         .trim('_')
-        .ifBlank { "field" }
 }

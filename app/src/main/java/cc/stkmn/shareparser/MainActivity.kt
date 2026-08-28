@@ -1,11 +1,11 @@
 package cc.stkmn.shareparser
 
-import android.Manifest
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
@@ -38,6 +38,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import cc.stkmn.shareparser.data.PendingShareStore
 import cc.stkmn.shareparser.data.Profile
 import cc.stkmn.shareparser.data.ProfileRepository
 import cc.stkmn.shareparser.data.SharedPayload
@@ -45,6 +46,7 @@ import cc.stkmn.shareparser.ui.FailureScreen
 import cc.stkmn.shareparser.ui.HomeScreen
 import cc.stkmn.shareparser.ui.ProfileEditorScreen
 import cc.stkmn.shareparser.ui.RegionalSettingsScreen
+import cc.stkmn.shareparser.ui.SettingsHomeScreen
 import cc.stkmn.shareparser.ui.SharedScreen
 
 class MainActivity : ComponentActivity() {
@@ -53,6 +55,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         CrashRecorder.install(this)
+        LauncherIconManager.apply(this, ProfileRepository(this).settings().launcherIcon)
         val pendingCrash = CrashRecorder.consumePending(this)
         latestIntent.value = if (pendingCrash && intent.action == Intent.ACTION_MAIN) {
             Intent(Intent.ACTION_VIEW, Uri.parse("shareparser://failure/crash"))
@@ -77,11 +80,17 @@ class MainActivity : ComponentActivity() {
         latestIntent.value = null
         setIntent(Intent())
     }
+
+    companion object {
+        const val ACTION_OPEN_PENDING_SHARE = "cc.stkmn.shareparser.OPEN_PENDING_SHARE"
+        const val EXTRA_PENDING_SHARE_ID = "pending_share_id"
+    }
 }
 
 private sealed interface Screen {
     data object Home : Screen
     data object Settings : Screen
+    data object RegionalSettings : Screen
     data class Editor(
         val profile: Profile?,
         val sample: SharedPayload? = null,
@@ -91,19 +100,20 @@ private sealed interface Screen {
     data object Failure : Screen
 }
 
+private fun previousScreen(screen: Screen): Screen = when (screen) {
+    Screen.RegionalSettings -> Screen.Settings
+    Screen.Settings, is Screen.Editor, is Screen.Shared, Screen.Failure -> Screen.Home
+    Screen.Home -> Screen.Home
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun ShareParserApp(startIntent: Intent?, onIntentConsumed: () -> Unit) {
     val context = LocalContext.current
     val repository = remember { ProfileRepository(context) }
     var profiles by remember { mutableStateOf(repository.profiles()) }
-    var screen by remember { mutableStateOf<Screen>(initialScreen(startIntent)) }
+    var screen by remember { mutableStateOf<Screen>(if (startIntent?.isFailureLink() == true) Screen.Failure else Screen.Home) }
     var importError by remember { mutableStateOf<String?>(null) }
-
-    val notificationPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { }
-    LaunchedEffect(Unit) {
-        if (Build.VERSION.SDK_INT >= 33) notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
-    }
 
     val importLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) {
@@ -123,13 +133,21 @@ private fun ShareParserApp(startIntent: Intent?, onIntentConsumed: () -> Unit) {
 
     LaunchedEffect(startIntent) {
         if (startIntent == null) return@LaunchedEffect
-        val payload = startIntent.sharedPayload()
-        val failure = startIntent.isFailureLink()
         when {
-            failure -> screen = Screen.Failure
-            payload != null -> screen = if (profiles.isEmpty()) Screen.Editor(null, sample = payload) else Screen.Shared(payload)
+            startIntent.isFailureLink() -> screen = Screen.Failure
+            startIntent.action == MainActivity.ACTION_OPEN_PENDING_SHARE -> {
+                val id = startIntent.getStringExtra(MainActivity.EXTRA_PENDING_SHARE_ID).orEmpty()
+                val payload = PendingShareStore(context).get(id)?.payload
+                if (payload != null) {
+                    screen = if (profiles.isEmpty()) Screen.Editor(null, sample = payload) else Screen.Shared(payload)
+                }
+            }
         }
         onIntentConsumed()
+    }
+
+    BackHandler(enabled = screen !is Screen.Home) {
+        screen = previousScreen(screen)
     }
 
     MaterialTheme(colorScheme = dynamicOrDefaultScheme()) {
@@ -141,6 +159,7 @@ private fun ShareParserApp(startIntent: Intent?, onIntentConsumed: () -> Unit) {
                             when (val current = screen) {
                                 Screen.Home -> "ShareParser"
                                 Screen.Settings -> "Einstellungen"
+                                Screen.RegionalSettings -> "Datum und Uhrzeit"
                                 is Screen.Editor -> if (current.profile == null) "Profil erstellen" else "Profil bearbeiten"
                                 is Screen.Shared -> "Geteilter Inhalt"
                                 Screen.Failure -> "Fehlerbericht"
@@ -149,8 +168,8 @@ private fun ShareParserApp(startIntent: Intent?, onIntentConsumed: () -> Unit) {
                     },
                     navigationIcon = {
                         if (screen !is Screen.Home) {
-                            IconButton(onClick = { screen = Screen.Home }) {
-                                Icon(Icons.Outlined.ArrowBack, "Zurück zur Profilübersicht")
+                            IconButton(onClick = { screen = previousScreen(screen) }) {
+                                Icon(Icons.Outlined.ArrowBack, "Zurück")
                             }
                         }
                     },
@@ -189,7 +208,11 @@ private fun ShareParserApp(startIntent: Intent?, onIntentConsumed: () -> Unit) {
                         },
                         onSettings = { screen = Screen.Settings }
                     )
-                    Screen.Settings -> RegionalSettingsScreen(repository = repository)
+                    Screen.Settings -> SettingsHomeScreen(
+                        repository = repository,
+                        onRegionalSettings = { screen = Screen.RegionalSettings }
+                    )
+                    Screen.RegionalSettings -> RegionalSettingsScreen(repository = repository)
                     is Screen.Editor -> ProfileEditorScreen(
                         existing = current.profile,
                         sample = current.sample,
@@ -223,22 +246,6 @@ private fun ShareParserApp(startIntent: Intent?, onIntentConsumed: () -> Unit) {
             }
         }
     }
-}
-
-private fun initialScreen(intent: Intent?): Screen {
-    if (intent?.isFailureLink() == true) return Screen.Failure
-    intent?.sharedPayload()?.let { return Screen.Shared(it) }
-    return Screen.Home
-}
-
-private fun Intent.sharedPayload(): SharedPayload? {
-    if (action != Intent.ACTION_SEND) return null
-    val text = getCharSequenceExtra(Intent.EXTRA_TEXT)?.toString()
-        ?: getStringExtra(Intent.EXTRA_HTML_TEXT)
-        ?: ""
-    val subject = getCharSequenceExtra(Intent.EXTRA_SUBJECT)?.toString().orEmpty()
-    if (text.isBlank() && subject.isBlank()) return null
-    return SharedPayload(text = text, subject = subject, mimeType = type ?: "text/plain")
 }
 
 private fun Intent.isFailureLink(): Boolean =

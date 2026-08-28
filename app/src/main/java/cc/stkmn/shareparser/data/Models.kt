@@ -6,7 +6,7 @@ import java.util.UUID
 
 @Serializable
 data class ProfileBundle(
-    val schemaVersion: Int = 4,
+    val schemaVersion: Int = 6,
     val profile: Profile
 )
 
@@ -17,8 +17,15 @@ data class Profile(
     val enabled: Boolean = true,
     val matchers: List<MatcherRule> = emptyList(),
     val extractors: List<ExtractorRule> = emptyList(),
-    val actions: List<ProcessingAction> = emptyList()
+    val actions: List<ProcessingAction> = emptyList(),
+    val parseDirection: ParseDirection = ParseDirection.TOP_DOWN
 )
+
+@Serializable
+enum class ParseDirection {
+    TOP_DOWN,
+    BOTTOM_UP
+}
 
 @Serializable
 data class MatcherRule(
@@ -58,7 +65,8 @@ sealed class ValueTransform {
     data class RegexReplace(
         val regex: String,
         val replacement: String = "",
-        val ignoreCase: Boolean = false
+        val ignoreCase: Boolean = false,
+        val literal: Boolean = true
     ) : ValueTransform()
 
     @Serializable
@@ -87,6 +95,12 @@ enum class UrlOpenMode {
 }
 
 @Serializable
+enum class CalendarTargetMode {
+    APP_EDITOR,
+    DIRECT_SAVE
+}
+
+@Serializable
 enum class DateTimeLocale {
     DE_DE,
     EN_US,
@@ -96,8 +110,27 @@ enum class DateTimeLocale {
 }
 
 @Serializable
+enum class ShareSelectionMode {
+    APP,
+    OVERLAY,
+    NOTIFICATION
+}
+
+@Serializable
+enum class LauncherIcon {
+    LOGO_1,
+    LOGO_2,
+    LOGO_3,
+    LOGO_4,
+    LOGO_5,
+    LOGO_6
+}
+
+@Serializable
 data class AppSettings(
-    val dateTimeLocale: DateTimeLocale = DateTimeLocale.DE_DE
+    val dateTimeLocale: DateTimeLocale = DateTimeLocale.SYSTEM,
+    val shareSelectionMode: ShareSelectionMode = ShareSelectionMode.APP,
+    val launcherIcon: LauncherIcon = LauncherIcon.LOGO_5
 )
 
 @Serializable
@@ -117,10 +150,13 @@ sealed class ProcessingAction {
         val locationTemplate: String = "",
         val startTemplate: String = "",
         val endTemplate: String = "",
+        val durationTemplate: String = "",
         val startPattern: String = "",
         val endPattern: String = "",
         val allDay: Boolean = false,
-        val calendarNameTemplate: String = ""
+        val calendarNameTemplate: String = "",
+        val calendarId: Long? = null,
+        val targetMode: CalendarTargetMode = CalendarTargetMode.APP_EDITOR
     ) : ProcessingAction()
 
     @Serializable
@@ -145,10 +181,13 @@ sealed class ProcessingAction {
     ) : ProcessingAction()
 }
 
+@Serializable
 data class SharedPayload(
     val text: String,
     val subject: String = "",
-    val mimeType: String = "text/plain"
+    val mimeType: String = "text/plain",
+    val sourcePackage: String = "",
+    val sourceApp: String = ""
 ) {
     val combined: String
         get() = buildString {
@@ -156,6 +195,13 @@ data class SharedPayload(
             append(text)
         }.trim()
 }
+
+@Serializable
+data class PendingShare(
+    val id: String,
+    val payload: SharedPayload,
+    val createdAtEpochMs: Long
+)
 
 @Serializable
 data class FailureReport(

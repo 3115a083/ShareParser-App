@@ -1,0 +1,1 @@
+Binary launcher assets are added through Git blobs.

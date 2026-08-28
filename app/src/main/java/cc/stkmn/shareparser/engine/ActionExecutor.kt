@@ -2,6 +2,7 @@ package cc.stkmn.shareparser.engine
 
 import android.Manifest
 import android.content.ActivityNotFoundException
+import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -11,12 +12,15 @@ import android.provider.CalendarContract
 import androidx.core.content.ContextCompat
 import cc.stkmn.shareparser.WebViewActivity
 import cc.stkmn.shareparser.data.AppSettings
+import cc.stkmn.shareparser.data.CalendarTargetMode
 import cc.stkmn.shareparser.data.DateTimeLocale
 import cc.stkmn.shareparser.data.ProcessingAction
 import cc.stkmn.shareparser.data.UrlOpenMode
+import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.ZoneId
+import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 
@@ -41,10 +45,9 @@ class ActionExecutor(context: Context, private val settings: AppSettings = AppSe
         val location = render(action.locationTemplate)
         val startText = render(action.startTemplate)
         val endText = render(action.endTemplate)
+        val durationText = render(action.durationTemplate)
         val calendarName = render(action.calendarNameTemplate)
 
-        // Some OEM calendar apps, including Samsung Calendar versions, match the
-        // documented MIME type more reliably when it is explicit on the intent.
         val intent = Intent(Intent.ACTION_INSERT)
             .setDataAndType(CalendarContract.Events.CONTENT_URI, "vnd.android.cursor.dir/event")
             .putExtra(CalendarContract.Events.TITLE, title)
@@ -70,23 +73,57 @@ class ActionExecutor(context: Context, private val settings: AppSettings = AppSe
             val parsed = FlexibleDateTimeParser.parse(
                 startValue = startText,
                 endValue = endText,
+                durationValue = durationText,
                 allDay = action.allDay,
                 settings = settings
             )
             parsed.startEpochMs?.let { intent.putExtra(CalendarContract.EXTRA_EVENT_BEGIN_TIME, it) }
-            parsed.endEpochMs?.let { intent.putExtra(CalendarContract.EXTRA_EVENT_END_TIME, it) }
+
+            if (parsed.recurrenceStartEpochMs.isNotEmpty() && parsed.startEpochMs != null) {
+                val occurrenceDuration = parsed.durationMillis
+                    ?: parsed.endEpochMs?.let { it - parsed.startEpochMs }.takeIf { (it ?: 0L) > 0L }
+                    ?: if (action.allDay) 24L * 60L * 60L * 1000L else null
+                if (occurrenceDuration != null) {
+                    intent.putExtra(CalendarContract.Events.DURATION, toRfc2445Duration(occurrenceDuration))
+                    intent.putExtra(
+                        CalendarContract.Events.RDATE,
+                        parsed.recurrenceStartEpochMs.joinToString(",") { toRfc2445DateTime(it) }
+                    )
+                } else {
+                    warnings += "Mehrere Termine wurden erkannt, aber ohne Dauer kann Android die Wiederholung nicht vollständig vorausfüllen."
+                    parsed.endEpochMs?.let { intent.putExtra(CalendarContract.EXTRA_EVENT_END_TIME, it) }
+                }
+            } else {
+                parsed.endEpochMs?.let { intent.putExtra(CalendarContract.EXTRA_EVENT_END_TIME, it) }
+            }
             warnings += parsed.warnings
         }
 
-        if (calendarName.isNotBlank()) {
-            val calendarId = resolveCalendarId(calendarName, warnings)
-            calendarId?.let { intent.putExtra(CalendarContract.Events.CALENDAR_ID, it) }
+        val selectedCalendarId = when {
+            action.calendarId != null -> validateCalendarId(action.calendarId, calendarName, warnings)
+            calendarName.isNotBlank() -> resolveCalendarId(calendarName, warnings)
+            else -> null
         }
+        selectedCalendarId?.let { intent.putExtra(CalendarContract.Events.CALENDAR_ID, it) }
 
         if (missing.isNotEmpty()) {
             warnings += "Nicht erkannte Variablen: ${missing.joinToString(", ")}. Bitte diese Angaben im Kalender manuell ergänzen."
         }
         if (title.isBlank()) warnings += "Titel ist leer. Bitte den Termin-Titel im Kalender prüfen."
+
+        if (action.targetMode == CalendarTargetMode.DIRECT_SAVE) {
+            return saveToSelectedCalendar(
+                action = action,
+                intent = intent,
+                selectedCalendarId = selectedCalendarId,
+                calendarName = calendarName,
+                warnings = warnings
+            )
+        }
+
+        if (selectedCalendarId != null) {
+            warnings += "Android erlaubt Kalender-Apps, die Zielkalender-Vorgabe beim Öffnen zu ignorieren. Nutze 'Zielkalender verbindlich', wenn der Kalender garantiert stimmen muss."
+        }
 
         try {
             launch(intent, "calendar", "Kalender konnte nicht geöffnet werden")
@@ -102,6 +139,101 @@ class ActionExecutor(context: Context, private val settings: AppSettings = AppSe
             }
         }
         return ExecutionResult(warnings.distinct())
+    }
+
+    private fun saveToSelectedCalendar(
+        action: ProcessingAction.Calendar,
+        intent: Intent,
+        selectedCalendarId: Long?,
+        calendarName: String,
+        warnings: MutableList<String>
+    ): ExecutionResult {
+        val calendarId = selectedCalendarId ?: throw ProcessingException(
+            "Für den verbindlichen Modus muss ein verfügbarer Zielkalender ausgewählt sein.",
+            "calendar",
+            "DIRECT_SAVE requested without a valid calendar id"
+        )
+        if (ContextCompat.checkSelfPermission(appContext, Manifest.permission.WRITE_CALENDAR) != PackageManager.PERMISSION_GRANTED) {
+            throw ProcessingException(
+                "Für den verbindlichen Zielkalender fehlt die Kalender-Schreibberechtigung. Öffne das Profil und erlaube sie dort.",
+                "calendar",
+                "WRITE_CALENDAR permission missing for DIRECT_SAVE"
+            )
+        }
+
+        val begin = intent.getLongExtra(CalendarContract.EXTRA_EVENT_BEGIN_TIME, Long.MIN_VALUE)
+        if (begin == Long.MIN_VALUE) {
+            throw ProcessingException(
+                "Der Termin hat keinen sicher erkannten Startzeitpunkt und kann deshalb nicht direkt gespeichert werden.",
+                "calendar.start",
+                "DIRECT_SAVE requires EXTRA_EVENT_BEGIN_TIME"
+            )
+        }
+
+        val end = intent.getLongExtra(CalendarContract.EXTRA_EVENT_END_TIME, Long.MIN_VALUE)
+        val duration = intent.getStringExtra(CalendarContract.Events.DURATION)
+        val rdate = intent.getStringExtra(CalendarContract.Events.RDATE)
+        val defaultEnd = begin + if (action.allDay) 24L * 60L * 60L * 1000L else 60L * 60L * 1000L
+
+        val values = ContentValues().apply {
+            put(CalendarContract.Events.CALENDAR_ID, calendarId)
+            put(CalendarContract.Events.TITLE, intent.getStringExtra(CalendarContract.Events.TITLE).orEmpty())
+            put(CalendarContract.Events.DESCRIPTION, intent.getStringExtra(CalendarContract.Events.DESCRIPTION).orEmpty())
+            put(CalendarContract.Events.EVENT_LOCATION, intent.getStringExtra(CalendarContract.Events.EVENT_LOCATION).orEmpty())
+            put(CalendarContract.Events.DTSTART, begin)
+            put(CalendarContract.Events.ALL_DAY, if (action.allDay) 1 else 0)
+            put(CalendarContract.Events.EVENT_TIMEZONE, if (action.allDay) "UTC" else ZoneId.systemDefault().id)
+            if (!rdate.isNullOrBlank()) {
+                put(CalendarContract.Events.RDATE, rdate)
+                put(CalendarContract.Events.DURATION, duration ?: toRfc2445Duration(defaultEnd - begin))
+            } else {
+                val effectiveEnd = if (end != Long.MIN_VALUE && end > begin) end else defaultEnd
+                put(CalendarContract.Events.DTEND, effectiveEnd)
+                if (end == Long.MIN_VALUE) warnings += "Keine Endzeit erkannt. Für den gespeicherten Termin wurde ${if (action.allDay) "ein Tag" else "eine Stunde"} verwendet."
+            }
+        }
+
+        val eventUri = try {
+            appContext.contentResolver.insert(CalendarContract.Events.CONTENT_URI, values)
+        } catch (e: Exception) {
+            throw ProcessingException(
+                "Der Termin konnte nicht in den ausgewählten Kalender geschrieben werden.",
+                "calendar",
+                "${e::class.java.name}: ${e.message ?: e.toString()}"
+            )
+        } ?: throw ProcessingException(
+            "Der Termin konnte nicht in den ausgewählten Kalender geschrieben werden.",
+            "calendar",
+            "Calendar provider returned null from insert"
+        )
+
+        warnings += "Termin wurde verbindlich in '${calendarName.ifBlank { "den ausgewählten Kalender" }}' angelegt und zum Bearbeiten geöffnet."
+        launch(Intent(Intent.ACTION_EDIT, eventUri), "calendar", "Der gespeicherte Termin konnte nicht zum Bearbeiten geöffnet werden")
+        return ExecutionResult(warnings.distinct())
+    }
+
+    private fun validateCalendarId(id: Long, fallbackName: String, warnings: MutableList<String>): Long? {
+        if (ContextCompat.checkSelfPermission(appContext, Manifest.permission.READ_CALENDAR) != PackageManager.PERMISSION_GRANTED) {
+            warnings += "Der ausgewählte Zielkalender konnte ohne Kalender-Leseberechtigung nicht geprüft werden."
+            return null
+        }
+        return try {
+            val found = appContext.contentResolver.query(
+                CalendarContract.Calendars.CONTENT_URI,
+                arrayOf(CalendarContract.Calendars._ID),
+                "${CalendarContract.Calendars._ID}=? AND ${CalendarContract.Calendars.VISIBLE}=1",
+                arrayOf(id.toString()),
+                null
+            )?.use { it.moveToFirst() } == true
+            if (found) id
+            else if (fallbackName.isNotBlank()) resolveCalendarId(fallbackName, warnings)
+            else {
+                warnings += "Der gespeicherte Zielkalender ist auf diesem Gerät nicht mehr verfügbar."
+                null
+            }
+        } catch (_: Exception) {
+            if (fallbackName.isNotBlank()) resolveCalendarId(fallbackName, warnings) else null
+        }
     }
 
     private fun resolveCalendarId(name: String, warnings: MutableList<String>): Long? {
@@ -200,8 +332,6 @@ class ActionExecutor(context: Context, private val settings: AppSettings = AppSe
         val safeIntent = Intent(intent).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
 
         try {
-            // Use the application context for all launches. This avoids retaining or
-            // reusing a stale share-target Activity after another app was opened.
             appContext.startActivity(safeIntent)
         } catch (e: ActivityNotFoundException) {
             throw ProcessingException(
@@ -226,6 +356,13 @@ class ActionExecutor(context: Context, private val settings: AppSettings = AppSe
             "Manufacturer: ${Build.MANUFACTURER}\n" +
             "Model: ${Build.MODEL}\n" +
             "Intent: ${runCatching { intent.toUri(0) }.getOrDefault("unavailable")}"
+
+    private fun toRfc2445Duration(durationMillis: Long): String = "PT${durationMillis / 1000L}S"
+
+    private fun toRfc2445DateTime(epochMs: Long): String =
+        DateTimeFormatter.ofPattern("yyyyMMdd'T'HHmmss'Z'", Locale.ROOT)
+            .withZone(ZoneOffset.UTC)
+            .format(Instant.ofEpochMilli(epochMs))
 
     private fun parseExplicit(value: String, pattern: String): Long {
         val formatter = DateTimeFormatter.ofPattern(pattern, localeForSettings())

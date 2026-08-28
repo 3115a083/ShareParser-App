@@ -8,3 +8,11 @@ local.properties
 /captures/
 .externalNativeBuild/
 .cxx/
+
+# Never commit signing material. Production/release keys belong in a secure secret store.
+*.jks
+*.keystore
+*.p12
+*.pfx
+*.pem
+*.key
