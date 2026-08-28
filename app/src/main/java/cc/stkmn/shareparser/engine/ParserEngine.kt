@@ -8,23 +8,30 @@ import cc.stkmn.shareparser.data.SharedPayload
 import cc.stkmn.shareparser.data.ValueTransform
 
 class ParserEngine {
-    fun matchingProfiles(payload: SharedPayload, profiles: List<Profile>): List<Profile> = profiles.filter { profile ->
-        if (!profile.enabled) return@filter false
-        val triggerValues = availableValues(payload, profile)
-        profile.matchers.all { matcher ->
-            runCatching {
-                val options = buildSet {
-                    add(RegexOption.MULTILINE)
-                    if (matcher.ignoreCase) add(RegexOption.IGNORE_CASE)
-                }
-                val source = if (matcher.variableKey.isBlank()) {
-                    payload.combined
-                } else {
-                    triggerValues[matcher.variableKey] ?: return@runCatching false
-                }
-                Regex(matcher.regex, options).containsMatchIn(source)
-            }.getOrDefault(false)
+    fun matchingProfiles(payload: SharedPayload, profiles: List<Profile>): List<Profile> {
+        val matched = profiles.filter { profile ->
+            if (!profile.enabled) return@filter false
+            val triggerValues = availableValues(payload, profile)
+            profile.matchers.all { matcher ->
+                runCatching {
+                    val options = buildSet {
+                        add(RegexOption.MULTILINE)
+                        if (matcher.ignoreCase) add(RegexOption.IGNORE_CASE)
+                    }
+                    val source = if (matcher.variableKey.isBlank()) {
+                        payload.combined
+                    } else {
+                        triggerValues[matcher.variableKey] ?: return@runCatching false
+                    }
+                    Regex(matcher.regex, options).containsMatchIn(source)
+                }.getOrDefault(false)
+            }
         }
+
+        // Profiles without any recognition feature are useful as a fallback, but
+        // they must not make an otherwise unique automatic profile match ambiguous.
+        val specific = matched.filter { it.matchers.isNotEmpty() }
+        return if (specific.isNotEmpty()) specific else matched
     }
 
     fun matchingProfiles(input: String, profiles: List<Profile>): List<Profile> =
@@ -106,9 +113,11 @@ class ParserEngine {
             CaseMode.UPPER -> value.uppercase()
         }
         is ValueTransform.RegexReplace -> {
+            if (transform.regex.isEmpty()) return value
             val options = if (transform.ignoreCase) setOf(RegexOption.IGNORE_CASE) else emptySet()
             try {
-                Regex(transform.regex, options).replace(value, transform.replacement)
+                val pattern = if (transform.literal) Regex.escape(transform.regex) else transform.regex
+                Regex(pattern, options).replace(value, transform.replacement)
             } catch (e: Exception) {
                 throw ProcessingException(
                     "Ersetzen-Baustein für '$key' ist ungültig.",
