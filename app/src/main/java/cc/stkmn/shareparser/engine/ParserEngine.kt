@@ -27,9 +27,6 @@ class ParserEngine {
                 }.getOrDefault(false)
             }
         }
-
-        // Profiles without any recognition feature are useful as a fallback, but
-        // they must not make an otherwise unique automatic profile match ambiguous.
         val specific = matched.filter { it.matchers.isNotEmpty() }
         return if (specific.isNotEmpty()) specific else matched
     }
@@ -69,7 +66,9 @@ class ParserEngine {
     private fun builtInValues(payload: SharedPayload) = linkedMapOf(
         "input" to payload.combined,
         "text" to payload.text,
-        "subject" to payload.subject
+        "subject" to payload.subject,
+        "source_app" to payload.sourceApp,
+        "source_package" to payload.sourcePackage
     )
 
     private fun sourceFor(payload: SharedPayload, source: InputSource): String = when (source) {
