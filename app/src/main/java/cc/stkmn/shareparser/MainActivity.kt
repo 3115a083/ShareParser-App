@@ -5,6 +5,7 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
@@ -54,6 +55,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         CrashRecorder.install(this)
+        LauncherIconManager.apply(this, ProfileRepository(this).settings().launcherIcon)
         val pendingCrash = CrashRecorder.consumePending(this)
         latestIntent.value = if (pendingCrash && intent.action == Intent.ACTION_MAIN) {
             Intent(Intent.ACTION_VIEW, Uri.parse("shareparser://failure/crash"))
@@ -98,6 +100,12 @@ private sealed interface Screen {
     data object Failure : Screen
 }
 
+private fun previousScreen(screen: Screen): Screen = when (screen) {
+    Screen.RegionalSettings -> Screen.Settings
+    Screen.Settings, is Screen.Editor, is Screen.Shared, Screen.Failure -> Screen.Home
+    Screen.Home -> Screen.Home
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun ShareParserApp(startIntent: Intent?, onIntentConsumed: () -> Unit) {
@@ -138,6 +146,10 @@ private fun ShareParserApp(startIntent: Intent?, onIntentConsumed: () -> Unit) {
         onIntentConsumed()
     }
 
+    BackHandler(enabled = screen !is Screen.Home) {
+        screen = previousScreen(screen)
+    }
+
     MaterialTheme(colorScheme = dynamicOrDefaultScheme()) {
         Scaffold(
             topBar = {
@@ -156,9 +168,7 @@ private fun ShareParserApp(startIntent: Intent?, onIntentConsumed: () -> Unit) {
                     },
                     navigationIcon = {
                         if (screen !is Screen.Home) {
-                            IconButton(onClick = {
-                                screen = if (screen is Screen.RegionalSettings) Screen.Settings else Screen.Home
-                            }) {
+                            IconButton(onClick = { screen = previousScreen(screen) }) {
                                 Icon(Icons.Outlined.ArrowBack, "Zurück")
                             }
                         }
