@@ -15,6 +15,9 @@ updates:
       - dependency-name: "com.android.application"
         versions:
           - ">= 9.0.0"
+      - dependency-name: "gradle-wrapper"
+        versions:
+          - ">= 9.6.0"
       - dependency-name: "androidx.core:core-ktx"
         versions:
           - ">= 1.19.0"
