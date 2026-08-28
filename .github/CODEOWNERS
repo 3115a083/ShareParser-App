@@ -1,0 +1,7 @@
+# Require review/ownership awareness for all files.
+* @3115a083
+
+# Security-sensitive automation and manifest changes.
+/.github/ @3115a083
+/app/src/main/AndroidManifest.xml @3115a083
+/app/build.gradle.kts @3115a083
