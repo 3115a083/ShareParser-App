@@ -6,7 +6,7 @@ import java.util.UUID
 
 @Serializable
 data class ProfileBundle(
-    val schemaVersion: Int = 5,
+    val schemaVersion: Int = 6,
     val profile: Profile
 )
 
@@ -17,8 +17,15 @@ data class Profile(
     val enabled: Boolean = true,
     val matchers: List<MatcherRule> = emptyList(),
     val extractors: List<ExtractorRule> = emptyList(),
-    val actions: List<ProcessingAction> = emptyList()
+    val actions: List<ProcessingAction> = emptyList(),
+    val parseDirection: ParseDirection = ParseDirection.TOP_DOWN
 )
+
+@Serializable
+enum class ParseDirection {
+    TOP_DOWN,
+    BOTTOM_UP
+}
 
 @Serializable
 data class MatcherRule(
@@ -88,6 +95,12 @@ enum class UrlOpenMode {
 }
 
 @Serializable
+enum class CalendarTargetMode {
+    APP_EDITOR,
+    DIRECT_SAVE
+}
+
+@Serializable
 enum class DateTimeLocale {
     DE_DE,
     EN_US,
@@ -104,9 +117,20 @@ enum class ShareSelectionMode {
 }
 
 @Serializable
+enum class LauncherIcon {
+    LOGO_1,
+    LOGO_2,
+    LOGO_3,
+    LOGO_4,
+    LOGO_5,
+    LOGO_6
+}
+
+@Serializable
 data class AppSettings(
     val dateTimeLocale: DateTimeLocale = DateTimeLocale.SYSTEM,
-    val shareSelectionMode: ShareSelectionMode = ShareSelectionMode.APP
+    val shareSelectionMode: ShareSelectionMode = ShareSelectionMode.APP,
+    val launcherIcon: LauncherIcon = LauncherIcon.LOGO_5
 )
 
 @Serializable
@@ -131,7 +155,8 @@ sealed class ProcessingAction {
         val endPattern: String = "",
         val allDay: Boolean = false,
         val calendarNameTemplate: String = "",
-        val calendarId: Long? = null
+        val calendarId: Long? = null,
+        val targetMode: CalendarTargetMode = CalendarTargetMode.APP_EDITOR
     ) : ProcessingAction()
 
     @Serializable
