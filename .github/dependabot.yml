@@ -5,8 +5,23 @@ updates:
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
+    groups:
+      kotlin-plugins:
+        patterns:
+          - "org.jetbrains.kotlin*"
+    ignore:
+      - dependency-name: "com.android.application"
+        versions:
+          - ">= 9.0.0"
+      - dependency-name: "androidx.core:core-ktx"
+        versions:
+          - ">= 1.19.0"
   - package-ecosystem: github-actions
     directory: /
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
+    groups:
+      github-actions:
+        patterns:
+          - "*"
