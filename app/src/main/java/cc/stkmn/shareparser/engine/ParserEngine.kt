@@ -103,26 +103,31 @@ class ParserEngine {
         return value
     }
 
-    private fun applyTransform(value: String, transform: ValueTransform, key: String): String = when (transform) {
-        ValueTransform.Trim -> value.trim()
-        is ValueTransform.Prefix -> transform.value + value
-        is ValueTransform.Suffix -> value + transform.value
-        is ValueTransform.ChangeCase -> when (transform.mode) {
-            CaseMode.LOWER -> value.lowercase()
-            CaseMode.UPPER -> value.uppercase()
-        }
-        is ValueTransform.RegexReplace -> {
-            if (transform.regex.isEmpty()) return value
-            val options = if (transform.ignoreCase) setOf(RegexOption.IGNORE_CASE) else emptySet()
-            try {
-                val pattern = if (transform.literal) Regex.escape(transform.regex) else transform.regex
-                Regex(pattern, options).replace(value, transform.replacement)
-            } catch (e: Exception) {
-                throw ProcessingException(
-                    "Ersetzen-Baustein für '$key' ist ungültig.",
-                    key,
-                    e.message ?: e.toString()
-                )
+    private fun applyTransform(value: String, transform: ValueTransform, key: String): String {
+        return when (transform) {
+            ValueTransform.Trim -> value.trim()
+            is ValueTransform.Prefix -> transform.value + value
+            is ValueTransform.Suffix -> value + transform.value
+            is ValueTransform.ChangeCase -> when (transform.mode) {
+                CaseMode.LOWER -> value.lowercase()
+                CaseMode.UPPER -> value.uppercase()
+            }
+            is ValueTransform.RegexReplace -> {
+                if (transform.regex.isEmpty()) {
+                    value
+                } else {
+                    val options = if (transform.ignoreCase) setOf(RegexOption.IGNORE_CASE) else emptySet()
+                    try {
+                        val pattern = if (transform.literal) Regex.escape(transform.regex) else transform.regex
+                        Regex(pattern, options).replace(value, transform.replacement)
+                    } catch (e: Exception) {
+                        throw ProcessingException(
+                            "Ersetzen-Baustein für '$key' ist ungültig.",
+                            key,
+                            e.message ?: e.toString()
+                        )
+                    }
+                }
             }
         }
     }
