@@ -3,6 +3,7 @@ package cc.stkmn.shareparser.engine
 import cc.stkmn.shareparser.data.CaseMode
 import cc.stkmn.shareparser.data.ExtractorRule
 import cc.stkmn.shareparser.data.InputSource
+import cc.stkmn.shareparser.data.ParseDirection
 import cc.stkmn.shareparser.data.Profile
 import cc.stkmn.shareparser.data.SharedPayload
 import cc.stkmn.shareparser.data.ValueTransform
@@ -37,7 +38,7 @@ class ParserEngine {
     fun extract(payload: SharedPayload, profile: Profile): Map<String, String> {
         val values = builtInValues(payload)
         for (rule in profile.extractors) {
-            val value = extractOne(sourceFor(payload, rule.source), rule)
+            val value = extractOne(sourceFor(payload, rule.source), rule, profile.parseDirection)
             if (value == null && rule.required) {
                 throw ProcessingException(
                     userMessage = "Pflichtfeld '${rule.key}' konnte nicht erkannt werden.",
@@ -56,7 +57,7 @@ class ParserEngine {
     private fun availableValues(payload: SharedPayload, profile: Profile): Map<String, String> {
         val values = builtInValues(payload)
         profile.extractors.forEach { rule ->
-            runCatching { extractOne(sourceFor(payload, rule.source), rule) }
+            runCatching { extractOne(sourceFor(payload, rule.source), rule, profile.parseDirection) }
                 .getOrNull()
                 ?.let { values[rule.key] = it }
         }
@@ -77,15 +78,20 @@ class ParserEngine {
         InputSource.SUBJECT -> payload.subject
     }
 
-    private fun extractOne(input: String, rule: ExtractorRule): String? {
-        val match = try {
-            Regex(rule.regex, setOf(RegexOption.MULTILINE)).find(input)
+    private fun extractOne(input: String, rule: ExtractorRule, direction: ParseDirection): String? {
+        val regex = try {
+            Regex(rule.regex, setOf(RegexOption.MULTILINE))
         } catch (e: Exception) {
             throw ProcessingException(
                 "Ungültiger regulärer Ausdruck für '${rule.key}'.",
                 rule.key,
                 e.message ?: e.toString()
             )
+        }
+
+        val match = when (direction) {
+            ParseDirection.TOP_DOWN -> regex.find(input)
+            ParseDirection.BOTTOM_UP -> regex.findAll(input).lastOrNull()
         } ?: return null
 
         if (rule.group !in match.groupValues.indices) {
