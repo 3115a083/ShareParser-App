@@ -9,7 +9,6 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
-import android.widget.Toast
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
@@ -21,7 +20,7 @@ object FailureNotifier {
     private const val CHANNEL = "processing_errors"
 
     fun show(context: Context, report: FailureReport) {
-        runCatching { Toast.makeText(context.applicationContext, report.message, Toast.LENGTH_LONG).show() }
+        UserNotice.showLong(context, report.message)
 
         if (Build.VERSION.SDK_INT >= 33 &&
             ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
