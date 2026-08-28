@@ -70,6 +70,27 @@ jobs:
             echo "pull_request_target is intentionally forbidden in this repository"
             exit 1
           fi
+      - name: Verify runtime-safe icon resources
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          expected = [
+              *(Path("app/src/main/res/mipmap-nodpi") / f"app_logo_{i}.png" for i in range(1, 5)),
+              Path("app/src/main/res/drawable/ic_launcher_foreground.png"),
+          ]
+          png_signature = b"\x89PNG\r\n\x1a\n"
+          for path in expected:
+              if not path.is_file():
+                  raise SystemExit(f"Missing icon resource: {path}")
+              if not path.read_bytes().startswith(png_signature):
+                  raise SystemExit(f"Icon resource is not a PNG: {path}")
+          forbidden = list(Path("app/src/main/res/mipmap-nodpi").glob("app_logo_*.webp"))
+          if forbidden:
+              raise SystemExit("Launcher WebP resources are forbidden after the Android 16 decoder regression: " + ", ".join(map(str, forbidden)))
+          PY
       - name: Unit tests, lint and debug APK
         run: gradle :app:testDebugUnitTest :app:lintDebug :app:assembleDebug --stacktrace
       - name: Upload debug APK
