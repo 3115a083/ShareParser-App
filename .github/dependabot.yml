@@ -8,7 +8,9 @@ updates:
     groups:
       kotlin-plugins:
         patterns:
-          - "org.jetbrains.kotlin*"
+          - "org.jetbrains.kotlin.android"
+          - "org.jetbrains.kotlin.plugin.compose"
+          - "org.jetbrains.kotlin.plugin.serialization"
     ignore:
       - dependency-name: "com.android.application"
         versions:
@@ -16,6 +18,9 @@ updates:
       - dependency-name: "androidx.core:core-ktx"
         versions:
           - ">= 1.19.0"
+      - dependency-name: "androidx.compose:compose-bom"
+        versions:
+          - ">= 2026.08.00"
   - package-ecosystem: github-actions
     directory: /
     schedule:
