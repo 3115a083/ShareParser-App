@@ -2,6 +2,7 @@ package cc.stkmn.shareparser.engine
 
 import android.Manifest
 import android.content.ActivityNotFoundException
+import android.content.ClipData
 import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
@@ -10,12 +11,17 @@ import android.net.Uri
 import android.os.Build
 import android.provider.CalendarContract
 import androidx.core.content.ContextCompat
+import androidx.core.content.FileProvider
+import androidx.documentfile.provider.DocumentFile
+import cc.stkmn.shareparser.SaveTextFileActivity
 import cc.stkmn.shareparser.WebViewActivity
 import cc.stkmn.shareparser.data.AppSettings
 import cc.stkmn.shareparser.data.CalendarTargetMode
 import cc.stkmn.shareparser.data.DateTimeLocale
 import cc.stkmn.shareparser.data.ProcessingAction
+import cc.stkmn.shareparser.data.TextFileMode
 import cc.stkmn.shareparser.data.UrlOpenMode
+import java.io.File
 import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalDateTime
@@ -319,14 +325,134 @@ class ActionExecutor(context: Context, private val settings: AppSettings = AppSe
     private fun shareText(action: ProcessingAction.Share, values: Map<String, String>): ExecutionResult {
         val text = TemplateEngine.render(action.textTemplate, values)
         val subject = if (action.subjectTemplate.isBlank()) "" else TemplateEngine.render(action.subjectTemplate, values)
-        val intent = Intent(Intent.ACTION_SEND).apply {
-            type = action.mimeType.ifBlank { "text/plain" }
-            putExtra(Intent.EXTRA_TEXT, text)
-            if (subject.isNotBlank()) putExtra(Intent.EXTRA_SUBJECT, subject)
+        val mimeType = action.mimeType.ifBlank { "text/plain" }
+        if (!action.asFile) {
+            val intent = Intent(Intent.ACTION_SEND).apply {
+                type = mimeType
+                putExtra(Intent.EXTRA_TEXT, text)
+                if (subject.isNotBlank()) putExtra(Intent.EXTRA_SUBJECT, subject)
+            }
+            launch(Intent.createChooser(intent, action.friendlyName), "share", "Teilen-Dialog konnte nicht geöffnet werden")
+            return ExecutionResult()
         }
-        launch(Intent.createChooser(intent, action.friendlyName), "share", "Teilen-Dialog konnte nicht geöffnet werden")
-        return ExecutionResult()
+
+        val renderedName = TemplateEngine.render(action.fileNameTemplate.ifBlank { "ShareParser.txt" }, values)
+        val fileName = safeFileName(renderedName)
+        val relativePath = if (action.relativePathTemplate.isBlank()) "" else TemplateEngine.render(action.relativePathTemplate, values)
+        return when (action.fileMode) {
+            TextFileMode.SHARE -> {
+                val file = writeTemporaryFile(fileName, text)
+                val uri = shareUri(file)
+                val intent = Intent(Intent.ACTION_SEND).apply {
+                    type = mimeType
+                    putExtra(Intent.EXTRA_STREAM, uri)
+                    putExtra(Intent.EXTRA_TEXT, text)
+                    if (subject.isNotBlank()) putExtra(Intent.EXTRA_SUBJECT, subject)
+                    clipData = ClipData.newUri(appContext.contentResolver, fileName, uri)
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                }
+                launch(Intent.createChooser(intent, action.friendlyName), "share.file", "Datei konnte nicht geteilt werden")
+                ExecutionResult()
+            }
+            TextFileMode.OPEN -> {
+                val file = writeTemporaryFile(fileName, text)
+                val uri = shareUri(file)
+                launch(
+                    Intent(Intent.ACTION_VIEW).apply {
+                        setDataAndType(uri, mimeType)
+                        clipData = ClipData.newUri(appContext.contentResolver, fileName, uri)
+                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    },
+                    "share.file",
+                    "Datei konnte nicht geöffnet werden"
+                )
+                ExecutionResult()
+            }
+            TextFileMode.SAVE -> saveTextFile(fileName, relativePath, mimeType, text)
+        }
     }
+
+    private fun saveTextFile(fileName: String, relativePath: String, mimeType: String, text: String): ExecutionResult {
+        if (settings.defaultSaveTreeUri.isNotBlank()) {
+            val saved = runCatching {
+                val root = DocumentFile.fromTreeUri(appContext, Uri.parse(settings.defaultSaveTreeUri))
+                    ?: error("Default tree URI is unavailable")
+                var directory = root
+                safePathSegments(relativePath).forEach { segment ->
+                    val next = directory.findFile(segment)?.takeIf { it.isDirectory }
+                        ?: directory.createDirectory(segment)
+                        ?: error("Could not create directory '$segment'")
+                    directory = next
+                }
+                val target = directory.findFile(fileName)?.takeIf { it.isFile }
+                    ?: directory.createFile(mimeType, fileName)
+                    ?: error("Could not create file '$fileName'")
+                appContext.contentResolver.openOutputStream(target.uri, "wt")?.bufferedWriter()?.use { it.write(text) }
+                    ?: error("Could not open output stream")
+                target.uri
+            }.getOrNull()
+            if (saved != null) {
+                val location = safePathSegments(relativePath).joinToString("/")
+                val display = if (location.isBlank()) fileName else "$location/$fileName"
+                return ExecutionResult(listOf("Datei '$display' wurde im voreingestellten Ordner gespeichert."))
+            }
+        }
+
+        val file = writeTemporaryFile(fileName, text)
+        launch(
+            Intent(appContext, SaveTextFileActivity::class.java).apply {
+                putExtra(SaveTextFileActivity.EXTRA_SOURCE_PATH, file.absolutePath)
+                putExtra(SaveTextFileActivity.EXTRA_MIME_TYPE, mimeType)
+                putExtra(SaveTextFileActivity.EXTRA_FILE_NAME, fileName)
+            },
+            "share.file",
+            "Speicherort konnte nicht geöffnet werden"
+        )
+        return ExecutionResult(
+            if (settings.defaultSaveTreeUri.isBlank()) emptyList()
+            else listOf("Der voreingestellte Speicherordner war nicht erreichbar. Android zeigt deshalb den Dateidialog an.")
+        )
+    }
+
+    private fun writeTemporaryFile(fileName: String, text: String): File {
+        val directory = File(appContext.cacheDir, "shared").apply { mkdirs() }
+        val file = File(directory, fileName)
+        runCatching { file.writeText(text) }.getOrElse {
+            throw ProcessingException(
+                "Die Textdatei konnte nicht erstellt werden.",
+                "share.file",
+                "${it::class.java.name}: ${it.message ?: it.toString()}"
+            )
+        }
+        return file
+    }
+
+    private fun shareUri(file: File): Uri = try {
+        FileProvider.getUriForFile(appContext, "${appContext.packageName}.files", file)
+    } catch (e: Exception) {
+        throw ProcessingException(
+            "Die Textdatei konnte nicht für andere Apps freigegeben werden.",
+            "share.file",
+            "${e::class.java.name}: ${e.message ?: e.toString()}"
+        )
+    }
+
+    private fun safeFileName(value: String): String = value
+        .substringAfterLast('/')
+        .substringAfterLast('\\')
+        .trim()
+        .replace(Regex("[\\u0000-\\u001F<>:\"/\\\\|?*]+"), "_")
+        .take(180)
+        .ifBlank { "ShareParser.txt" }
+
+    private fun safePathSegments(value: String): List<String> = value
+        .split('/', '\\')
+        .map { segment ->
+            segment.trim()
+                .replace(Regex("[\\u0000-\\u001F<>:\"/\\\\|?*]+"), "_")
+                .take(80)
+        }
+        .filter { it.isNotBlank() && it != "." && it != ".." }
 
     private fun launch(intent: Intent, failingField: String, message: String) {
         val safeIntent = Intent(intent).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
