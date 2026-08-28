@@ -20,7 +20,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import cc.stkmn.shareparser.data.AppSettings
 import cc.stkmn.shareparser.data.DateTimeLocale
 import cc.stkmn.shareparser.data.ProfileRepository
 
@@ -33,6 +32,14 @@ internal fun RegionalSettingsScreen(repository: ProfileRepository) {
         repository.saveSettings(settings)
     }
 
+    val order = listOf(
+        DateTimeLocale.SYSTEM,
+        DateTimeLocale.DE_DE,
+        DateTimeLocale.EN_US,
+        DateTimeLocale.EN_GB,
+        DateTimeLocale.ISO
+    )
+
     LazyColumn(
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -40,26 +47,17 @@ internal fun RegionalSettingsScreen(repository: ProfileRepository) {
         item {
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Text("Regionale Datums- und Zeitformate", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
-                Text("Legt fest, wie mehrdeutige Angaben interpretiert werden. Eindeutige ISO-Daten wie 2026-12-31 funktionieren in allen Modi.")
+                Text("Standard ist die Android-Geräteeinstellung. Die Auswahl legt fest, wie mehrdeutige Datums- und Zeitangaben interpretiert werden.")
             }
         }
 
-        DateTimeLocale.entries.forEach { locale ->
+        order.forEach { locale ->
             item(key = locale.name) {
                 val info = localeInfo(locale)
                 Card(Modifier.fillMaxWidth()) {
-                    Row(
-                        Modifier.padding(16.dp),
-                        verticalAlignment = Alignment.Top
-                    ) {
-                        RadioButton(
-                            selected = settings.dateTimeLocale == locale,
-                            onClick = { select(locale) }
-                        )
-                        Column(
-                            Modifier.padding(start = 8.dp),
-                            verticalArrangement = Arrangement.spacedBy(4.dp)
-                        ) {
+                    Row(Modifier.padding(16.dp), verticalAlignment = Alignment.Top) {
+                        RadioButton(selected = settings.dateTimeLocale == locale, onClick = { select(locale) })
+                        Column(Modifier.padding(start = 8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                             Text(info.title, fontWeight = FontWeight.SemiBold)
                             Text(info.description, style = MaterialTheme.typography.bodySmall)
                             Text("Beispiele: ${info.examples}", style = MaterialTheme.typography.bodySmall)
@@ -78,13 +76,14 @@ internal fun RegionalSettingsScreen(repository: ProfileRepository) {
     }
 }
 
-private data class LocaleInfo(
-    val title: String,
-    val description: String,
-    val examples: String
-)
+private data class LocaleInfo(val title: String, val description: String, val examples: String)
 
 private fun localeInfo(locale: DateTimeLocale): LocaleInfo = when (locale) {
+    DateTimeLocale.SYSTEM -> LocaleInfo(
+        "Geräteeinstellung, Standard",
+        "Leitet Datumsreihenfolge und 12/24-Stunden-Präferenz aus Sprache und Region des Geräts ab.",
+        "abhängig von den Android-Regionseinstellungen"
+    )
     DateTimeLocale.DE_DE -> LocaleInfo(
         "Deutsch, Deutschland",
         "Tag vor Monat, 24-Stunden-Zeit sowie deutsche Begriffe wie heute, morgen und Montag.",
@@ -102,12 +101,7 @@ private fun localeInfo(locale: DateTimeLocale): LocaleInfo = when (locale) {
     )
     DateTimeLocale.ISO -> LocaleInfo(
         "ISO / international",
-        "Bevorzugt eindeutige Jahr-Monat-Tag-Angaben und 24-Stunden-Zeit. Deutsche und englische relative Begriffe bleiben erkennbar.",
+        "Bevorzugt eindeutige Jahr-Monat-Tag-Angaben und 24-Stunden-Zeit.",
         "2026-12-14, 2026-12-14 14:30"
-    )
-    DateTimeLocale.SYSTEM -> LocaleInfo(
-        "Geräteeinstellung",
-        "Leitet Datumsreihenfolge und 12/24-Stunden-Präferenz aus der Gerätesprache und Region ab.",
-        "abhängig von den Android-Regionseinstellungen"
     )
 }
