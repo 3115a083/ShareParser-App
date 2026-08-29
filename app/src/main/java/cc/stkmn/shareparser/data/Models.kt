@@ -144,6 +144,25 @@ enum class TextFileMode {
 }
 
 @Serializable
+enum class AppLanguage {
+    SYSTEM,
+    DE,
+    EN
+}
+
+@Serializable
+enum class InvalidValuePolicy {
+    FALLBACK,
+    ERROR
+}
+
+@Serializable
+enum class WebhookFireMode {
+    SELECTABLE,
+    ALWAYS
+}
+
+@Serializable
 enum class LauncherIcon {
     LOGO_1,
     LOGO_2,
