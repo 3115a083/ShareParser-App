@@ -10,7 +10,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
-import java.util.Locale
+import cc.stkmn.shareparser.AppLocale
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
@@ -265,8 +265,7 @@ private fun englishFallback(value: String): String {
     return result
 }
 
-internal fun localized(value: String): String =
-    if (Locale.getDefault().language == "de") value else englishFallback(value)
+internal fun localized(value: String): String = AppLocale.text(value, englishFallback(value))
 
 @Composable
 internal fun Text(
