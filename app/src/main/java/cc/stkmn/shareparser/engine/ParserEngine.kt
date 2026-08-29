@@ -3,6 +3,8 @@ package cc.stkmn.shareparser.engine
 import cc.stkmn.shareparser.data.CaseMode
 import cc.stkmn.shareparser.data.ExtractorRule
 import cc.stkmn.shareparser.data.InputSource
+import cc.stkmn.shareparser.data.MatcherJoin
+import cc.stkmn.shareparser.data.MatcherValueMode
 import cc.stkmn.shareparser.data.ParseDirection
 import cc.stkmn.shareparser.data.Profile
 import cc.stkmn.shareparser.data.SharedPayload
@@ -13,19 +15,38 @@ class ParserEngine {
         val matched = profiles.filter { profile ->
             if (!profile.enabled) return@filter false
             val triggerValues = availableValues(payload, profile)
-            profile.matchers.all { matcher ->
-                runCatching {
-                    val options = buildSet {
-                        add(RegexOption.MULTILINE)
-                        if (matcher.ignoreCase) add(RegexOption.IGNORE_CASE)
+            if (profile.matchers.isEmpty()) {
+                true
+            } else {
+                profile.matchers.map { matcher ->
+                    runCatching {
+                        val source = if (matcher.variableKey.isBlank()) {
+                            payload.combined
+                        } else {
+                            triggerValues[matcher.variableKey].orEmpty()
+                        }
+                        when (matcher.valueMode) {
+                            MatcherValueMode.EMPTY -> source.isBlank()
+                            MatcherValueMode.NOT_EMPTY -> source.isNotBlank()
+                            MatcherValueMode.REGEX -> {
+                                val options = buildSet {
+                                    add(RegexOption.MULTILINE)
+                                    if (matcher.ignoreCase) add(RegexOption.IGNORE_CASE)
+                                }
+                                Regex(matcher.regex, options).containsMatchIn(source)
+                            }
+                        }
+                    }.getOrDefault(false)
+                }.let { results ->
+                    var matchedResult = results.first()
+                    for (index in 1 until results.size) {
+                        matchedResult = when (profile.matchers[index].join) {
+                            MatcherJoin.AND -> matchedResult && results[index]
+                            MatcherJoin.OR -> matchedResult || results[index]
+                        }
                     }
-                    val source = if (matcher.variableKey.isBlank()) {
-                        payload.combined
-                    } else {
-                        triggerValues[matcher.variableKey] ?: return@runCatching false
-                    }
-                    Regex(matcher.regex, options).containsMatchIn(source)
-                }.getOrDefault(false)
+                    matchedResult
+                }
             }
         }
         val specific = matched.filter { it.matchers.isNotEmpty() }
