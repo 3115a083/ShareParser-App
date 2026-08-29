@@ -223,4 +223,32 @@ class ParserEngineTest {
         assertEquals(listOf("Present"), engine.matchingProfiles("PLZ: 59000", listOf(presentProfile)).map { it.name })
     }
 
+
+    @Test
+    fun sourceAppCriterionCanBeNegated() {
+        val profile = Profile(
+            "negated",
+            "Not FairEmail",
+            matchers = listOf(
+                MatcherRule(
+                    regex = Regex.escape("eu.faircode.email"),
+                    variableKey = "source_package",
+                    negate = true
+                )
+            )
+        )
+        assertTrue(
+            engine.matchingProfiles(
+                SharedPayload(text = "Termin", sourcePackage = "com.example.other"),
+                listOf(profile)
+            ).isNotEmpty()
+        )
+        assertTrue(
+            engine.matchingProfiles(
+                SharedPayload(text = "Termin", sourcePackage = "eu.faircode.email"),
+                listOf(profile)
+            ).isEmpty()
+        )
+    }
+
 }
