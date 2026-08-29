@@ -46,10 +46,8 @@ internal fun rememberVariableHighlighting(
         val builder = AnnotatedString.Builder(text)
         relevant.forEach { rule ->
             val color = byKey[rule.key]?.color ?: return@forEach
-            runCatching { Regex(rule.regex, setOf(RegexOption.MULTILINE)).findAll(text.text).toList() }
+            runCatching { Regex(rule.regex, setOf(RegexOption.MULTILINE)).findAll(text.text).take(250).toList() }
                 .getOrDefault(emptyList())
-                .asSequence()
-                .take(250)
                 .forEach { match ->
                     val group = if (rule.group in match.groupValues.indices) match.groups[rule.group] else null
                     val start = group?.range?.first ?: return@forEach
