@@ -170,7 +170,6 @@ internal fun ProfileEditorScreen(
     var lastObserved by remember(existing?.id) { mutableStateOf(initialProfile) }
     var restoringHistory by remember(existing?.id) { mutableStateOf(false) }
     var showExitDialog by remember(existing?.id) { mutableStateOf(false) }
-    var showDeleteDialog by remember(existing?.id) { mutableStateOf(false) }
 
     var advanced by remember { mutableStateOf(false) }
     var advancedJson by remember { mutableStateOf("") }
@@ -424,24 +423,6 @@ internal fun ProfileEditorScreen(
         }
     }
 
-    if (showDeleteDialog && existing != null) {
-        AlertDialog(
-            onDismissRequest = { showDeleteDialog = false },
-            title = { Text("Profil löschen?") },
-            text = { Text("Das Profil '${existing.name}' wird dauerhaft gelöscht.") },
-            confirmButton = {
-                Button(onClick = {
-                    repository.delete(existing.id)
-                    showDeleteDialog = false
-                    onDeleted()
-                }) { Text("Löschen") }
-            },
-            dismissButton = {
-                TextButton(onClick = { showDeleteDialog = false }) { Text("Abbrechen") }
-            }
-        )
-    }
-
     if (showExitDialog) {
         AlertDialog(
             onDismissRequest = { showExitDialog = false },
@@ -523,56 +504,735 @@ internal fun ProfileEditorScreen(
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
         item {
-            Row(
-                modifier = Modifier.fillMaxWidth().widthIn(max = 560.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                OutlinedButton(
-                    onClick = { clipboard.setText(AnnotatedString(repository.export(buildProfile()))) },
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Icon(Icons.Outlined.ContentCopy, null)
-                    Spacer(Modifier.width(4.dp))
-                    Text("JSON kopieren")
+            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                item {
+                    AssistChip(
+                        onClick = { navigationScope.launch { recognitionAnchor.bringIntoView() } },
+                        label = { Text("Profil erkennen") }
+                    )
                 }
-                OutlinedButton(
-                    onClick = {
-                        val json = repository.export(buildProfile())
-                        runCatching {
-                            context.startActivity(
-                                Intent.createChooser(
-                                    Intent(Intent.ACTION_SEND).apply {
-                                        type = "application/json"
-                                        putExtra(Intent.EXTRA_TEXT, json)
-                                        putExtra(Intent.EXTRA_SUBJECT, "ShareParser Profil: ${name.ifBlank { "Profil" }}")
-                                    },
-                                    "Profil teilen"
+                if (sample != null) {
+                    item {
+                        AssistChip(
+                            onClick = { navigationScope.launch { exampleAnchor.bringIntoView() } },
+                            label = { Text("Variablen aus Beispiel") }
+                        )
+                    }
+                }
+                item {
+                    AssistChip(
+                        onClick = { navigationScope.launch { variablesAnchor.bringIntoView() } },
+                        label = { Text("Variablen") }
+                    )
+                }
+                item {
+                    AssistChip(
+                        onClick = { navigationScope.launch { actionsAnchor.bringIntoView() } },
+                        label = { Text("Weiterverarbeitung") }
+                    )
+                }
+            }
+        }
+        item {
+            Card(Modifier.fillMaxWidth()) {
+                Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Outlined.Share, null)
+                    Spacer(Modifier.width(10.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text("Bearbeitungsmodus aktiv", fontWeight = FontWeight.SemiBold)
+                        Text(
+                            "Neue Nachrichten oder Textdateien, die du jetzt an ShareParser teilst, werden direkt als Beispiel in dieses Profil geladen.",
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+                    IconButton(
+                        onClick = {
+                            if (undoStack.isNotEmpty()) restoreProfile(undoStack.removeAt(undoStack.lastIndex))
+                        },
+                        enabled = undoStack.isNotEmpty()
+                    ) {
+                        Icon(Icons.Outlined.Undo, "Letzte Änderung rückgängig")
+                    }
+                }
+            }
+        }
+
+        if (highlightField != null) {
+            item {
+                Card(Modifier.fillMaxWidth()) {
+                    Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Outlined.ErrorOutline, null, tint = MaterialTheme.colorScheme.error)
+                        Spacer(Modifier.width(10.dp))
+                        Column {
+                            Text("Fehlerstelle hervorgehoben", fontWeight = FontWeight.SemiBold)
+                            Text(highlightField, style = MaterialTheme.typography.bodySmall)
+                        }
+                    }
+                }
+            }
+        }
+
+        item { SectionTitle("Profil") }
+        item {
+            OutlinedTextField(
+                value = name,
+                onValueChange = { name = it },
+                label = { Text("Profilname") },
+                placeholder = { Text("z. B. FairEmail Termin") },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true
+            )
+        }
+        item {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Switch(enabled, { enabled = it })
+                Spacer(Modifier.width(10.dp))
+                Text(if (enabled) "Profil aktiv" else "Profil deaktiviert")
+            }
+        }
+        item {
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text("Parsing-Reihenfolge", fontWeight = FontWeight.SemiBold)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    RadioButton(parseDirection == ParseDirection.TOP_DOWN, { parseDirection = ParseDirection.TOP_DOWN })
+                    Text("Von oben nach unten")
+                }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    RadioButton(parseDirection == ParseDirection.BOTTOM_UP, { parseDirection = ParseDirection.BOTTOM_UP })
+                    Text("Von unten nach oben")
+                }
+                Text(
+                    if (parseDirection == ParseDirection.BOTTOM_UP)
+                        "Nimmt bei mehrfach vorkommenden Feldern den letzten Treffer. Sinnvoll, wenn die ursprüngliche Mail unter einer Antwort oder Weiterleitung steht."
+                    else "Nimmt bei mehrfach vorkommenden Feldern den ersten Treffer.",
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
+        }
+
+        item {
+            EditorSectionHeader(
+                "Profil automatisch erkennen",
+                Modifier.bringIntoViewRequester(recognitionAnchor)
+            )
+        }
+        item {
+            Text("Kombiniere feste Textteile, teilende App und Variablen. Ab dem zweiten Merkmal kannst du UND oder ODER wählen.")
+        }
+
+        item {
+            val sourceApps = remember(sample?.sourcePackage, sample?.sourceApp) {
+                ShareSourceAppCatalog.list(
+                    context,
+                    includePackage = sample?.sourcePackage.orEmpty(),
+                    includeLabel = sample?.sourceApp.orEmpty()
+                )
+            }
+            val activeAppMatcher = matchers.firstOrNull { it.variableKey == "source_package" }
+            val activePackage = activeAppMatcher?.regex
+                ?.removePrefix("\\Q")
+                ?.removeSuffix("\\E")
+                .orEmpty()
+            Card(Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Teilende App", fontWeight = FontWeight.SemiBold)
+                    Text(
+                        "Optional. Wähle eine installierte App und ob geteilte Inhalte von dieser App stammen sollen oder nicht.",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        RadioButton(
+                            selected = !sourceAppNegated,
+                            onClick = { sourceAppNegated = false }
+                        )
+                        Text("Ist")
+                        Spacer(Modifier.width(12.dp))
+                        RadioButton(
+                            selected = sourceAppNegated,
+                            onClick = { sourceAppNegated = true }
+                        )
+                        Text("Ist nicht")
+                    }
+                    OutlinedButton(
+                        onClick = { sourceAppMenu = true },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            activeAppMatcher?.friendlyText
+                                ?.substringAfter("Teilende App ")
+                                ?.ifBlank { null }
+                                ?: "App auswählen"
+                        )
+                    }
+                    DropdownMenu(expanded = sourceAppMenu, onDismissRequest = { sourceAppMenu = false }) {
+                        sourceApps.forEach { app ->
+                            DropdownMenuItem(
+                                text = {
+                                    Column {
+                                        Text(app.label)
+                                        Text(app.packageName, style = MaterialTheme.typography.bodySmall)
+                                    }
+                                },
+                                onClick = {
+                                    val join = activeAppMatcher?.join ?: MatcherJoin.AND
+                                    matchers.removeAll { it.variableKey == "source_package" }
+                                    matchers += MatcherRule(
+                                        regex = Regex.escape(app.packageName),
+                                        ignoreCase = false,
+                                        friendlyText = "Teilende App " +
+                                            (if (sourceAppNegated) "ist nicht " else "ist ") +
+                                            app.label,
+                                        variableKey = "source_package",
+                                        join = join,
+                                        valueMode = MatcherValueMode.REGEX,
+                                        negate = sourceAppNegated
+                                    )
+                                    sourceAppMenu = false
+                                }
+                            )
+                        }
+                    }
+                    if (activeAppMatcher != null) {
+                        TextButton(onClick = { matchers.remove(activeAppMatcher) }) {
+                            Text("App-Filter entfernen")
+                        }
+                    }
+                }
+            }
+        }
+
+        if (sample != null) {
+            if (sample.fileName.isNotBlank()) {
+                item {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        val fileActive = matchers.any { it.variableKey == "file_name" && it.regex == Regex.escape(sample.fileName) }
+                        FilterChip(
+                            selected = fileActive,
+                            onClick = {
+                                if (fileActive) matchers.removeAll { it.variableKey == "file_name" && it.regex == Regex.escape(sample.fileName) }
+                                else matchers += MatcherRule(
+                                    regex = Regex.escape(sample.fileName),
+                                    friendlyText = "Dateiname ${sample.fileName}",
+                                    variableKey = "file_name"
+                                )
+                            },
+                            label = { Text("Datei: ${sample.fileName.take(32)}") }
+                        )
+                        val mimeActive = matchers.any { it.variableKey == "mime_type" && it.regex == Regex.escape(sample.mimeType) }
+                        FilterChip(
+                            selected = mimeActive,
+                            onClick = {
+                                if (mimeActive) matchers.removeAll { it.variableKey == "mime_type" && it.regex == Regex.escape(sample.mimeType) }
+                                else matchers += MatcherRule(
+                                    regex = Regex.escape(sample.mimeType),
+                                    friendlyText = "Dateityp ${sample.mimeType}",
+                                    variableKey = "mime_type"
+                                )
+                            },
+                            label = { Text(sample.mimeType) }
+                        )
+                    }
+                }
+            }
+            if (sample.subject.isNotBlank()) {
+                item {
+                    SelectionSourceCard(
+                        title = "Betreff",
+                        fixedText = sample.subject,
+                        value = subjectSelection,
+                        source = InputSource.SUBJECT,
+                        extractors = extractors,
+                        onValueChange = { subjectSelection = it.copy(text = sample.subject) },
+                        onVariable = {
+                            val s = subjectSelection.selection
+                            if (!s.collapsed) {
+                                variableName = "field${extractors.size + 1}"
+                                pendingSelection = SelectionDraft(sample.subject, s.start, s.end, InputSource.SUBJECT)
+                            }
+                        },
+                        onMatcher = { addMatcherSelection(sample.subject, subjectSelection.selection) }
+                    )
+                }
+            }
+            item {
+                SelectionSourceCard(
+                    title = if (sample.fileName.isBlank()) "Nachrichtentext" else "Dateiinhalt",
+                    fixedText = sample.text,
+                    value = bodySelection,
+                    source = InputSource.TEXT,
+                    extractors = extractors,
+                    onValueChange = { bodySelection = it.copy(text = sample.text) },
+                    onVariable = {
+                        val s = bodySelection.selection
+                        if (!s.collapsed) {
+                            variableName = "field${extractors.size + 1}"
+                            pendingSelection = SelectionDraft(sample.text, s.start, s.end, InputSource.TEXT)
+                        }
+                    },
+                    onMatcher = { addMatcherSelection(sample.text, bodySelection.selection) }
+                )
+            }
+            item { Text("Automatische Vorschläge", style = MaterialTheme.typography.labelLarge) }
+            item {
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    items(GuidedRuleFactory.suggestedMatchers(sample)) { suggestion ->
+                        val regex = Regex.escape(suggestion)
+                        val active = matchers.any { it.variableKey.isBlank() && it.regex == regex }
+                        FilterChip(
+                            selected = active,
+                            onClick = {
+                                if (active) matchers.removeAll { it.variableKey.isBlank() && it.regex == regex }
+                                else matchers += GuidedRuleFactory.matcherFromText(suggestion)
+                            },
+                            label = { Text(suggestion.take(36)) }
+                        )
+                    }
+                }
+            }
+        }
+
+        if (extractors.any { it.key.isNotBlank() }) {
+            item {
+                Card(Modifier.fillMaxWidth()) {
+                    Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.fillMaxWidth().clickable { variableMatcherExpanded = !variableMatcherExpanded }
+                        ) {
+                            Column(Modifier.weight(1f)) {
+                                Text("Variablen als Profilmerkmal", fontWeight = FontWeight.SemiBold)
+                                Text(
+                                    "Wähle bei Bedarf eine oder mehrere Variablen und lege fest, was geprüft werden soll.",
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                            }
+                            Icon(
+                                if (variableMatcherExpanded) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore,
+                                null
+                            )
+                        }
+                        if (variableMatcherExpanded) {
+                            Text("Variablen auswählen", fontWeight = FontWeight.SemiBold)
+                            LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                items(extractors.filter { it.key.isNotBlank() }, key = { it.id }) { rule ->
+                                    val selected = rule.key in selectedMatcherVariables
+                                    FilterChip(
+                                        selected = selected,
+                                        onClick = {
+                                            if (selected) selectedMatcherVariables.remove(rule.key)
+                                            else selectedMatcherVariables.add(rule.key)
+                                        },
+                                        label = { Text(variableLabel(rule.key)) }
+                                    )
+                                }
+                            }
+
+                            Text("Prüfung", fontWeight = FontWeight.SemiBold)
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                RadioButton(variableMatcherMode == MatcherValueMode.EMPTY, { variableMatcherMode = MatcherValueMode.EMPTY })
+                                Text("Ist leer")
+                            }
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                RadioButton(variableMatcherMode == MatcherValueMode.NOT_EMPTY, { variableMatcherMode = MatcherValueMode.NOT_EMPTY })
+                                Text("Ist nicht leer")
+                            }
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                RadioButton(variableMatcherMode == MatcherValueMode.REGEX, { variableMatcherMode = MatcherValueMode.REGEX })
+                                Text("Inhalt prüfen")
+                            }
+
+                            if (variableMatcherMode == MatcherValueMode.REGEX) {
+                                Text(
+                                    "Du musst keinen Regex schreiben. Wähle zuerst die Art der Prüfung und gib anschließend nur den Vergleichswert ein.",
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                                LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    item { FilterChip(matcherPatternKind == "contains", { matcherPatternKind = "contains" }, label = { Text("Enthält") }) }
+                                    item { FilterChip(matcherPatternKind == "starts", { matcherPatternKind = "starts" }, label = { Text("Beginnt mit") }) }
+                                    item { FilterChip(matcherPatternKind == "ends", { matcherPatternKind = "ends" }, label = { Text("Endet mit") }) }
+                                    item { FilterChip(matcherPatternKind == "exact", { matcherPatternKind = "exact" }, label = { Text("Exakt") }) }
+                                    item { FilterChip(matcherPatternKind == "digits", { matcherPatternKind = "digits" }, label = { Text("Nur Ziffern") }) }
+                                    item { FilterChip(matcherPatternKind == "digit_count", { matcherPatternKind = "digit_count" }, label = { Text("Anzahl Ziffern") }) }
+                                    item { FilterChip(matcherPatternKind == "custom", { matcherPatternKind = "custom" }, label = { Text("Eigener Regex") }) }
+                                }
+                                if (matcherPatternKind != "digits") {
+                                    OutlinedTextField(
+                                        value = matcherPatternValue,
+                                        onValueChange = { matcherPatternValue = it },
+                                        label = {
+                                            Text(
+                                                if (matcherPatternKind == "digit_count") "Anzahl der Ziffern"
+                                                else if (matcherPatternKind == "custom") "Regex"
+                                                else "Vergleichswert"
+                                            )
+                                        },
+                                        supportingText = {
+                                            Text(
+                                                when (matcherPatternKind) {
+                                                    "contains" -> "Beispiel: ABC findet jeden Inhalt, der ABC enthält."
+                                                    "starts" -> "Der Inhalt muss mit diesem Text beginnen."
+                                                    "ends" -> "Der Inhalt muss mit diesem Text enden."
+                                                    "exact" -> "Der komplette Inhalt muss exakt übereinstimmen."
+                                                    "digit_count" -> "Beispiel: 5 für eine fünfstellige PLZ."
+                                                    "custom" -> "Für Sonderfälle. Regex wird vor dem Speichern geprüft."
+                                                    else -> ""
+                                                }
+                                            )
+                                        },
+                                        modifier = Modifier.fillMaxWidth(),
+                                        singleLine = matcherPatternKind != "custom"
+                                    )
+                                }
+                            }
+
+                            Button(
+                                onClick = {
+                                    val regex = when (matcherPatternKind) {
+                                        "contains" -> Regex.escape(matcherPatternValue)
+                                        "starts" -> "^" + Regex.escape(matcherPatternValue)
+                                        "ends" -> Regex.escape(matcherPatternValue) + "$"
+                                        "exact" -> "^" + Regex.escape(matcherPatternValue) + "$"
+                                        "digits" -> "^\\d+$"
+                                        "digit_count" -> matcherPatternValue.toIntOrNull()?.takeIf { it in 1..50 }?.let { "^\\d{" + it + "}$" }.orEmpty()
+                                        "custom" -> matcherPatternValue
+                                        else -> ""
+                                    }
+                                    val validRegex = variableMatcherMode != MatcherValueMode.REGEX ||
+                                        (regex.isNotBlank() && runCatching { Regex(regex) }.isSuccess)
+                                    if (selectedMatcherVariables.isNotEmpty() && validRegex) {
+                                        selectedMatcherVariables.toList().forEach { key ->
+                                            val oldJoin = matchers.firstOrNull { it.variableKey == key }?.join ?: MatcherJoin.AND
+                                            matchers.removeAll { it.variableKey == key }
+                                            val text = when (variableMatcherMode) {
+                                                MatcherValueMode.EMPTY -> key + " ist leer"
+                                                MatcherValueMode.NOT_EMPTY -> key + " ist nicht leer"
+                                                MatcherValueMode.REGEX -> key + " erfüllt die Inhaltsprüfung"
+                                            }
+                                            matchers += MatcherRule(
+                                                regex = if (variableMatcherMode == MatcherValueMode.REGEX) regex else "",
+                                                ignoreCase = true,
+                                                friendlyText = text,
+                                                variableKey = key,
+                                                join = oldJoin,
+                                                valueMode = variableMatcherMode
+                                            )
+                                        }
+                                        selectedMatcherVariables.clear()
+                                    } else if (!validRegex) {
+                                        validationMessage = "Die gewählte Inhaltsprüfung ist noch unvollständig oder der Regex ist ungültig."
+                                    }
+                                },
+                                enabled = selectedMatcherVariables.isNotEmpty(),
+                                modifier = Modifier.fillMaxWidth()
+                            ) { Text("Prüfung übernehmen") }
+                        }
+                    }
+                }
+            }
+        }
+
+        if (matchers.isNotEmpty()) {
+            item { Text("Aktive Merkmale", style = MaterialTheme.typography.labelLarge) }
+            itemsIndexed(matchers, key = { index, matcher -> matcher.variableKey + "-" + matcher.regex + "-" + matcher.valueMode + "-" + index }) { index, matcher ->
+                Card(Modifier.fillMaxWidth()) {
+                    Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                        if (index > 0) {
+                            OutlinedButton(
+                                onClick = {
+                                    val currentIndex = matchers.indexOf(matcher)
+                                    if (currentIndex >= 0) {
+                                        matchers[currentIndex] = matcher.copy(
+                                            join = if (matcher.join == MatcherJoin.AND) MatcherJoin.OR else MatcherJoin.AND
+                                        )
+                                    }
+                                }
+                            ) { Text(if (matcher.join == MatcherJoin.AND) "UND" else "ODER") }
+                            Spacer(Modifier.width(8.dp))
+                        }
+                        Text(matcher.friendlyText.ifBlank { matcher.regex }, modifier = Modifier.weight(1f))
+                        IconButton(onClick = { matchers.remove(matcher) }) {
+                            Icon(Icons.Outlined.Delete, "Merkmal entfernen")
+                        }
+                    }
+                }
+            }
+        } else {
+            item { Text("Noch kein Merkmal. Ohne Merkmale dient dieses Profil nur als Fallback.", style = MaterialTheme.typography.bodySmall) }
+        }
+        item {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                OutlinedTextField(
+                    value = customMatcher,
+                    onValueChange = { customMatcher = it },
+                    label = { Text("Fester Text als Merkmal") },
+                    modifier = Modifier.weight(1f),
+                    singleLine = true
+                )
+                Spacer(Modifier.width(8.dp))
+                Button(onClick = {
+                    if (customMatcher.isNotBlank()) {
+                        matchers += GuidedRuleFactory.matcherFromText(customMatcher)
+                        customMatcher = ""
+                    }
+                }) { Text("Hinzufügen") }
+            }
+        }
+
+        if (sample != null) {
+            item {
+                EditorSectionHeader(
+                    "Variablen aus dem Beispiel",
+                    Modifier.bringIntoViewRequester(exampleAnchor)
+                )
+            }
+            item { Text("Markiere einen veränderlichen Wert oben und tippe auf „Als Variable“. Bereits definierte Variablen werden im Beispiel farbig markiert. Beispielwerte lassen sich kopieren und anschließend in Umwandlungen verwenden.") }
+            items(GuidedRuleFactory.candidates(sample).filter { it.source == InputSource.TEXT }.take(30)) { candidate ->
+                Card(Modifier.fillMaxWidth()) {
+                    Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text(candidate.label, fontWeight = FontWeight.SemiBold)
+                            Text(
+                                candidate.value,
+                                style = MaterialTheme.typography.bodySmall,
+                                modifier = Modifier.clickable { clipboard.setText(AnnotatedString(candidate.value)) }
+                            )
+                        }
+                        IconButton(onClick = { clipboard.setText(AnnotatedString(candidate.value)) }) {
+                            Icon(Icons.Outlined.ContentCopy, "Beispielwert kopieren")
+                        }
+                        OutlinedButton(onClick = {
+                            variableName = if (candidate.suggestedKey in reservedVariables) "${candidate.suggestedKey}_part" else candidate.suggestedKey
+                            pendingCandidate = candidate
+                        }) { Text("Variable") }
+                    }
+                }
+            }
+        }
+
+        item {
+            Card(Modifier.fillMaxWidth().bringIntoViewRequester(variablesAnchor)) {
+                Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                    SectionTitle("Variablen", Modifier.weight(1f))
+                    TextButton(onClick = {
+                        applyExtractor(ExtractorRule(key = "", regex = "(.+)", required = false))
+                    }) {
+                        Icon(Icons.Outlined.Add, null)
+                        Text("Manuell")
+                    }
+                }
+            }
+        }
+        items(extractors, key = { it.id }) { rule ->
+            val index = extractors.indexOfFirst { it.id == rule.id }
+            val previewRules = if (index >= 0) extractors.take(index + 1) else listOf(rule)
+            val availableSourceVariables = buildList {
+                addAll(reservedVariables)
+                if (index > 0) addAll(extractors.take(index).map { it.key }.filter { it.isNotBlank() })
+            }.distinct()
+            ExtractorCard(
+                rule = rule,
+                sample = sample,
+                parser = parser,
+                parseDirection = parseDirection,
+                previewRules = previewRules,
+                availableSourceVariables = availableSourceVariables,
+                highlighted = highlightField == rule.key,
+                advanced = advanced,
+                onChange = { changed ->
+                    if (index >= 0) applyExtractor(changed, index)
+                },
+                onSplit = { keys, separator ->
+                    if (index >= 0 && rule.key.isNotBlank() && keys.size >= 2) {
+                        val splitRegex = if (separator.isBlank()) {
+                            buildString {
+                                append("^\\s*")
+                                keys.indices.forEach { childIndex ->
+                                    if (childIndex == keys.lastIndex) append("(.+?)\\s*$")
+                                    else append("(\\S+)\\s+")
+                                }
+                            }
+                        } else {
+                            val escaped = Regex.escape(separator)
+                            buildString {
+                                append("^\\s*")
+                                keys.indices.forEach { childIndex ->
+                                    if (childIndex == keys.lastIndex) append("(.+?)\\s*$")
+                                    else append("(.*?)\\s*").append(escaped).append("\\s*")
+                                }
+                            }
+                        }
+                        keys.forEachIndexed { childIndex, key ->
+                            applyExtractor(
+                                ExtractorRule(
+                                    key = key,
+                                    regex = splitRegex,
+                                    group = childIndex + 1,
+                                    required = rule.required,
+                                    sourceVariableKey = rule.key,
+                                    transforms = listOf(ValueTransform.Trim)
                                 )
                             )
-                        }.onFailure { validationMessage = "Teilen fehlgeschlagen: ${it.message}" }
-                    },
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Icon(Icons.Outlined.Share, null)
-                    Spacer(Modifier.width(4.dp))
-                    Text("Teilen")
+                        }
+                    }
+                },
+                onDelete = {
+                    if (index >= 0) {
+                        val key = extractors[index].key
+                        extractors.removeAt(index)
+                        matchers.removeAll { it.variableKey == key }
+                        for (i in extractors.indices) {
+                            if (extractors[i].sourceVariableKey == key) {
+                                extractors[i] = extractors[i].copy(sourceVariableKey = "")
+                            }
+                        }
+                    }
                 }
+            )
+        }
+
+        item {
+            Card(Modifier.fillMaxWidth().bringIntoViewRequester(actionsAnchor)) {
+                Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                    SectionTitle("Weiterverarbeitung", Modifier.weight(1f))
+                    Column {
+                    TextButton(onClick = { addActionMenu = true }) {
+                        Icon(Icons.Outlined.Add, null)
+                        Text("Aktion")
+                    }
+                    DropdownMenu(expanded = addActionMenu, onDismissRequest = { addActionMenu = false }) {
+                        DropdownMenuItem(text = { Text("Kalendereintrag") }, onClick = { actions += defaultCalendarAction(); addActionMenu = false })
+                        DropdownMenuItem(text = { Text("URL öffnen") }, onClick = { actions += defaultUrlAction(); addActionMenu = false })
+                        DropdownMenuItem(text = { Text("Text oder Textdatei") }, onClick = { actions += defaultShareAction(); addActionMenu = false })
+                        DropdownMenuItem(text = { Text("Webhook") }, onClick = { actions += defaultWebhookAction(); addActionMenu = false })
+                    }
+                    }
+                }
+            }
+        }
+        val variables = listOf("subject", "text", "input", "source_app", "source_package", "file_name", "mime_type") + extractors.map { it.key }.filter { it.isNotBlank() }
+        items(actions, key = { it.id }) { action ->
+            val index = actions.indexOfFirst { it.id == action.id }
+            ActionEditorCard(
+                action = action,
+                variables = variables,
+                highlighted = highlightField?.startsWith(actionHighlightPrefix(action)) == true || highlightField == action.id,
+                canMoveUp = index > 0,
+                canMoveDown = index >= 0 && index < actions.lastIndex,
+                onMoveUp = {
+                    if (index > 0) {
+                        val previous = actions[index - 1]
+                        actions[index - 1] = actions[index]
+                        actions[index] = previous
+                    }
+                },
+                onMoveDown = {
+                    if (index >= 0 && index < actions.lastIndex) {
+                        val next = actions[index + 1]
+                        actions[index + 1] = actions[index]
+                        actions[index] = next
+                    }
+                },
+                onChange = { changed -> if (index >= 0) actions[index] = changed },
+                onDelete = { if (index >= 0) actions.removeAt(index) }
+            )
+        }
+
+        item { HorizontalDivider() }
+        item {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Switch(advanced, { advanced = it })
+                Spacer(Modifier.width(10.dp))
+                Column {
+                    Text("Erweiterter Modus")
+                    Text("Zeigt Regex-Details und erlaubt direkte Bearbeitung des Profil-JSON.", style = MaterialTheme.typography.bodySmall)
+                }
+            }
+        }
+        if (advanced) {
+            item {
+                OutlinedTextField(
+                    value = advancedJson,
+                    onValueChange = { advancedJson = it },
+                    label = { Text("Profil-JSON") },
+                    modifier = Modifier.fillMaxWidth(),
+                    minLines = 10
+                )
+            }
+            item {
                 OutlinedButton(
                     onClick = {
-                        pendingExport = repository.export(buildProfile())
-                        exportLauncher.launch("${safeFileName(name.ifBlank { "shareparser-profile" })}.json")
+                        runCatching {
+                            val decoded = repository.decodeBundle(advancedJson).copy(id = profileId)
+                            validate(decoded)?.let { error(it) }
+                            restoreProfile(decoded)
+                        }.onSuccess {
+                            validationMessage = "JSON übernommen. Speichere das Profil, um die Änderungen anzuwenden."
+                        }.onFailure { validationMessage = "JSON konnte nicht angewendet werden: ${it.message}" }
                     },
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Icon(Icons.Outlined.Download, null)
-                    Spacer(Modifier.width(4.dp))
-                    Text("Speichern")
+                    modifier = Modifier.fillMaxWidth()
+                ) { Text("JSON anwenden") }
+            }
+        }
+
+        validationMessage?.let { message -> item { Text(message, color = MaterialTheme.colorScheme.error) } }
+        item {
+            Button(
+                onClick = {
+                    val profile = buildProfile()
+                    val error = validate(profile)
+                    if (error == null) {
+                        repository.save(profile)
+                        onSaved()
+                    } else validationMessage = error
+                },
+                modifier = Modifier.fillMaxWidth()
+            ) { Text("Profil speichern") }
+        }
+        item {
+            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                item {
+                    AssistChip(
+                        onClick = { clipboard.setText(AnnotatedString(repository.export(buildProfile()))) },
+                        label = { Text("JSON kopieren") },
+                        leadingIcon = { Icon(Icons.Outlined.ContentCopy, null) }
+                    )
+                }
+                item {
+                    AssistChip(
+                        onClick = {
+                            val json = repository.export(buildProfile())
+                            runCatching {
+                                context.startActivity(
+                                    Intent.createChooser(
+                                        Intent(Intent.ACTION_SEND).apply {
+                                            type = "application/json"
+                                            putExtra(Intent.EXTRA_TEXT, json)
+                                            putExtra(Intent.EXTRA_SUBJECT, "ShareParser Profil: ${name.ifBlank { "Profil" }}")
+                                        },
+                                        "Profil teilen"
+                                    )
+                                )
+                            }.onFailure { validationMessage = "Teilen fehlgeschlagen: ${it.message}" }
+                        },
+                        label = { Text("Teilen") },
+                        leadingIcon = { Icon(Icons.Outlined.Share, null) }
+                    )
+                }
+                item {
+                    AssistChip(
+                        onClick = {
+                            pendingExport = repository.export(buildProfile())
+                            exportLauncher.launch("${safeFileName(name.ifBlank { "shareparser-profile" })}.json")
+                        },
+                        label = { Text("Speichern") },
+                        leadingIcon = { Icon(Icons.Outlined.Download, null) }
+                    )
                 }
             }
         }
         if (existing != null) {
             item {
-                TextButton(onClick = { showDeleteDialog = true }, modifier = Modifier.fillMaxWidth()) {
+                TextButton(onClick = { repository.delete(existing.id); onDeleted() }, modifier = Modifier.fillMaxWidth()) {
                     Icon(Icons.Outlined.Delete, null)
                     Text("Profil löschen")
                 }
