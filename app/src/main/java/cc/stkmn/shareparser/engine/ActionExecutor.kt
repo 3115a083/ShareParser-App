@@ -329,7 +329,7 @@ class ActionExecutor(context: Context, private val settings: AppSettings = AppSe
     private fun shareText(action: ProcessingAction.Share, values: Map<String, String>): ExecutionResult {
         val text = TemplateEngine.render(action.textTemplate, values)
         val subject = if (action.subjectTemplate.isBlank()) "" else TemplateEngine.render(action.subjectTemplate, values)
-        val mimeType = action.mimeType.ifBlank { "text/plain" }
+        val mimeType = "text/plain"
         if (!action.asFile) {
             val intent = Intent(Intent.ACTION_SEND).apply {
                 type = mimeType
@@ -348,7 +348,13 @@ class ActionExecutor(context: Context, private val settings: AppSettings = AppSe
             field = "share.fileName",
             label = "Dateiname"
         )
-        val fileName = resolveFileName(action, renderedName)
+        val baseFileName = resolveFileName(action, renderedName)
+        val extension = normalizeExtension(action.fileExtension)
+        val fileName = ensureExtension(baseFileName, extension)
+        val fileType = textMimeForExtension(extension)
+        val fileWarnings = if (fileType.supported) emptyList() else listOf(
+            "Die Dateiendung '.$extension' ist kein bekanntes Textformat. ShareParser speichert den Inhalt trotzdem als Textdatei mit dieser Endung."
+        )
         val renderedPath = if (action.relativePathTemplate.isBlank()) {
             ""
         } else {
@@ -367,7 +373,7 @@ class ActionExecutor(context: Context, private val settings: AppSettings = AppSe
                 val file = writeTemporaryFile(fileName, text)
                 val uri = shareUri(file)
                 val intent = Intent(Intent.ACTION_SEND).apply {
-                    type = mimeType
+                    type = fileType.mimeType
                     putExtra(Intent.EXTRA_STREAM, uri)
                     putExtra(Intent.EXTRA_TEXT, text)
                     if (subject.isNotBlank()) putExtra(Intent.EXTRA_SUBJECT, subject)
@@ -375,24 +381,58 @@ class ActionExecutor(context: Context, private val settings: AppSettings = AppSe
                     addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                 }
                 launch(Intent.createChooser(intent, action.friendlyName), "share.file", "Datei konnte nicht geteilt werden")
-                ExecutionResult()
+                ExecutionResult(fileWarnings)
             }
             TextFileMode.OPEN -> {
                 val file = writeTemporaryFile(fileName, text)
                 val uri = shareUri(file)
                 launch(
                     Intent(Intent.ACTION_VIEW).apply {
-                        setDataAndType(uri, mimeType)
+                        setDataAndType(uri, fileType.mimeType)
                         clipData = ClipData.newUri(appContext.contentResolver, fileName, uri)
                         addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                     },
                     "share.file",
                     "Datei konnte nicht geöffnet werden"
                 )
-                ExecutionResult()
+                ExecutionResult(fileWarnings)
             }
-            TextFileMode.SAVE -> saveTextFile(fileName, relativePath, mimeType, text)
+            TextFileMode.SAVE -> {
+                val result = saveTextFile(fileName, relativePath, fileType.mimeType, text)
+                result.copy(warnings = (fileWarnings + result.warnings).distinct())
+            }
         }
+    }
+
+    private data class TextFileType(val mimeType: String, val supported: Boolean)
+
+    private fun normalizeExtension(value: String): String = value
+        .trim()
+        .removePrefix(".")
+        .lowercase(Locale.ROOT)
+        .replace(Regex("[^a-z0-9]+"), "")
+        .ifBlank { "txt" }
+        .take(12)
+
+    private fun ensureExtension(fileName: String, extension: String): String {
+        val suffix = "." + extension
+        return if (fileName.endsWith(suffix, ignoreCase = true)) fileName else fileName.trimEnd('.') + suffix
+    }
+
+    private fun textMimeForExtension(extension: String): TextFileType = when (extension) {
+        "txt", "log", "ini", "conf", "cfg" -> TextFileType("text/plain", true)
+        "md", "markdown" -> TextFileType("text/markdown", true)
+        "html", "htm" -> TextFileType("text/html", true)
+        "csv" -> TextFileType("text/csv", true)
+        "tsv" -> TextFileType("text/tab-separated-values", true)
+        "json" -> TextFileType("application/json", true)
+        "xml" -> TextFileType("application/xml", true)
+        "yaml", "yml" -> TextFileType("application/yaml", true)
+        "css" -> TextFileType("text/css", true)
+        "js", "mjs" -> TextFileType("text/javascript", true)
+        "ics" -> TextFileType("text/calendar", true)
+        "sql", "kt", "java", "py", "sh" -> TextFileType("text/plain", true)
+        else -> TextFileType("text/plain", false)
     }
 
     private fun sendWebhook(action: ProcessingAction.Webhook, values: Map<String, String>): ExecutionResult {
