@@ -52,16 +52,29 @@ internal fun rememberVariableHighlighting(
                 val range = group.range
                 if (range.first < 0 || range.last < range.first || range.last >= text.length) return@forEach
                 val length = range.last - range.first + 1
-                val expected = rule.sampleLabel.length
+                val sample = rule.sampleLabel.trim()
+                val expected = sample.length
                 val suspiciouslyLarge = length > 1000 ||
                     (expected > 0 && length > maxOf(expected * 4, expected + 80))
-                if (suspiciouslyLarge) return@forEach
-                if (occupied.any { it.first <= range.last && range.first <= it.last }) return@forEach
-                occupied += range
+                val highlightRange = if (suspiciouslyLarge && sample.isNotBlank()) {
+                    val groupText = text.text.substring(range.first, range.last + 1)
+                    val local = groupText.indexOf(sample)
+                    if (local >= 0) {
+                        val start = range.first + local
+                        start until (start + sample.length)
+                    } else {
+                        null
+                    }
+                } else {
+                    range
+                } ?: return@forEach
+                if (highlightRange.first < 0 || highlightRange.last >= text.length) return@forEach
+                if (occupied.any { it.first <= highlightRange.last && highlightRange.first <= it.last }) return@forEach
+                occupied += highlightRange
                 builder.addStyle(
                     SpanStyle(background = color, fontWeight = FontWeight.SemiBold),
-                    range.first,
-                    range.last + 1
+                    highlightRange.first,
+                    highlightRange.last + 1
                 )
             }
         }
