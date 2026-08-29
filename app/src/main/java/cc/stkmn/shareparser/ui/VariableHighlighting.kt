@@ -47,7 +47,8 @@ internal fun rememberVariableHighlighting(
             }.getOrDefault(emptyList())
 
             matches.forEach { match ->
-                val group = match.groups.getOrNull(rule.group) ?: return@forEach
+                val group = if (rule.group in 0 until match.groups.size) match.groups[rule.group] else null
+                if (group == null) return@forEach
                 val range = group.range
                 if (range.first < 0 || range.last < range.first || range.last >= text.length) return@forEach
                 if (occupied.any { it.first <= range.last && range.first <= it.last }) return@forEach
