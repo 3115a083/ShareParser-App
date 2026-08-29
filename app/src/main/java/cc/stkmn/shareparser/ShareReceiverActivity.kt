@@ -42,7 +42,13 @@ class ShareReceiverActivity : ComponentActivity() {
 
         val coordinator = ShareCoordinator(this)
         val matches = coordinator.matchingProfiles(payload)
+        coordinator.executeAlwaysWebhooks(payload, matches)
         val choices = coordinator.choices(payload)
+
+        if (matches.isNotEmpty() && choices.isEmpty()) {
+            finish()
+            return
+        }
 
         if (matches.size == 1 && choices.size == 1) {
             coordinator.execute(payload, matches.first(), matches.first().actions.first())
@@ -51,7 +57,7 @@ class ShareReceiverActivity : ComponentActivity() {
         }
 
         val pending = pendingStore.put(payload)
-        if (matches.isEmpty() || choices.isEmpty()) {
+        if (matches.isEmpty()) {
             openApp(pending.id)
             finish()
             return
