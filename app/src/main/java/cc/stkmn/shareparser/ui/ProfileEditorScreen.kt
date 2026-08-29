@@ -5,6 +5,7 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -52,11 +53,13 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
@@ -109,6 +112,7 @@ private val reservedVariables = setOf(
     "mime_type"
 )
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 internal fun ProfileEditorScreen(
     existing: Profile?,
@@ -552,39 +556,66 @@ internal fun ProfileEditorScreen(
         recognitionEndIndex
     }
     val actionsIndex = variablesIndex + 1 + extractors.size
+    val activeEditorSection by remember(
+        editorListState,
+        recognitionIndex,
+        exampleIndex,
+        variablesIndex,
+        actionsIndex,
+        sample
+    ) {
+        derivedStateOf {
+            val visible = editorListState.firstVisibleItemIndex
+            when {
+                visible >= actionsIndex -> "actions"
+                visible >= variablesIndex -> "variables"
+                sample != null && visible >= exampleIndex -> "example"
+                else -> "recognition"
+            }
+        }
+    }
 
     LazyColumn(
         state = editorListState,
         contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
-        item {
-            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                item {
-                    AssistChip(
-                        onClick = { navigationScope.launch { editorListState.animateScrollToItem(recognitionIndex) } },
-                        label = { Text("Profil erkennen") }
-                    )
-                }
-                if (sample != null) {
+        stickyHeader {
+            Surface(tonalElevation = 3.dp) {
+                LazyRow(
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
                     item {
-                        AssistChip(
-                            onClick = { navigationScope.launch { editorListState.animateScrollToItem(exampleIndex) } },
-                            label = { Text("Variablen aus Beispiel") }
+                        FilterChip(
+                            selected = activeEditorSection == "recognition",
+                            onClick = { navigationScope.launch { editorListState.animateScrollToItem(recognitionIndex) } },
+                            label = { Text("Profil erkennen") }
                         )
                     }
-                }
-                item {
-                    AssistChip(
-                        onClick = { navigationScope.launch { editorListState.animateScrollToItem(variablesIndex) } },
-                        label = { Text("Variablen") }
-                    )
-                }
-                item {
-                    AssistChip(
-                        onClick = { navigationScope.launch { editorListState.animateScrollToItem(actionsIndex) } },
-                        label = { Text("Weiterverarbeitung") }
-                    )
+                    if (sample != null) {
+                        item {
+                            FilterChip(
+                                selected = activeEditorSection == "example",
+                                onClick = { navigationScope.launch { editorListState.animateScrollToItem(exampleIndex) } },
+                                label = { Text("Variablen aus Beispiel") }
+                            )
+                        }
+                    }
+                    item {
+                        FilterChip(
+                            selected = activeEditorSection == "variables",
+                            onClick = { navigationScope.launch { editorListState.animateScrollToItem(variablesIndex) } },
+                            label = { Text("Variablen") }
+                        )
+                    }
+                    item {
+                        FilterChip(
+                            selected = activeEditorSection == "actions",
+                            onClick = { navigationScope.launch { editorListState.animateScrollToItem(actionsIndex) } },
+                            label = { Text("Weiterverarbeitung") }
+                        )
+                    }
                 }
             }
         }
