@@ -18,6 +18,11 @@ object GuidedRuleFactory {
         "(?i)(?:\\b(?:am|an der|auf der|unter den|zum|zur)\\s+)?[\\p{L}][\\p{L}.'’/-]*(?:straße|strasse|str\\.?|weg|allee|platz|gasse|ring|ufer|chaussee|damm|steig|stieg|pfad|promenade)\\s+\\d{1,5}[a-zA-Z]?(?:\\s*[-/]\\s*\\d{1,5}[a-zA-Z]?)?"
     )
     private val postalCity = Regex("(?<!\\d)\\d{5}\\s+[\\p{L}][\\p{L} .'-]{1,50}(?!\\d)")
+    private val webUrl = Regex("(?i)\\bhttps?://[^\\s<>\"']+")
+    private val mailTo = Regex("(?i)\\bmailto:[^\\s<>\"']+")
+    private val telLink = Regex("(?i)\\btel:[+0-9()./ -]{5,}")
+    private val plainEmail = Regex("(?i)(?<![\\w.+-])[A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z]{2,}(?![\\w.-])")
+    private val hrefTarget = Regex("(?i)href\\s*=\\s*[\"'](https?://[^\"']+|mailto:[^\"']+|tel:[^\"']+)[\"']")
 
     fun candidates(payload: SharedPayload): List<Candidate> = buildList {
         if (payload.subject.isNotBlank()) {
@@ -75,6 +80,35 @@ object GuidedRuleFactory {
                                 suggestedKey = "plz_ort"
                             )
                         )
+                    }
+                }
+
+                webUrl.findAll(line).forEach { match ->
+                    add(Candidate("Web-Link", match.value.trimEnd('.', ',', ';'), InputSource.TEXT, line, "link"))
+                }
+                mailTo.findAll(line).forEach { match ->
+                    add(Candidate("E-Mail-Link", match.value, InputSource.TEXT, line, "email"))
+                }
+                telLink.findAll(line).forEach { match ->
+                    add(Candidate("Telefon-Link", match.value.trim(), InputSource.TEXT, line, "telefon"))
+                }
+                plainEmail.findAll(line).forEach { match ->
+                    add(Candidate("E-Mail-Adresse", match.value, InputSource.TEXT, line, "email"))
+                }
+                hrefTarget.findAll(line).forEach { match ->
+                    val target = match.groups[1]?.value.orEmpty()
+                    if (target.isNotBlank()) {
+                        val label = when {
+                            target.startsWith("mailto:", true) -> "E-Mail-Link"
+                            target.startsWith("tel:", true) -> "Telefon-Link"
+                            else -> "Web-Link"
+                        }
+                        val key = when {
+                            target.startsWith("mailto:", true) -> "email"
+                            target.startsWith("tel:", true) -> "telefon"
+                            else -> "link"
+                        }
+                        add(Candidate(label, target, InputSource.TEXT, line, key))
                     }
                 }
             }
@@ -145,8 +179,9 @@ object GuidedRuleFactory {
         val suffix = sourceText.substring(end, lineEnd)
         val selected = sourceText.substring(start, end)
 
+        val horizontalSpace = "[\\t\\p{Zs}]*"
         val regex = if (prefix.isBlank() && suffix.isBlank()) {
-            "(?m)^\\s*(.+?)\\s*$"
+            "(?m)^${horizontalSpace}(.+?)${horizontalSpace}$"
         } else {
             "(?m)^${flexibleLiteral(prefix)}(.+?)${flexibleLiteral(suffix)}$"
         }
@@ -205,9 +240,9 @@ object GuidedRuleFactory {
         // Mail and HTML content often contains Unicode separator characters such
         // as EN SPACE (U+2002) or non-breaking spaces. Treat all separators as
         // interchangeable whitespace so rules learned from one mail remain reusable.
-        return value.split(Regex("[\\s\\p{Z}]+"))
+        return value.split(Regex("[\\t\\p{Zs}]+"))
             .filter { it.isNotEmpty() }
-            .joinToString("[\\s\\p{Z}]+") { Regex.escape(it) }
+            .joinToString("[\\t\\p{Zs}]+") { Regex.escape(it) }
     }
 
     private fun suggestedKey(label: String, index: Int): String {
