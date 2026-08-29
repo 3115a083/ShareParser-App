@@ -26,7 +26,9 @@ import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Download
 import androidx.compose.material.icons.outlined.ErrorOutline
+import androidx.compose.material.icons.outlined.ExpandLess
 import androidx.compose.material.icons.outlined.ExpandMore
+import androidx.compose.material.icons.outlined.Undo
 import androidx.compose.material.icons.outlined.Fullscreen
 import androidx.compose.material.icons.outlined.FullscreenExit
 import androidx.compose.material.icons.outlined.Share
@@ -74,7 +76,9 @@ import cc.stkmn.shareparser.data.EditorModeStore
 import cc.stkmn.shareparser.data.EmptyValuePolicy
 import cc.stkmn.shareparser.data.ExtractorRule
 import cc.stkmn.shareparser.data.InputSource
+import cc.stkmn.shareparser.data.MatcherJoin
 import cc.stkmn.shareparser.data.MatcherRule
+import cc.stkmn.shareparser.data.MatcherValueMode
 import cc.stkmn.shareparser.data.ParseDirection
 import cc.stkmn.shareparser.data.ProcessingAction
 import cc.stkmn.shareparser.data.Profile
@@ -106,7 +110,11 @@ internal fun ProfileEditorScreen(
     highlightField: String?,
     repository: ProfileRepository,
     onSaved: () -> Unit,
-    onDeleted: () -> Unit
+    onDeleted: () -> Unit,
+    exitRequest: Int = 0,
+    onDirtyChanged: (Boolean) -> Unit = {},
+    onExitRequestHandled: () -> Unit = {},
+    onDiscarded: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val clipboard = LocalClipboardManager.current
@@ -119,16 +127,30 @@ internal fun ProfileEditorScreen(
         onDispose { editorModeStore.clear(profileId) }
     }
 
+    val initialActions = remember(existing?.id) {
+        existing?.actions?.takeIf { it.isNotEmpty() } ?: listOf(defaultCalendarAction())
+    }
     var name by remember(existing?.id) { mutableStateOf(existing?.name.orEmpty()) }
     var enabled by remember(existing?.id) { mutableStateOf(existing?.enabled ?: true) }
     var parseDirection by remember(existing?.id) { mutableStateOf(existing?.parseDirection ?: ParseDirection.TOP_DOWN) }
     val matchers = remember(existing?.id) { mutableStateListOf<MatcherRule>().apply { addAll(existing?.matchers.orEmpty()) } }
     val extractors = remember(existing?.id) { mutableStateListOf<ExtractorRule>().apply { addAll(existing?.extractors.orEmpty()) } }
-    val actions = remember(existing?.id) {
-        mutableStateListOf<ProcessingAction>().apply {
-            addAll(existing?.actions?.takeIf { it.isNotEmpty() } ?: listOf(defaultCalendarAction()))
-        }
+    val actions = remember(existing?.id) { mutableStateListOf<ProcessingAction>().apply { addAll(initialActions) } }
+    val initialProfile = remember(existing?.id, profileId) {
+        Profile(
+            id = profileId,
+            name = existing?.name.orEmpty().trim(),
+            enabled = existing?.enabled ?: true,
+            matchers = existing?.matchers.orEmpty(),
+            extractors = existing?.extractors.orEmpty(),
+            actions = initialActions,
+            parseDirection = existing?.parseDirection ?: ParseDirection.TOP_DOWN
+        )
     }
+    val undoStack = remember(existing?.id) { mutableStateListOf<Profile>() }
+    var lastObserved by remember(existing?.id) { mutableStateOf(initialProfile) }
+    var restoringUndo by remember(existing?.id) { mutableStateOf(false) }
+    var showExitDialog by remember(existing?.id) { mutableStateOf(false) }
 
     var advanced by remember { mutableStateOf(false) }
     var advancedJson by remember { mutableStateOf("") }
@@ -136,6 +158,11 @@ internal fun ProfileEditorScreen(
     var pendingExport by remember { mutableStateOf("") }
     var addActionMenu by remember { mutableStateOf(false) }
     var customMatcher by remember { mutableStateOf("") }
+    var variableMatcherExpanded by remember { mutableStateOf(false) }
+    val selectedMatcherVariables = remember { mutableStateListOf<String>() }
+    var variableMatcherMode by remember { mutableStateOf(MatcherValueMode.NOT_EMPTY) }
+    var matcherPatternKind by remember { mutableStateOf("contains") }
+    var matcherPatternValue by remember { mutableStateOf("") }
 
     var subjectSelection by remember(sample?.subject) { mutableStateOf(TextFieldValue(sample?.subject.orEmpty())) }
     var bodySelection by remember(sample?.text) { mutableStateOf(TextFieldValue(sample?.text.orEmpty())) }
@@ -162,6 +189,16 @@ internal fun ProfileEditorScreen(
         actions = actions.toList(),
         parseDirection = parseDirection
     )
+
+    fun restoreProfile(profile: Profile) {
+        restoringUndo = true
+        name = profile.name
+        enabled = profile.enabled
+        parseDirection = profile.parseDirection
+        matchers.clear(); matchers.addAll(profile.matchers)
+        extractors.clear(); extractors.addAll(profile.extractors)
+        actions.clear(); actions.addAll(profile.actions)
+    }
 
     fun validate(profile: Profile): String? {
         if (profile.name.isBlank()) return "Bitte einen Profilnamen eingeben."
@@ -230,6 +267,58 @@ internal fun ProfileEditorScreen(
     LaunchedEffect(advanced) {
         if (advanced) advancedJson = repository.export(buildProfile())
     }
+
+    val currentDraft = buildProfile()
+    LaunchedEffect(currentDraft) {
+        onDirtyChanged(currentDraft != initialProfile)
+        if (restoringUndo) {
+            restoringUndo = false
+            lastObserved = currentDraft
+        } else if (currentDraft != lastObserved) {
+            undoStack += lastObserved
+            while (undoStack.size > 60) undoStack.removeAt(0)
+            lastObserved = currentDraft
+        }
+    }
+
+    LaunchedEffect(exitRequest) {
+        if (exitRequest > 0) {
+            if (buildProfile() == initialProfile) onDiscarded() else showExitDialog = true
+            onExitRequestHandled()
+        }
+    }
+
+    if (showExitDialog) {
+        AlertDialog(
+            onDismissRequest = { showExitDialog = false },
+            title = { Text("Ungespeicherte Änderungen") },
+            text = { Text("Möchtest du die Änderungen am Profil anwenden oder verwerfen?") },
+            confirmButton = {
+                Button(onClick = {
+                    val profile = buildProfile()
+                    val error = validate(profile)
+                    if (error == null) {
+                        repository.save(profile)
+                        showExitDialog = false
+                        onSaved()
+                    } else {
+                        validationMessage = error
+                        showExitDialog = false
+                    }
+                }) { Text("Anwenden") }
+            },
+            dismissButton = {
+                Row {
+                    TextButton(onClick = { showExitDialog = false }) { Text("Abbrechen") }
+                    TextButton(onClick = {
+                        showExitDialog = false
+                        onDiscarded()
+                    }) { Text("Verwerfen") }
+                }
+            }
+        )
+    }
+
 
     pendingCandidate?.let { candidate ->
         VariableDialog(
