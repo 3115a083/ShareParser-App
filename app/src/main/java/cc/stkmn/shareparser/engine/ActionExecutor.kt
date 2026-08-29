@@ -349,7 +349,11 @@ class ActionExecutor(context: Context, private val settings: AppSettings = AppSe
             label = "Dateiname"
         )
         val baseFileName = resolveFileName(action, renderedName)
-        val extension = normalizeExtension(action.fileExtension)
+        val extension = if (action.fileExtension.isBlank()) {
+            inferLegacyExtension(baseFileName, action.mimeType)
+        } else {
+            normalizeExtension(action.fileExtension)
+        }
         val fileName = ensureExtension(baseFileName, extension)
         val fileType = textMimeForExtension(extension)
         val fileWarnings = if (fileType.supported) emptyList() else listOf(
@@ -405,6 +409,20 @@ class ActionExecutor(context: Context, private val settings: AppSettings = AppSe
     }
 
     private data class TextFileType(val mimeType: String, val supported: Boolean)
+
+    private fun inferLegacyExtension(fileName: String, mimeType: String): String {
+        val fromName = fileName.substringAfterLast('.', "").takeIf { it.isNotBlank() }?.let(::normalizeExtension)
+        if (fromName != null) return fromName
+        return when (mimeType.lowercase(Locale.ROOT)) {
+            "text/markdown" -> "md"
+            "text/html" -> "html"
+            "text/csv" -> "csv"
+            "application/json" -> "json"
+            "application/xml", "text/xml" -> "xml"
+            "application/yaml", "text/yaml" -> "yaml"
+            else -> "txt"
+        }
+    }
 
     private fun normalizeExtension(value: String): String = value
         .trim()
