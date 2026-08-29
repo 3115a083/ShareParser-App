@@ -15,6 +15,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import cc.stkmn.shareparser.AppLocale
@@ -23,12 +24,13 @@ import cc.stkmn.shareparser.data.ProfileRepository
 
 @Composable
 internal fun LanguageSettingsScreen(repository: ProfileRepository) {
+    val context = LocalContext.current
     var settings by remember { mutableStateOf(repository.settings()) }
 
     fun select(language: AppLanguage) {
         settings = settings.copy(appLanguage = language)
         repository.saveSettings(settings)
-        AppLocale.apply(androidx.compose.ui.platform.LocalContext.current, language)
+        AppLocale.apply(context, language)
     }
 
     LazyColumn(
