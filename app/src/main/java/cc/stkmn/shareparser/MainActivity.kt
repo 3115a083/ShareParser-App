@@ -9,7 +9,6 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
@@ -38,13 +37,13 @@ import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import cc.stkmn.shareparser.data.EditorModeStore
 import cc.stkmn.shareparser.data.PendingShareStore
@@ -128,6 +127,17 @@ private fun ShareParserApp(startIntent: Intent?, onIntentConsumed: () -> Unit) {
     var profiles by remember { mutableStateOf(repository.profiles()) }
     var screen by remember { mutableStateOf<Screen>(if (startIntent?.isFailureLink() == true) Screen.Failure else Screen.Home) }
     var importError by remember { mutableStateOf<String?>(null) }
+    var editorDirty by remember { mutableStateOf(false) }
+    var editorExitRequest by remember { mutableIntStateOf(0) }
+
+    fun requestBack() {
+        if (screen is Screen.Editor && editorDirty) {
+            editorExitRequest += 1
+        } else {
+            if (screen is Screen.Editor) editorMode.clear()
+            screen = previousScreen(screen)
+        }
+    }
 
     val importLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) {
@@ -171,8 +181,7 @@ private fun ShareParserApp(startIntent: Intent?, onIntentConsumed: () -> Unit) {
     }
 
     BackHandler(enabled = screen !is Screen.Home) {
-        if (screen is Screen.Editor) editorMode.clear()
-        screen = previousScreen(screen)
+        requestBack()
     }
 
     MaterialTheme(colorScheme = dynamicOrDefaultScheme()) {
@@ -181,10 +190,10 @@ private fun ShareParserApp(startIntent: Intent?, onIntentConsumed: () -> Unit) {
                 TopAppBar(
                     title = {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Image(
-                                painter = painterResource(R.drawable.ic_launcher_foreground),
+                            AppArtworkImage(
+                                assetPath = AppArtwork.FOREGROUND_ASSET,
                                 contentDescription = null,
-                                modifier = Modifier.size(42.dp)
+                                modifier = Modifier.size(50.dp)
                             )
                             Spacer(Modifier.width(10.dp))
                             Text(
@@ -201,10 +210,7 @@ private fun ShareParserApp(startIntent: Intent?, onIntentConsumed: () -> Unit) {
                     },
                     navigationIcon = {
                         if (screen !is Screen.Home) {
-                            IconButton(onClick = {
-                                if (screen is Screen.Editor) editorMode.clear()
-                                screen = previousScreen(screen)
-                            }) {
+                            IconButton(onClick = { requestBack() }) {
                                 Icon(Icons.Outlined.ArrowBack, "Zurück")
                             }
                         }
@@ -256,12 +262,22 @@ private fun ShareParserApp(startIntent: Intent?, onIntentConsumed: () -> Unit) {
                         repository = repository,
                         onSaved = {
                             editorMode.clear()
+                            editorDirty = false
                             profiles = repository.profiles()
                             screen = Screen.Home
                         },
                         onDeleted = {
                             editorMode.clear()
+                            editorDirty = false
                             profiles = repository.profiles()
+                            screen = Screen.Home
+                        },
+                        exitRequest = editorExitRequest,
+                        onDirtyChanged = { editorDirty = it },
+                        onExitRequestHandled = { editorExitRequest = 0 },
+                        onDiscarded = {
+                            editorMode.clear()
+                            editorDirty = false
                             screen = Screen.Home
                         }
                     )
