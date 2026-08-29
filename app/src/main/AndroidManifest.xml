@@ -28,6 +28,7 @@
         android:hasFragileUserData="false"
         android:icon="@mipmap/ic_launcher"
         android:label="ShareParser"
+        android:logo="@mipmap/ic_launcher"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.ShareParser">
@@ -68,6 +69,7 @@
             android:excludeFromRecents="true"
             android:noHistory="true"
             android:icon="@mipmap/ic_launcher"
+            android:logo="@mipmap/ic_launcher"
             android:taskAffinity="cc.stkmn.shareparser.share.receiver"
             android:theme="@android:style/Theme.Translucent.NoTitleBar">
             <intent-filter>
