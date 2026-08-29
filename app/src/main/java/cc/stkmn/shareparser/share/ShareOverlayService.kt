@@ -17,7 +17,7 @@ import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
-import cc.stkmn.shareparser.R
+import cc.stkmn.shareparser.AppArtwork
 import cc.stkmn.shareparser.AppLocale
 import cc.stkmn.shareparser.data.PendingShareStore
 
@@ -68,9 +68,9 @@ class ShareOverlayService : Service() {
             gravity = Gravity.CENTER_VERTICAL
         }
         header.addView(ImageView(this).apply {
-            setImageResource(R.drawable.ic_launcher_foreground)
+            AppArtwork.loadBitmap(this@ShareOverlayService, AppArtwork.FOREGROUND_ASSET)?.let { setImageBitmap(it) }
             scaleType = ImageView.ScaleType.CENTER_INSIDE
-        }, LinearLayout.LayoutParams(dp(56), dp(56)).apply { marginEnd = dp(12) })
+        }, LinearLayout.LayoutParams(dp(66), dp(66)).apply { marginEnd = dp(12) })
         header.addView(LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             addView(TextView(this@ShareOverlayService).apply {
