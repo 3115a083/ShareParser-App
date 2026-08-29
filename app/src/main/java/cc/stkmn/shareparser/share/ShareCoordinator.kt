@@ -75,7 +75,6 @@ class ShareCoordinator(context: Context) {
                 executeInternal(payload, profile, action)
             }.apply {
                 name = "ShareParser-webhook"
-                isDaemon = true
                 start()
             }
             return true
