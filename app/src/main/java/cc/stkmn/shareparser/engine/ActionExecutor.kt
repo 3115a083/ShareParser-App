@@ -18,15 +18,11 @@ import cc.stkmn.shareparser.WebViewActivity
 import cc.stkmn.shareparser.data.AppSettings
 import cc.stkmn.shareparser.data.CalendarTargetMode
 import cc.stkmn.shareparser.data.DateTimeLocale
-import cc.stkmn.shareparser.data.InvalidValuePolicy
 import cc.stkmn.shareparser.data.EmptyValuePolicy
 import cc.stkmn.shareparser.data.ProcessingAction
 import cc.stkmn.shareparser.data.TextFileMode
 import cc.stkmn.shareparser.data.UrlOpenMode
-import cc.stkmn.shareparser.notify.WarningNotifier
 import java.io.File
-import java.net.HttpURLConnection
-import java.net.URL
 import java.net.HttpURLConnection
 import java.net.URL
 import java.time.Instant
@@ -445,102 +441,6 @@ class ActionExecutor(context: Context, private val settings: AppSettings = AppSe
         }
         return ExecutionResult()
     }
-    private fun callWebhook(action: ProcessingAction.Webhook, values: Map<String, String>): ExecutionResult {
-        val url = TemplateEngine.render(action.urlTemplate, values).trim()
-        val uri = runCatching { Uri.parse(url) }.getOrNull()
-        if (uri?.scheme?.lowercase() !in setOf("http", "https") || uri?.host.isNullOrBlank()) {
-            throw ProcessingException("Die Webhook-URL ist ungültig.", "webhook.url", "Rejected webhook URL: " + url)
-        }
-        val body = TemplateEngine.render(action.bodyTemplate, values)
-        val method = action.method.trim().uppercase(Locale.ROOT).ifBlank { "POST" }
-        if (method !in setOf("POST", "PUT", "PATCH")) {
-            throw ProcessingException("Die Webhook-Methode wird nicht unterstützt.", "webhook.method", "Unsupported webhook method: " + method)
-        }
-
-        Thread {
-            runCatching {
-                val connection = (URL(url).openConnection() as HttpURLConnection).apply {
-                    requestMethod = method
-                    connectTimeout = 10_000
-                    readTimeout = 15_000
-                    doOutput = true
-                    setRequestProperty("Content-Type", action.contentType.ifBlank { "application/json" })
-                    setRequestProperty("Accept", "*/*")
-                }
-                connection.outputStream.bufferedWriter(Charsets.UTF_8).use { it.write(body) }
-                val status = connection.responseCode
-                if (status !in 200..299) {
-                    val response = runCatching {
-                        (connection.errorStream ?: connection.inputStream)?.bufferedReader()?.use { it.readText().take(500) }
-                    }.getOrNull().orEmpty()
-                    error("HTTP " + status + if (response.isBlank()) "" else ": " + response)
-                }
-                connection.disconnect()
-            }.onFailure {
-                WarningNotifier.show(
-                    appContext,
-                    listOf("Webhook '" + action.friendlyName + "' fehlgeschlagen: " + (it.message ?: it::class.java.simpleName))
-                )
-            }
-        }.apply {
-            name = "ShareParser-Webhook"
-            isDaemon = true
-            start()
-        }
-        return ExecutionResult()
-    }
-
-    private fun renderFileName(action: ProcessingAction.Share, values: Map<String, String>): String {
-        val missing = linkedSetOf<String>()
-        val rendered = TemplateEngine.renderLenient(
-            action.fileNameTemplate.ifBlank { action.fileNameFallback.ifBlank { "ShareParser.txt" } },
-            values
-        ) { missing += it }.trim()
-        val invalid = rendered.isBlank() ||
-            rendered.length > 180 ||
-            rendered == "." ||
-            rendered == ".." ||
-            Regex("[\\u0000-\\u001F<>:\"/\\\\|?*]").containsMatchIn(rendered) ||
-            missing.isNotEmpty()
-        if (!invalid) return rendered
-
-        if (action.fileNameInvalidPolicy == InvalidValuePolicy.ERROR) {
-            throw ProcessingException(
-                "Der erzeugte Dateiname ist leer, enthält unerlaubte Zeichen oder nutzt eine leere Variable.",
-                "share.fileName",
-                "Rendered filename='" + rendered + "', missing=" + missing.joinToString()
-            )
-        }
-        val fallback = TemplateEngine.renderLenient(
-            action.fileNameFallback.ifBlank { "ShareParser.txt" },
-            values
-        ) { }
-        return safeFileName(fallback).ifBlank { "ShareParser.txt" }
-    }
-
-    private fun renderRelativePath(action: ProcessingAction.Share, values: Map<String, String>): String {
-        if (action.relativePathTemplate.isBlank()) return ""
-        val missing = linkedSetOf<String>()
-        val rendered = TemplateEngine.renderLenient(action.relativePathTemplate, values) { missing += it }.trim()
-        val invalid = missing.isNotEmpty() ||
-            rendered.split('/', '\\').any { segment ->
-                val value = segment.trim()
-                value == "." || value == ".." || value.length > 80 ||
-                    Regex("[\\u0000-\\u001F<>:\"|?*]").containsMatchIn(value)
-            }
-        if (!invalid) return rendered
-
-        if (action.pathInvalidPolicy == InvalidValuePolicy.ERROR) {
-            throw ProcessingException(
-                "Der erzeugte Unterordner enthält eine leere Variable oder unerlaubte Zeichen.",
-                "share.path",
-                "Rendered path='" + rendered + "', missing=" + missing.joinToString()
-            )
-        }
-        val fallback = TemplateEngine.renderLenient(action.pathFallback, values) { }
-        return safePathSegments(fallback).joinToString("/")
-    }
-
     private fun saveTextFile(fileName: String, relativePath: String, mimeType: String, text: String): ExecutionResult {
         if (settings.defaultSaveTreeUri.isNotBlank()) {
             val saved = runCatching {
