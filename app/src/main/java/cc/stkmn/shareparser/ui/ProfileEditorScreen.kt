@@ -132,6 +132,11 @@ internal fun ProfileEditorScreen(
     val context = LocalContext.current
     val clipboard = LocalClipboardManager.current
     val parser = remember { ParserEngine() }
+    val navigationScope = rememberCoroutineScope()
+    val recognitionAnchor = remember { BringIntoViewRequester() }
+    val exampleAnchor = remember { BringIntoViewRequester() }
+    val variablesAnchor = remember { BringIntoViewRequester() }
+    val actionsAnchor = remember { BringIntoViewRequester() }
     val profileId = remember(existing?.id) { existing?.id ?: UUID.randomUUID().toString() }
     val editorModeStore = remember { EditorModeStore(context) }
 
@@ -499,6 +504,36 @@ internal fun ProfileEditorScreen(
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
         item {
+            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                item {
+                    AssistChip(
+                        onClick = { navigationScope.launch { recognitionAnchor.bringIntoView() } },
+                        label = { Text("Profil erkennen") }
+                    )
+                }
+                if (sample != null) {
+                    item {
+                        AssistChip(
+                            onClick = { navigationScope.launch { exampleAnchor.bringIntoView() } },
+                            label = { Text("Variablen aus Beispiel") }
+                        )
+                    }
+                }
+                item {
+                    AssistChip(
+                        onClick = { navigationScope.launch { variablesAnchor.bringIntoView() } },
+                        label = { Text("Variablen") }
+                    )
+                }
+                item {
+                    AssistChip(
+                        onClick = { navigationScope.launch { actionsAnchor.bringIntoView() } },
+                        label = { Text("Weiterverarbeitung") }
+                    )
+                }
+            }
+        }
+        item {
             Card(Modifier.fillMaxWidth()) {
                 Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Outlined.Share, null)
@@ -575,8 +610,12 @@ internal fun ProfileEditorScreen(
             }
         }
 
-        item { HorizontalDivider() }
-        item { SectionTitle("Profil automatisch erkennen") }
+        item {
+            EditorSectionHeader(
+                "Profil automatisch erkennen",
+                Modifier.bringIntoViewRequester(recognitionAnchor)
+            )
+        }
         item {
             Text("Kombiniere feste Textteile, teilende App und Variablen. Ab dem zweiten Merkmal kannst du UND oder ODER wählen.")
         }
@@ -763,7 +802,7 @@ internal fun ProfileEditorScreen(
                             Column(Modifier.weight(1f)) {
                                 Text("Variablen als Profilmerkmal", fontWeight = FontWeight.SemiBold)
                                 Text(
-                                    "Eingeklappt. Wähle bei Bedarf eine oder mehrere Variablen und lege fest, was geprüft werden soll.",
+                                    "Wähle bei Bedarf eine oder mehrere Variablen und lege fest, was geprüft werden soll.",
                                     style = MaterialTheme.typography.bodySmall
                                 )
                             }
@@ -940,8 +979,12 @@ internal fun ProfileEditorScreen(
         }
 
         if (sample != null) {
-            item { HorizontalDivider() }
-            item { SectionTitle("Variablen aus dem Beispiel") }
+            item {
+                EditorSectionHeader(
+                    "Variablen aus dem Beispiel",
+                    Modifier.bringIntoViewRequester(exampleAnchor)
+                )
+            }
             item { Text("Markiere einen veränderlichen Wert oben und tippe auf „Als Variable“. Bereits definierte Variablen werden im Beispiel farbig markiert. Beispielwerte lassen sich kopieren und anschließend in Umwandlungen verwenden.") }
             items(GuidedRuleFactory.candidates(sample).filter { it.source == InputSource.TEXT }.take(30)) { candidate ->
                 Card(Modifier.fillMaxWidth()) {
@@ -966,15 +1009,16 @@ internal fun ProfileEditorScreen(
             }
         }
 
-        item { HorizontalDivider() }
         item {
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                SectionTitle("Variablen", Modifier.weight(1f))
-                TextButton(onClick = {
-                    extractors += ExtractorRule(key = "", regex = "(.+)", required = false)
-                }) {
-                    Icon(Icons.Outlined.Add, null)
-                    Text("Manuell")
+            Card(Modifier.fillMaxWidth().bringIntoViewRequester(variablesAnchor)) {
+                Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                    SectionTitle("Variablen", Modifier.weight(1f))
+                    TextButton(onClick = {
+                        applyExtractor(ExtractorRule(key = "", regex = "(.+)", required = false))
+                    }) {
+                        Icon(Icons.Outlined.Add, null)
+                        Text("Manuell")
+                    }
                 }
             }
         }
@@ -1046,11 +1090,11 @@ internal fun ProfileEditorScreen(
             )
         }
 
-        item { HorizontalDivider() }
         item {
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                SectionTitle("Weiterverarbeitung", Modifier.weight(1f))
-                Column {
+            Card(Modifier.fillMaxWidth().bringIntoViewRequester(actionsAnchor)) {
+                Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                    SectionTitle("Weiterverarbeitung", Modifier.weight(1f))
+                    Column {
                     TextButton(onClick = { addActionMenu = true }) {
                         Icon(Icons.Outlined.Add, null)
                         Text("Aktion")
@@ -1060,6 +1104,7 @@ internal fun ProfileEditorScreen(
                         DropdownMenuItem(text = { Text("URL öffnen") }, onClick = { actions += defaultUrlAction(); addActionMenu = false })
                         DropdownMenuItem(text = { Text("Text oder Textdatei") }, onClick = { actions += defaultShareAction(); addActionMenu = false })
                         DropdownMenuItem(text = { Text("Webhook") }, onClick = { actions += defaultWebhookAction(); addActionMenu = false })
+                    }
                     }
                 }
             }
@@ -1899,6 +1944,18 @@ private fun TemplateField(
                 )
             }
         }
+    }
+}
+
+@Composable
+private fun EditorSectionHeader(text: String, modifier: Modifier = Modifier) {
+    Card(modifier.fillMaxWidth()) {
+        Text(
+            text,
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp)
+        )
     }
 }
 
