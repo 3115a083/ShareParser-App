@@ -1,5 +1,6 @@
 package cc.stkmn.shareparser.ui
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -85,7 +86,7 @@ private fun LanguageChoiceCard(
     description: String,
     onClick: () -> Unit
 ) {
-    Card(Modifier.fillMaxWidth()) {
+    Card(Modifier.fillMaxWidth().clickable(onClick = onClick)) {
         androidx.compose.foundation.layout.Row(
             Modifier.padding(16.dp),
             verticalAlignment = androidx.compose.ui.Alignment.Top
