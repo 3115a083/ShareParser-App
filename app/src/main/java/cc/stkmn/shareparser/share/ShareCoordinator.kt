@@ -7,7 +7,6 @@ import cc.stkmn.shareparser.data.ProcessingAction
 import cc.stkmn.shareparser.data.Profile
 import cc.stkmn.shareparser.data.ProfileRepository
 import cc.stkmn.shareparser.data.SharedPayload
-import cc.stkmn.shareparser.data.WebhookFireMode
 import cc.stkmn.shareparser.data.WebhookMode
 import cc.stkmn.shareparser.engine.ActionExecutor
 import cc.stkmn.shareparser.engine.ParserEngine
