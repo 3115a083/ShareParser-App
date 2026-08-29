@@ -19,10 +19,12 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material.icons.outlined.Language
+import androidx.compose.material.icons.outlined.OpenInNew
 import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material.icons.outlined.PictureInPictureAlt
 import androidx.compose.material3.Card
 import androidx.compose.material3.Icon
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.RadioButton
@@ -38,16 +40,16 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
-import cc.stkmn.shareparser.AppLocale
-import cc.stkmn.shareparser.data.AppLanguage
 import cc.stkmn.shareparser.data.ProfileRepository
 import cc.stkmn.shareparser.data.ShareSelectionMode
+import cc.stkmn.shareparser.BuildConfig
 import cc.stkmn.shareparser.notify.ShareSelectionNotifier
 
 @Composable
 internal fun SettingsHomeScreen(
     repository: ProfileRepository,
-    onRegionalSettings: () -> Unit
+    onRegionalSettings: () -> Unit,
+    onLanguageSettings: () -> Unit
 ) {
     val context = LocalContext.current
     var settings by remember { mutableStateOf(repository.settings()) }
@@ -57,12 +59,6 @@ internal fun SettingsHomeScreen(
     fun saveMode(mode: ShareSelectionMode) {
         settings = settings.copy(shareSelectionMode = mode)
         repository.saveSettings(settings)
-    }
-
-    fun saveLanguage(language: AppLanguage) {
-        settings = settings.copy(appLanguage = language)
-        repository.saveSettings(settings)
-        AppLocale.apply(context, language)
     }
 
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
@@ -92,34 +88,23 @@ internal fun SettingsHomeScreen(
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         item {
-            Text("Sprache / Language", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+            Text("Sprache und Format", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
         }
         item {
-            Text("Beim ersten Start folgt ShareParser der Systemsprache. Diese Auswahl kann jederzeit geändert werden.", style = MaterialTheme.typography.bodySmall)
-        }
-        item {
-            ChoiceCard(
-                selected = settings.appLanguage == AppLanguage.SYSTEM,
-                title = "Systemstandard / System default",
-                description = "Verwendet die Sprache des Geräts.",
-                onClick = { saveLanguage(AppLanguage.SYSTEM) }
-            )
-        }
-        item {
-            ChoiceCard(
-                selected = settings.appLanguage == AppLanguage.DE,
-                title = "Deutsch",
-                description = "Deutsch als App-Sprache verwenden.",
-                onClick = { saveLanguage(AppLanguage.DE) }
-            )
-        }
-        item {
-            ChoiceCard(
-                selected = settings.appLanguage == AppLanguage.EN,
-                title = "English",
-                description = "Use English as the app language.",
-                onClick = { saveLanguage(AppLanguage.EN) }
-            )
+            Card(
+                Modifier
+                    .fillMaxWidth()
+                    .clickable(onClick = onLanguageSettings)
+            ) {
+                Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Outlined.Language, null)
+                    Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
+                        Text("App-Sprache", fontWeight = FontWeight.SemiBold)
+                        Text("Systemstandard, Deutsch oder English", style = MaterialTheme.typography.bodySmall)
+                    }
+                    Icon(Icons.Outlined.ChevronRight, null)
+                }
+            }
         }
 
         item {
@@ -255,6 +240,31 @@ internal fun SettingsHomeScreen(
                 },
                 modifier = Modifier.fillMaxWidth()
             ) { Text("Benachrichtigungskanal konfigurieren") }
+        }
+
+        item { HorizontalDivider() }
+        item {
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text("Über ShareParser", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                Text("Version ${BuildConfig.VERSION_NAME} (Build ${BuildConfig.VERSION_CODE})", style = MaterialTheme.typography.bodySmall)
+                OutlinedButton(
+                    onClick = {
+                        context.startActivity(
+                            Intent(
+                                Intent.ACTION_VIEW,
+                                Uri.parse("https://github.com/3115a083/ShareParser-App")
+                            )
+                        )
+                    }
+                ) {
+                    Icon(Icons.Outlined.OpenInNew, null)
+                    Text("GitHub")
+                }
+                Text(
+                    "Dieses Projekt ist vibecoded. Es wurde vor allem für den eigenen Bedarf erstellt und mit der Community geteilt, falls es auch anderen hilfreich ist.",
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
         }
     }
 }
