@@ -27,6 +27,8 @@ import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Download
 import androidx.compose.material.icons.outlined.ErrorOutline
 import androidx.compose.material.icons.outlined.ExpandMore
+import androidx.compose.material.icons.outlined.Fullscreen
+import androidx.compose.material.icons.outlined.FullscreenExit
 import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material.icons.outlined.Splitscreen
 import androidx.compose.material3.AlertDialog
@@ -70,6 +72,7 @@ import cc.stkmn.shareparser.calendar.CalendarCatalog
 import cc.stkmn.shareparser.data.CalendarTargetMode
 import cc.stkmn.shareparser.data.CaseMode
 import cc.stkmn.shareparser.data.EditorModeStore
+import cc.stkmn.shareparser.data.EmptyValuePolicy
 import cc.stkmn.shareparser.data.ExtractorRule
 import cc.stkmn.shareparser.data.InputSource
 import cc.stkmn.shareparser.data.MatcherRule
@@ -81,6 +84,7 @@ import cc.stkmn.shareparser.data.SharedPayload
 import cc.stkmn.shareparser.data.TextFileMode
 import cc.stkmn.shareparser.data.UrlOpenMode
 import cc.stkmn.shareparser.data.ValueTransform
+import cc.stkmn.shareparser.data.WebhookMode
 import cc.stkmn.shareparser.engine.GuidedRuleFactory
 import cc.stkmn.shareparser.engine.ParserEngine
 import cc.stkmn.shareparser.engine.TemplateEngine
@@ -475,6 +479,34 @@ internal fun ProfileEditorScreen(
         } else {
             item { Text("Noch kein Merkmal. Ohne Merkmale dient dieses Profil nur als Fallback.", style = MaterialTheme.typography.bodySmall) }
         }
+        if (extractors.any { it.key.isNotBlank() }) {
+            item {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Variablen als Profilmerkmal", fontWeight = FontWeight.SemiBold)
+                    Text(
+                        "Filter werden nach der Variablen-Extraktion geprüft. Beispiele: „Nicht leer“ akzeptiert jeden Inhalt, „5 Ziffern“ eignet sich z. B. für eine PLZ. Für andere Formate kannst du im erweiterten Modus einen Regex wie ^[A-Z]{2}-\\d{6}$ verwenden.",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                    extractors.filter { it.key.isNotBlank() }.forEach { rule ->
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Text(variableLabel(rule.key), modifier = Modifier.weight(1f))
+                            OutlinedButton(onClick = {
+                                val regex = ".+"
+                                if (matchers.none { it.variableKey == rule.key && it.regex == regex }) {
+                                    matchers += MatcherRule(regex = regex, ignoreCase = false, friendlyText = "${rule.key} ist nicht leer", variableKey = rule.key)
+                                }
+                            }) { Text("Nicht leer") }
+                            OutlinedButton(onClick = {
+                                val regex = "^\\d{5}$"
+                                if (matchers.none { it.variableKey == rule.key && it.regex == regex }) {
+                                    matchers += MatcherRule(regex = regex, ignoreCase = false, friendlyText = "${rule.key}: genau 5 Ziffern", variableKey = rule.key)
+                                }
+                            }) { Text("5 Ziffern") }
+                        }
+                    }
+                }
+            }
+        }
         item {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 OutlinedTextField(
@@ -625,6 +657,7 @@ internal fun ProfileEditorScreen(
                         DropdownMenuItem(text = { Text("Kalendereintrag") }, onClick = { actions += defaultCalendarAction(); addActionMenu = false })
                         DropdownMenuItem(text = { Text("URL öffnen") }, onClick = { actions += defaultUrlAction(); addActionMenu = false })
                         DropdownMenuItem(text = { Text("Text oder Textdatei") }, onClick = { actions += defaultShareAction(); addActionMenu = false })
+                        DropdownMenuItem(text = { Text("Webhook") }, onClick = { actions += defaultWebhookAction(); addActionMenu = false })
                     }
                 }
             }
@@ -852,11 +885,15 @@ private fun SelectionSourceCard(
 ) {
     val clipboard = LocalClipboardManager.current
     val selected = selectedText(fixedText, value.selection)
+    var expanded by remember(title) { mutableStateOf(false) }
     val (visualTransformation, highlights) = rememberVariableHighlighting(source, extractors)
     Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(title, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                IconButton(onClick = { expanded = !expanded }) {
+                    Icon(if (expanded) Icons.Outlined.FullscreenExit else Icons.Outlined.Fullscreen, if (expanded) "Textfeld verkleinern" else "Textfeld maximieren")
+                }
                 IconButton(onClick = { clipboard.setText(AnnotatedString(fixedText)) }) {
                     Icon(Icons.Outlined.ContentCopy, "Text kopieren")
                 }
@@ -868,8 +905,8 @@ private fun SelectionSourceCard(
                 readOnly = true,
                 visualTransformation = visualTransformation,
                 modifier = Modifier.fillMaxWidth(),
-                minLines = if (title == "Nachrichtentext" || title == "Dateiinhalt") 5 else 1,
-                maxLines = if (title == "Nachrichtentext" || title == "Dateiinhalt") 14 else 3
+                minLines = if (expanded) 18 else if (title == "Nachrichtentext" || title == "Dateiinhalt") 5 else 1,
+                maxLines = if (expanded) 32 else if (title == "Nachrichtentext" || title == "Dateiinhalt") 14 else 3
             )
             if (highlights.isNotEmpty()) {
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -1107,6 +1144,7 @@ private fun ActionEditorCard(
                 is ProcessingAction.Calendar -> CalendarActionFields(action, variables, onChange)
                 is ProcessingAction.Url -> UrlActionFields(action, variables, onChange)
                 is ProcessingAction.Share -> ShareActionFields(action, variables, onChange)
+                is ProcessingAction.Webhook -> WebhookActionFields(action, variables, onChange)
             }
         }
     }
@@ -1259,6 +1297,31 @@ private fun ShareActionFields(action: ProcessingAction.Share, variables: List<St
             variables,
             placeholder = "z. B. Termine/{{jahr}}"
         ) { onChange(action.copy(relativePathTemplate = it)) }
+        Text("Leere oder ungültige Dateifelder", fontWeight = FontWeight.SemiBold)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            RadioButton(action.emptyValuePolicy == EmptyValuePolicy.FALLBACK, { onChange(action.copy(emptyValuePolicy = EmptyValuePolicy.FALLBACK)) })
+            Text("Fallback verwenden")
+        }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            RadioButton(action.emptyValuePolicy == EmptyValuePolicy.ERROR, { onChange(action.copy(emptyValuePolicy = EmptyValuePolicy.ERROR)) })
+            Text("Fehler melden und Aktion abbrechen")
+        }
+        if (action.emptyValuePolicy == EmptyValuePolicy.FALLBACK) {
+            OutlinedTextField(
+                value = action.fallbackFileName,
+                onValueChange = { onChange(action.copy(fallbackFileName = it)) },
+                label = { Text("Fallback-Dateiname") },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true
+            )
+            OutlinedTextField(
+                value = action.fallbackPath,
+                onValueChange = { onChange(action.copy(fallbackPath = it)) },
+                label = { Text("Fallback-Unterordner, optional") },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true
+            )
+        }
         Text("Datei verwenden", fontWeight = FontWeight.SemiBold)
         Row(verticalAlignment = Alignment.CenterVertically) {
             RadioButton(action.fileMode == TextFileMode.SHARE, { onChange(action.copy(fileMode = TextFileMode.SHARE)) })
@@ -1281,6 +1344,35 @@ private fun ShareActionFields(action: ProcessingAction.Share, variables: List<St
                 Text("Nutzt den voreingestellten Ordner aus den Einstellungen. Ohne Voreinstellung erscheint der Android-Dateidialog. Der Unterordner kann Variablen enthalten.", style = MaterialTheme.typography.bodySmall)
             }
         }
+    }
+}
+
+@Composable
+private fun WebhookActionFields(action: ProcessingAction.Webhook, variables: List<String>, onChange: (ProcessingAction) -> Unit) {
+    Text("Webhook", fontWeight = FontWeight.SemiBold)
+    TemplateField("URL", action.urlTemplate, variables, placeholder = "https://example.com/webhook", minLines = 2, urlEncodeVariables = true) { onChange(action.copy(urlTemplate = it)) }
+    TemplateField("POST-Inhalt", action.bodyTemplate, variables, placeholder = "{\"text\":\"{{text}}\"}", minLines = 5) { onChange(action.copy(bodyTemplate = it)) }
+    OutlinedTextField(action.contentType, { onChange(action.copy(contentType = it)) }, label = { Text("Content-Type") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+    Text("Ausführung", fontWeight = FontWeight.SemiBold)
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        RadioButton(action.mode == WebhookMode.ON_SELECTION, { onChange(action.copy(mode = WebhookMode.ON_SELECTION)) })
+        Column { Text("Nur bei Auswahl dieser Aktion"); Text("Der Webhook erscheint wie jede andere Aktion in der Auswahl.", style = MaterialTheme.typography.bodySmall) }
+    }
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        RadioButton(action.mode == WebhookMode.ALWAYS, { onChange(action.copy(mode = WebhookMode.ALWAYS)) })
+        Column { Text("Immer senden"); Text("Feuert automatisch, sobald dieses Profil zu einem geteilten Inhalt passt.", style = MaterialTheme.typography.bodySmall) }
+    }
+    Text("Leerer POST-Inhalt", fontWeight = FontWeight.SemiBold)
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        RadioButton(action.emptyValuePolicy == EmptyValuePolicy.FALLBACK, { onChange(action.copy(emptyValuePolicy = EmptyValuePolicy.FALLBACK)) })
+        Text("Fallback verwenden")
+    }
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        RadioButton(action.emptyValuePolicy == EmptyValuePolicy.ERROR, { onChange(action.copy(emptyValuePolicy = EmptyValuePolicy.ERROR)) })
+        Text("Fehler melden")
+    }
+    if (action.emptyValuePolicy == EmptyValuePolicy.FALLBACK) {
+        OutlinedTextField(action.fallbackBody, { onChange(action.copy(fallbackBody = it)) }, label = { Text("Fallback-Inhalt") }, modifier = Modifier.fillMaxWidth(), minLines = 2)
     }
 }
 
@@ -1372,28 +1464,36 @@ private fun actionTemplates(action: ProcessingAction): List<Pair<String, String>
         "Dateiname" to action.fileNameTemplate,
         "Unterordner" to action.relativePathTemplate
     )
+    is ProcessingAction.Webhook -> listOf(
+        "Webhook-URL" to action.urlTemplate,
+        "Webhook-Inhalt" to action.bodyTemplate
+    )
 }
 
 private fun defaultCalendarAction() = ProcessingAction.Calendar(UUID.randomUUID().toString(), "Kalender öffnen")
 private fun defaultUrlAction() = ProcessingAction.Url(UUID.randomUUID().toString(), "Link öffnen")
 private fun defaultShareAction() = ProcessingAction.Share(UUID.randomUUID().toString(), "Text weiterleiten")
+private fun defaultWebhookAction() = ProcessingAction.Webhook(UUID.randomUUID().toString(), "Webhook senden")
 
 private fun withFriendlyName(action: ProcessingAction, name: String): ProcessingAction = when (action) {
     is ProcessingAction.Calendar -> action.copy(friendlyName = name)
     is ProcessingAction.Url -> action.copy(friendlyName = name)
     is ProcessingAction.Share -> action.copy(friendlyName = name)
+    is ProcessingAction.Webhook -> action.copy(friendlyName = name)
 }
 
 private fun withIcon(action: ProcessingAction, icon: String): ProcessingAction = when (action) {
     is ProcessingAction.Calendar -> action.copy(icon = icon)
     is ProcessingAction.Url -> action.copy(icon = icon)
     is ProcessingAction.Share -> action.copy(icon = icon)
+    is ProcessingAction.Webhook -> action.copy(icon = icon)
 }
 
 private fun actionHighlightPrefix(action: ProcessingAction): String = when (action) {
     is ProcessingAction.Calendar -> "calendar"
     is ProcessingAction.Url -> "url"
     is ProcessingAction.Share -> "share"
+    is ProcessingAction.Webhook -> "webhook"
 }
 
 private fun sourceLabel(source: InputSource): String = when (source) {
