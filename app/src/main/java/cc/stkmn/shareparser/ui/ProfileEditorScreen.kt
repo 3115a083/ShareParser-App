@@ -1307,50 +1307,56 @@ internal fun ProfileEditorScreen(
             ) { Text("Profil speichern") }
         }
         item {
-            Row(
-                modifier = Modifier.widthIn(max = 560.dp).fillMaxWidth(),
+            LazyRow(
+                modifier = Modifier.fillMaxWidth().widthIn(max = 620.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                OutlinedButton(
-                    onClick = { clipboard.setText(AnnotatedString(repository.export(buildProfile()))) },
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Icon(Icons.Outlined.ContentCopy, null)
-                    Spacer(Modifier.width(4.dp))
-                    Text("JSON kopieren")
+                item {
+                    OutlinedButton(
+                        onClick = { clipboard.setText(AnnotatedString(repository.export(buildProfile()))) },
+                        modifier = Modifier.width(180.dp)
+                    ) {
+                        Icon(Icons.Outlined.ContentCopy, null)
+                        Spacer(Modifier.width(6.dp))
+                        Text("JSON kopieren", maxLines = 1)
+                    }
                 }
-                OutlinedButton(
-                    onClick = {
-                        val json = repository.export(buildProfile())
-                        runCatching {
-                            context.startActivity(
-                                Intent.createChooser(
-                                    Intent(Intent.ACTION_SEND).apply {
-                                        type = "application/json"
-                                        putExtra(Intent.EXTRA_TEXT, json)
-                                        putExtra(Intent.EXTRA_SUBJECT, "ShareParser Profil: ${name.ifBlank { "Profil" }}")
-                                    },
-                                    "Profil teilen"
+                item {
+                    OutlinedButton(
+                        onClick = {
+                            val json = repository.export(buildProfile())
+                            runCatching {
+                                context.startActivity(
+                                    Intent.createChooser(
+                                        Intent(Intent.ACTION_SEND).apply {
+                                            type = "application/json"
+                                            putExtra(Intent.EXTRA_TEXT, json)
+                                            putExtra(Intent.EXTRA_SUBJECT, "ShareParser Profil: ${name.ifBlank { "Profil" }}")
+                                        },
+                                        "Profil teilen"
+                                    )
                                 )
-                            )
-                        }.onFailure { validationMessage = "Teilen fehlgeschlagen: ${it.message}" }
-                    },
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Icon(Icons.Outlined.Share, null)
-                    Spacer(Modifier.width(4.dp))
-                    Text("Teilen")
+                            }.onFailure { validationMessage = "Teilen fehlgeschlagen: ${it.message}" }
+                        },
+                        modifier = Modifier.width(180.dp)
+                    ) {
+                        Icon(Icons.Outlined.Share, null)
+                        Spacer(Modifier.width(6.dp))
+                        Text("Teilen", maxLines = 1)
+                    }
                 }
-                OutlinedButton(
-                    onClick = {
-                        pendingExport = repository.export(buildProfile())
-                        exportLauncher.launch("${safeFileName(name.ifBlank { "shareparser-profile" })}.json")
-                    },
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Icon(Icons.Outlined.Download, null)
-                    Spacer(Modifier.width(4.dp))
-                    Text("Speichern")
+                item {
+                    OutlinedButton(
+                        onClick = {
+                            pendingExport = repository.export(buildProfile())
+                            exportLauncher.launch("${safeFileName(name.ifBlank { "shareparser-profile" })}.json")
+                        },
+                        modifier = Modifier.width(180.dp)
+                    ) {
+                        Icon(Icons.Outlined.Download, null)
+                        Spacer(Modifier.width(6.dp))
+                        Text("Speichern", maxLines = 1)
+                    }
                 }
             }
         }
