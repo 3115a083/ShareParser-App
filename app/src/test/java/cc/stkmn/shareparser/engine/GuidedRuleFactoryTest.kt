@@ -87,4 +87,29 @@ class GuidedRuleFactoryTest {
         assertTrue(candidates.any { it.suggestedKey == "telefon" && it.value.startsWith("tel:") })
     }
 
+
+    @Test
+    fun suggestsAndExtractsFormattedLinkTargets() {
+        val sample = SharedPayload(
+            text = "Website öffnen",
+            linkTargets = listOf("https://example.com/booking/ABC", "mailto:test@example.com")
+        )
+        val candidates = GuidedRuleFactory.candidates(sample)
+        val web = candidates.first { it.source == InputSource.LINKS && it.suggestedKey == "link" }
+        val rule = GuidedRuleFactory.extractor(web, "booking_link", required = true)
+        val profile = Profile("links", "Links", extractors = listOf(rule))
+
+        assertEquals(
+            "https://example.com/booking/XYZ",
+            parser.extract(
+                SharedPayload(
+                    text = "Website öffnen",
+                    linkTargets = listOf("https://example.com/booking/XYZ")
+                ),
+                profile
+            )["booking_link"]
+        )
+        assertTrue(candidates.any { it.source == InputSource.LINKS && it.value.startsWith("mailto:") })
+    }
+
 }
