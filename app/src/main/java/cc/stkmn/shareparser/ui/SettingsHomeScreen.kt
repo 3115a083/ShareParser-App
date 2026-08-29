@@ -53,13 +53,6 @@ import cc.stkmn.shareparser.data.ProfileRepository
 import cc.stkmn.shareparser.data.ShareSelectionMode
 import cc.stkmn.shareparser.notify.ShareSelectionNotifier
 
-private val selectableLauncherIcons = listOf(
-    LauncherIcon.LOGO_1,
-    LauncherIcon.LOGO_2,
-    LauncherIcon.LOGO_3,
-    LauncherIcon.LOGO_4
-)
-
 @Composable
 internal fun SettingsHomeScreen(
     repository: ProfileRepository,
@@ -73,12 +66,6 @@ internal fun SettingsHomeScreen(
     fun saveMode(mode: ShareSelectionMode) {
         settings = settings.copy(shareSelectionMode = mode)
         repository.saveSettings(settings)
-    }
-
-    fun saveIcon(icon: LauncherIcon) {
-        settings = settings.copy(launcherIcon = icon)
-        repository.saveSettings(settings)
-        LauncherIconManager.apply(context, icon)
     }
 
     fun saveLanguage(language: AppLanguage) {
@@ -142,41 +129,6 @@ internal fun SettingsHomeScreen(
                 description = "Use English as the app language.",
                 onClick = { saveLanguage(AppLanguage.EN) }
             )
-        }
-
-        item {
-            Text("Darstellung", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-        }
-        item {
-            Text("App-Symbol", fontWeight = FontWeight.SemiBold)
-        }
-        item {
-            Text("Logo 1 ist der Standard und wird auch im Android-Teilen-Dialog verwendet. Beim Wechsel kann der Launcher einige Sekunden brauchen, bis das neue Symbol sichtbar ist.", style = MaterialTheme.typography.bodySmall)
-        }
-        item {
-            LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                items(selectableLauncherIcons) { icon ->
-                    val selected = normalizedLauncherIcon(settings.launcherIcon) == icon
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        modifier = Modifier
-                            .border(
-                                width = if (selected) 2.dp else 1.dp,
-                                color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant,
-                                shape = RoundedCornerShape(14.dp)
-                            )
-                            .clickable { saveIcon(icon) }
-                            .padding(8.dp)
-                    ) {
-                        AppArtworkImage(
-                            assetPath = AppArtwork.launcherAsset(icon),
-                            contentDescription = "App-Symbol ${selectableLauncherIcons.indexOf(icon) + 1}",
-                            modifier = Modifier.size(64.dp)
-                        )
-                        Text("${selectableLauncherIcons.indexOf(icon) + 1}", style = MaterialTheme.typography.labelMedium)
-                    }
-                }
-            }
         }
 
         item {
