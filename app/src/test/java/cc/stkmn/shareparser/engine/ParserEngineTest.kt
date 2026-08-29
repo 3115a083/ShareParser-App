@@ -3,7 +3,9 @@ package cc.stkmn.shareparser.engine
 import cc.stkmn.shareparser.data.CaseMode
 import cc.stkmn.shareparser.data.ExtractorRule
 import cc.stkmn.shareparser.data.InputSource
+import cc.stkmn.shareparser.data.MatcherJoin
 import cc.stkmn.shareparser.data.MatcherRule
+import cc.stkmn.shareparser.data.MatcherValueMode
 import cc.stkmn.shareparser.data.ParseDirection
 import cc.stkmn.shareparser.data.Profile
 import cc.stkmn.shareparser.data.SharedPayload
@@ -175,4 +177,50 @@ class ParserEngineTest {
         )
         assertEquals(listOf("Markdown"), engine.matchingProfiles(payload, listOf(profile)).map { it.name })
     }
+
+    @Test
+    fun matcherCanUseOrFromSecondCriterion() {
+        val profile = Profile(
+            "1",
+            "Either",
+            matchers = listOf(
+                MatcherRule(regex = "Alpha"),
+                MatcherRule(regex = "Beta", join = MatcherJoin.OR)
+            )
+        )
+        assertTrue(engine.matchingProfiles("Beta", listOf(profile)).isNotEmpty())
+    }
+
+    @Test
+    fun variableMatcherCanCheckEmptyAndNotEmpty() {
+        val extractor = ExtractorRule("postal", "PLZ: ([0-9]+)")
+        val emptyProfile = Profile(
+            "empty",
+            "Empty",
+            extractors = listOf(extractor),
+            matchers = listOf(
+                MatcherRule(
+                    regex = "",
+                    variableKey = "postal",
+                    valueMode = MatcherValueMode.EMPTY
+                )
+            )
+        )
+        val presentProfile = Profile(
+            "present",
+            "Present",
+            extractors = listOf(extractor),
+            matchers = listOf(
+                MatcherRule(
+                    regex = "",
+                    variableKey = "postal",
+                    valueMode = MatcherValueMode.NOT_EMPTY
+                )
+            )
+        )
+
+        assertEquals(listOf("Empty"), engine.matchingProfiles("Keine PLZ", listOf(emptyProfile)).map { it.name })
+        assertEquals(listOf("Present"), engine.matchingProfiles("PLZ: 59000", listOf(presentProfile)).map { it.name })
+    }
+
 }
