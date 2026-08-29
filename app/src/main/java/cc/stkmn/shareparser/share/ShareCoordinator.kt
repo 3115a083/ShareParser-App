@@ -7,6 +7,7 @@ import cc.stkmn.shareparser.data.ProcessingAction
 import cc.stkmn.shareparser.data.Profile
 import cc.stkmn.shareparser.data.ProfileRepository
 import cc.stkmn.shareparser.data.SharedPayload
+import cc.stkmn.shareparser.data.WebhookMode
 import cc.stkmn.shareparser.engine.ActionExecutor
 import cc.stkmn.shareparser.engine.ParserEngine
 import cc.stkmn.shareparser.engine.ProcessingException
@@ -32,7 +33,9 @@ class ShareCoordinator(context: Context) {
     fun matchingProfiles(payload: SharedPayload): List<Profile> = parser.matchingProfiles(payload, repository.profiles())
 
     fun choices(payload: SharedPayload): List<Choice> = matchingProfiles(payload).flatMap { profile ->
-        profile.actions.map { action ->
+        profile.actions
+            .filterNot { it is ProcessingAction.Webhook && it.mode == WebhookMode.ALWAYS }
+            .map { action ->
             Choice(
                 profileId = profile.id,
                 actionId = action.id,
@@ -57,7 +60,30 @@ class ShareCoordinator(context: Context) {
         return result
     }
 
+    fun executeAlwaysWebhooks(payload: SharedPayload, profiles: List<Profile> = matchingProfiles(payload)) {
+        profiles.forEach { profile ->
+            profile.actions
+                .filterIsInstance<ProcessingAction.Webhook>()
+                .filter { it.mode == WebhookMode.ALWAYS }
+                .forEach { execute(payload, profile, it) }
+        }
+    }
+
     fun execute(payload: SharedPayload, profile: Profile, action: ProcessingAction): Boolean {
+        if (action is ProcessingAction.Webhook) {
+            Thread {
+                executeInternal(payload, profile, action)
+            }.apply {
+                name = "ShareParser-webhook"
+                isDaemon = true
+                start()
+            }
+            return true
+        }
+        return executeInternal(payload, profile, action)
+    }
+
+    private fun executeInternal(payload: SharedPayload, profile: Profile, action: ProcessingAction): Boolean {
         return try {
             val extracted = parser.extract(payload, profile)
             val result = ActionExecutor(appContext, repository.settings()).execute(action, extracted)
