@@ -59,4 +59,32 @@ class GuidedRuleFactoryTest {
         val profile = Profile("1", "Selected", matchers = listOf(matcher))
         assertTrue(parser.matchingProfiles("Neue Mail mit Profilkennung ABC und anderen Werten", listOf(profile)).isNotEmpty())
     }
+
+    @Test
+    fun selectedVariableCapturesOnlySelectedPart() {
+        val text = "Ort: Berlin / Raum: 12"
+        val start = text.indexOf("Berlin")
+        val rule = GuidedRuleFactory.extractorFromSelection(
+            text,
+            start,
+            start + "Berlin".length,
+            "ort",
+            InputSource.TEXT,
+            true
+        )
+        val profile = Profile("1", "Ort", extractors = listOf(rule))
+        assertEquals("Hamburg", parser.extract("Ort: Hamburg / Raum: 12", profile)["ort"])
+    }
+
+    @Test
+    fun suggestsLinksEmailAndPhoneTargets() {
+        val sample = SharedPayload(
+            text = "Web https://example.com/test\nMail mailto:test@example.com\nTelefon tel:+491701234567"
+        )
+        val candidates = GuidedRuleFactory.candidates(sample)
+        assertTrue(candidates.any { it.suggestedKey == "link" && it.value.startsWith("https://") })
+        assertTrue(candidates.any { it.suggestedKey == "email" && it.value.startsWith("mailto:") })
+        assertTrue(candidates.any { it.suggestedKey == "telefon" && it.value.startsWith("tel:") })
+    }
+
 }
