@@ -189,6 +189,7 @@ internal fun ProfileEditorScreen(
     var variableName by remember { mutableStateOf("") }
     var variableRequired by remember { mutableStateOf(false) }
     var variableConflict by remember { mutableStateOf<VariableConflict?>(null) }
+    val variableConflictQueue = remember { mutableStateListOf<VariableConflict>() }
 
     val exportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
         if (uri != null && pendingExport.isNotBlank()) {
@@ -223,8 +224,12 @@ internal fun ProfileEditorScreen(
         if (profile.name.isBlank()) return "Bitte einen Profilnamen eingeben."
         val keys = profile.extractors.map { it.key }
         if (keys.any { it.isBlank() }) return "Jede Variable braucht einen Namen."
-        if (keys.any { it in reservedVariables }) return "Ein Variablenname ist bereits für eine eingebaute Variable reserviert."
-        if (keys.size != keys.distinct().size) return "Jeder Variablenname darf nur einmal vorkommen."
+        if (keys.any { key -> reservedVariables.any { it.equals(key, ignoreCase = true) } }) {
+            return "Ein Variablenname ist bereits für eine eingebaute Variable reserviert."
+        }
+        if (keys.size != keys.map { it.lowercase() }.distinct().size) {
+            return "Jeder Variablenname darf nur einmal vorkommen."
+        }
 
         val variablesAvailableAtStep = reservedVariables.toMutableSet()
         profile.extractors.forEach { rule ->
@@ -256,12 +261,20 @@ internal fun ProfileEditorScreen(
 
     fun uniqueVariableKey(base: String, skipIndex: Int? = null): String {
         val used = extractors.mapIndexedNotNull { index, rule ->
-            rule.key.takeIf { index != skipIndex && it.isNotBlank() }
+            rule.key.takeIf { index != skipIndex && it.isNotBlank() }?.lowercase()
         }.toSet()
-        if (base !in used) return base
+        if (base.lowercase() !in used) return base
         var number = 2
-        while ("${base}_${number}" in used) number += 1
+        while (("${base}_${number}").lowercase() in used) number += 1
         return "${base}_${number}"
+    }
+
+    fun finishVariableConflict() {
+        variableConflict = if (variableConflictQueue.isNotEmpty()) {
+            variableConflictQueue.removeAt(0)
+        } else {
+            null
+        }
     }
 
     fun renameVariableReferences(oldKey: String, newKey: String, sourceIndex: Int) {
@@ -287,10 +300,11 @@ internal fun ProfileEditorScreen(
     }
 
     fun applyExtractor(proposed: ExtractorRule, index: Int? = null) {
-        val conflictIndex = extractors.indexOfFirst { it.key == proposed.key }
+        val conflictIndex = extractors.indexOfFirst { it.key.equals(proposed.key, ignoreCase = true) }
             .takeIf { it >= 0 && it != index }
         if (proposed.key.isNotBlank() && conflictIndex != null) {
-            variableConflict = VariableConflict(proposed, index)
+            val conflict = VariableConflict(proposed, index)
+            if (variableConflict == null) variableConflict = conflict else variableConflictQueue += conflict
             return
         }
         if (index == null) {
@@ -303,7 +317,7 @@ internal fun ProfileEditorScreen(
     }
 
     fun overwriteConflict(conflict: VariableConflict) {
-        val target = extractors.indexOfFirst { it.key == conflict.proposed.key }
+        val target = extractors.indexOfFirst { it.key.equals(conflict.proposed.key, ignoreCase = true) }
         val source = conflict.index
         val oldKey = source?.takeIf { it in extractors.indices }?.let { extractors[it].key }.orEmpty()
         var finalIndex = source ?: target
@@ -330,7 +344,7 @@ internal fun ProfileEditorScreen(
             }
         }
         if (source != null) renameVariableReferences(oldKey, conflict.proposed.key, finalIndex.coerceAtLeast(0))
-        variableConflict = null
+        finishVariableConflict()
     }
 
     fun incrementConflict(conflict: VariableConflict) {
@@ -342,7 +356,7 @@ internal fun ProfileEditorScreen(
             extractors[conflict.index] = changed
             renameVariableReferences(oldKey, changed.key, conflict.index)
         }
-        variableConflict = null
+        finishVariableConflict()
     }
 
     fun addCandidate(candidate: GuidedRuleFactory.Candidate) {
@@ -472,7 +486,7 @@ internal fun ProfileEditorScreen(
 
     variableConflict?.let { conflict ->
         AlertDialog(
-            onDismissRequest = { variableConflict = null },
+            onDismissRequest = { finishVariableConflict() },
             title = { Text("Variable bereits vorhanden") },
             text = {
                 Text("Die Variable '${conflict.proposed.key}' existiert bereits. Wähle, wie ShareParser fortfahren soll.")
@@ -483,7 +497,7 @@ internal fun ProfileEditorScreen(
             dismissButton = {
                 Row {
                     TextButton(onClick = { incrementConflict(conflict) }) { Text("Mit Nummer speichern") }
-                    TextButton(onClick = { variableConflict = null }) { Text("Verwerfen") }
+                    TextButton(onClick = { finishVariableConflict() }) { Text("Verwerfen") }
                 }
             }
         )
@@ -1242,7 +1256,7 @@ internal fun ProfileEditorScreen(
         }
         item {
             Row(
-                modifier = Modifier.fillMaxWidth().widthIn(max = 560.dp),
+                modifier = Modifier.widthIn(max = 560.dp).fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 OutlinedButton(
