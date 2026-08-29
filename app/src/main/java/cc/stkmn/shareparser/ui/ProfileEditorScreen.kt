@@ -184,6 +184,7 @@ internal fun ProfileEditorScreen(
     var pendingCandidate by remember { mutableStateOf<GuidedRuleFactory.Candidate?>(null) }
     var variableName by remember { mutableStateOf("") }
     var variableRequired by remember { mutableStateOf(false) }
+    var variableConflict by remember { mutableStateOf<VariableConflict?>(null) }
 
     val exportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
         if (uri != null && pendingExport.isNotBlank()) {
@@ -249,9 +250,58 @@ internal fun ProfileEditorScreen(
         return null
     }
 
+    fun uniqueVariableKey(base: String, skipIndex: Int? = null): String {
+        val used = extractors.mapIndexedNotNull { index, rule ->
+            rule.key.takeIf { index != skipIndex && it.isNotBlank() }
+        }.toSet()
+        if (base !in used) return base
+        var number = 2
+        while ("${base}_${number}" in used) number += 1
+        return "${base}_${number}"
+    }
+
+    fun applyExtractor(proposed: ExtractorRule, index: Int? = null) {
+        val conflictIndex = extractors.indexOfFirst { it.key == proposed.key }
+            .takeIf { it >= 0 && it != index }
+        if (proposed.key.isNotBlank() && conflictIndex != null) {
+            variableConflict = VariableConflict(proposed, index)
+            return
+        }
+        if (index == null) extractors += proposed
+        else if (index in extractors.indices) extractors[index] = proposed
+    }
+
+    fun overwriteConflict(conflict: VariableConflict) {
+        val target = extractors.indexOfFirst { it.key == conflict.proposed.key }
+        val source = conflict.index
+        when {
+            target < 0 && source == null -> extractors += conflict.proposed
+            target < 0 && source != null && source in extractors.indices -> extractors[source] = conflict.proposed
+            source == null -> extractors[target] = conflict.proposed
+            source == target -> extractors[source] = conflict.proposed
+            source < target -> {
+                extractors[source] = conflict.proposed
+                extractors.removeAt(target)
+            }
+            else -> {
+                extractors.removeAt(target)
+                val adjusted = source - 1
+                if (adjusted in extractors.indices) extractors[adjusted] = conflict.proposed
+            }
+        }
+        variableConflict = null
+    }
+
+    fun incrementConflict(conflict: VariableConflict) {
+        val changed = conflict.proposed.copy(key = uniqueVariableKey(conflict.proposed.key, conflict.index))
+        if (conflict.index == null) extractors += changed
+        else if (conflict.index in extractors.indices) extractors[conflict.index] = changed
+        variableConflict = null
+    }
+
     fun addCandidate(candidate: GuidedRuleFactory.Candidate) {
         if (variableName.isBlank()) return
-        extractors += GuidedRuleFactory.extractor(candidate, variableName, variableRequired)
+        applyExtractor(GuidedRuleFactory.extractor(candidate, variableName, variableRequired))
         pendingCandidate = null
         variableName = ""
         variableRequired = false
@@ -259,13 +309,15 @@ internal fun ProfileEditorScreen(
 
     fun addSelection(draft: SelectionDraft) {
         if (variableName.isBlank()) return
-        extractors += GuidedRuleFactory.extractorFromSelection(
-            sourceText = draft.sourceText,
-            selectionStart = draft.start,
-            selectionEnd = draft.end,
-            key = variableName,
-            source = draft.source,
-            required = variableRequired
+        applyExtractor(
+            GuidedRuleFactory.extractorFromSelection(
+                sourceText = draft.sourceText,
+                selectionStart = draft.start,
+                selectionEnd = draft.end,
+                key = variableName,
+                source = draft.source,
+                required = variableRequired
+            )
         )
         pendingSelection = null
         variableName = ""
@@ -353,6 +405,25 @@ internal fun ProfileEditorScreen(
         )
     }
 
+
+    variableConflict?.let { conflict ->
+        AlertDialog(
+            onDismissRequest = { variableConflict = null },
+            title = { Text("Variable bereits vorhanden") },
+            text = {
+                Text("Die Variable '${conflict.proposed.key}' existiert bereits. Wähle, wie ShareParser fortfahren soll.")
+            },
+            confirmButton = {
+                TextButton(onClick = { overwriteConflict(conflict) }) { Text("Überschreiben") }
+            },
+            dismissButton = {
+                Row {
+                    TextButton(onClick = { incrementConflict(conflict) }) { Text("Mit Nummer speichern") }
+                    TextButton(onClick = { variableConflict = null }) { Text("Verwerfen") }
+                }
+            }
+        )
+    }
 
     pendingCandidate?.let { candidate ->
         VariableDialog(
