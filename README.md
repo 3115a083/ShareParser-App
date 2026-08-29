@@ -1,7 +1,7 @@
 # ShareParser
 
 <p align="center">
-  <img src="app/src/main/res/mipmap-nodpi/app_logo_1.png" width="160" alt="ShareParser logo">
+  <img src="app/src/main/res/mipmap-nodpi/app_logo_3.png" width="160" alt="ShareParser logo">
 </p>
 
 ShareParser is a privacy-focused Android app for parsing and transforming text, emails and text files shared from other apps.
