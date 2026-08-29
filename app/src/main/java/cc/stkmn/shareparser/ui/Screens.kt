@@ -67,6 +67,7 @@ import cc.stkmn.shareparser.engine.ParserEngine
 import cc.stkmn.shareparser.engine.ProcessingException
 import cc.stkmn.shareparser.notify.FailureNotifier
 import cc.stkmn.shareparser.notify.WarningNotifier
+import cc.stkmn.shareparser.share.ShareCoordinator
 import java.util.UUID
 
 @Composable
@@ -257,6 +258,10 @@ internal fun SharedScreen(
     }
 
     fun executeNow(profile: Profile, action: ProcessingAction) {
+        if (action is ProcessingAction.Webhook) {
+            ShareCoordinator(context).execute(payload, profile, action)
+            return
+        }
         try {
             val extracted = parser.extract(payload, profile)
             val result = ActionExecutor(context, repository.settings()).execute(action, extracted)
