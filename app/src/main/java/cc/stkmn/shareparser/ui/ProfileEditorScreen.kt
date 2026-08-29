@@ -1806,19 +1806,32 @@ private fun ShareActionFields(action: ProcessingAction.Share, variables: List<St
     }
 
     if (action.asFile) {
-        val shownExtension = action.fileExtension.ifBlank { inferEditorExtension(action.fileNameTemplate, action.mimeType) }
+        val inferredExtension = inferEditorExtension(action.fileNameTemplate, action.mimeType)
+        var extensionField by remember(action.id) { mutableStateOf(action.fileExtension) }
+        LaunchedEffect(action.fileExtension) {
+            if (action.fileExtension != extensionField && action.fileExtension.isNotBlank()) {
+                extensionField = action.fileExtension
+            }
+        }
         OutlinedTextField(
-            value = shownExtension,
-            onValueChange = { onChange(action.copy(fileExtension = it.removePrefix("."))) },
+            value = extensionField,
+            onValueChange = {
+                extensionField = it.removePrefix(".")
+                onChange(action.copy(fileExtension = extensionField))
+            },
             label = { Text("Dateiendung") },
-            placeholder = { Text("z. B. txt, md, html, json") },
+            placeholder = { Text(inferredExtension.ifBlank { "txt" }) },
             supportingText = {
-                if (!isKnownTextExtension(shownExtension)) {
-                    Text("Unbekannte Endung. Die Datei wird trotzdem als Textdatei mit dieser Endung erzeugt.")
-                } else {
-                    Text("ShareParser wählt den passenden Text-Inhaltstyp automatisch.")
+                when {
+                    extensionField.isBlank() -> Text("Leer lassen übernimmt die bisherige oder Standard-Endung.")
+                    !isKnownTextExtension(extensionField) -> Text(
+                        "Unbekannte Endung. Die Datei wird trotzdem als Textdatei mit dieser Endung erzeugt.",
+                        color = MaterialTheme.colorScheme.error
+                    )
+                    else -> Text("ShareParser wählt den passenden Text-Inhaltstyp automatisch.")
                 }
             },
+            isError = extensionField.isNotBlank() && !isKnownTextExtension(extensionField),
             modifier = Modifier.fillMaxWidth(),
             singleLine = true
         )
