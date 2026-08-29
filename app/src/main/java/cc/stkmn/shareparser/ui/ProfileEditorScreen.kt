@@ -549,8 +549,8 @@ internal fun ProfileEditorScreen(
     }
     val variableMatcherItemCount = if (extractors.any { it.key.isNotBlank() }) 1 else 0
     val activeMatcherItemCount = if (matchers.isNotEmpty()) 1 + matchers.size else 1
-    val recognitionEndIndex = recognitionIndex + 1 + 1 + 1 +
-        sampleRecognitionCount + variableMatcherItemCount + activeMatcherItemCount + 1
+    val recognitionEndIndex = recognitionIndex + 6 +
+        sampleRecognitionCount + variableMatcherItemCount + activeMatcherItemCount
     val exampleIndex = recognitionEndIndex
     val variablesIndex = if (sample != null) {
         exampleIndex + 1 + 1 + sampleCandidates.size
