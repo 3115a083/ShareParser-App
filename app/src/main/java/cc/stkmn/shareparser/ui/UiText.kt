@@ -342,7 +342,17 @@ private val exactEnglish = mapOf(
     "Es ist keine Capture Group sichtbar. ShareParser übernimmt standardmäßig Gruppe 1 als Variableninhalt." to "No capture group is visible. ShareParser uses group 1 as the variable content by default.",
     "Der aktuelle Beispielwert steckt wörtlich im Filter. Für wechselnde Werte besser einen allgemeineren Baustein verwenden." to "The current example value is literal in the filter. Use a more general building block for changing values.",
     "Leere Erkennung findet keine Variable." to "An empty recognition rule finds no variable.",
-    "Variablen aus dem Beispiel" to "Variables from the example"
+    "Variablen aus dem Beispiel" to "Variables from the example",
+    "Filter-Bausteine" to "Filter building blocks",
+    "Vorschläge aus aktuellem Beispiel" to "Suggestions from the current example",
+    "alles außer Zeilenumbruch" to "anything except line breaks",
+    "alles außer Ziffern" to "anything except digits",
+    "alles außer lat. Buchstaben" to "anything except Latin letters",
+    "1 lat. Buchstabe" to "1 Latin letter",
+    "1 Ziffer" to "1 digit",
+    "Mehrere gierige Platzhalter können zu unerwartet großen Treffern führen. Verwende feste Anker oder möglichst kurze Treffer wie .+?." to "Several greedy wildcards can produce unexpectedly large matches. Use fixed anchors or shortest-match patterns such as .+?.",
+    "Eine Ausschlussklasse ohne Zeilengrenze kann über unerwartet viel Text laufen. Prüfe, ob Zeilenumbrüche ausgeschlossen werden sollten." to "An exclusion class without a line boundary may run across unexpected amounts of text. Consider excluding line breaks.",
+    "Dieses Projekt ist vibecoded. Es wurde vor allem für den eigenen Bedarf erstellt und mit der Community geteilt, falls es auch anderen hilfreich ist." to "This project is vibe-coded. It was created mainly for personal use and shared with the community in case it is useful to others."
 )
 
 private fun englishFallback(value: String): String {
