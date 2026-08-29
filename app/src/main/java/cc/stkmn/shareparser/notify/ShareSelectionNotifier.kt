@@ -61,8 +61,14 @@ object ShareSelectionNotifier {
             val builder = NotificationCompat.Builder(context.applicationContext, CHANNEL)
                 .setSmallIcon(R.drawable.ic_notification)
                 .setContentTitle("ShareParser: Weiterverarbeitung auswählen")
-                .setContentText(if (choices.size == 1) choices.first().label(multipleProfiles) else "${choices.size} Möglichkeiten verfügbar")
-                .setStyle(NotificationCompat.BigTextStyle().bigText(choices.take(6).joinToString("\n") { it.label(multipleProfiles) }))
+                .setContentText(
+                    when {
+                        choices.size == 1 -> choices.first().label(multipleProfiles)
+                        choices.size <= 3 -> "${choices.size} Möglichkeiten verfügbar"
+                        else -> "3 Schnellaktionen, weitere in ShareParser"
+                    }
+                )
+                .setStyle(NotificationCompat.BigTextStyle().bigText(choices.take(3).joinToString("\n") { it.label(multipleProfiles) }))
                 .setPriority(NotificationCompat.PRIORITY_DEFAULT)
                 .setAutoCancel(true)
                 .setTimeoutAfter(TIMEOUT_MS)
