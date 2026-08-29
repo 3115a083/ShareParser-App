@@ -54,19 +54,17 @@ internal fun rememberVariableHighlighting(
                 val length = range.last - range.first + 1
                 val sample = rule.sampleLabel.trim()
                 val expected = sample.length
+                val groupText = text.text.substring(range.first, range.last + 1)
+                val exactSampleOffset = if (sample.isNotBlank()) groupText.indexOf(sample) else -1
                 val suspiciouslyLarge = length > 1000 ||
-                    (expected > 0 && length > maxOf(expected * 4, expected + 80))
-                val highlightRange = if (suspiciouslyLarge && sample.isNotBlank()) {
-                    val groupText = text.text.substring(range.first, range.last + 1)
-                    val local = groupText.indexOf(sample)
-                    if (local >= 0) {
-                        val start = range.first + local
+                    (expected > 0 && length > maxOf(expected * 3, expected + 48))
+                val highlightRange = when {
+                    exactSampleOffset >= 0 && groupText != sample -> {
+                        val start = range.first + exactSampleOffset
                         start until (start + sample.length)
-                    } else {
-                        null
                     }
-                } else {
-                    range
+                    suspiciouslyLarge -> null
+                    else -> range
                 } ?: return@forEach
                 if (highlightRange.first < 0 || highlightRange.last >= text.length) return@forEach
                 if (occupied.any { it.first <= highlightRange.last && highlightRange.first <= it.last }) return@forEach
