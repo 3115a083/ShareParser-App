@@ -9,9 +9,9 @@
         android:allowBackup="false"
         android:fullBackupContent="false"
         android:hasFragileUserData="false"
-        android:icon="@mipmap/app_logo_1"
+        android:icon="@mipmap/app_logo_3"
         android:label="ShareParser"
-        android:roundIcon="@mipmap/app_logo_1"
+        android:roundIcon="@mipmap/app_logo_3"
         android:supportsRtl="true"
         android:theme="@style/Theme.ShareParser">
 
