@@ -6,6 +6,8 @@
 
 ShareParser is a privacy-focused Android app for parsing and transforming text, emails and text files shared from other apps.
 
+This is a **vibecoded project** that was created primarily for the author's own everyday needs. It is shared with the community because the same workflows may be useful to other people. Contributions, testing and practical feedback are welcome, especially where generated code or Android-specific behavior needs additional review.
+
 This is a **vibe-coded project** that was created primarily for the author's own day-to-day needs. It is shared publicly in case the app or parts of its implementation are useful to other people. Contributions, testing feedback and improvements from the community are welcome.
 
 A reusable profile recognizes incoming content, extracts named variables and turns the result into calendar events, URLs, rebuilt messages or generated text files. The normal workflow is visual. Regex remains available for advanced users, but is not required for common profiles.
@@ -85,6 +87,12 @@ The guided rule builder covers common cases such as contains, starts with, ends 
 ## Parsing direction
 
 Each profile can parse from **top to bottom** or **bottom to top**. Bottom-to-top mode is useful for replies and forwarded email chains where the original message appears below the newest reply. If a field occurs several times, ShareParser can use the last match instead of the first.
+
+## Regex assistance
+
+Variable extraction rules can be edited directly in each variable card. A built-in assistant offers reusable blocks for arbitrary text, digits, letters, mixed IDs, dates, times, email addresses, telephone numbers, addresses with optional house numbers, exclusions and line boundaries. Fixed text can be inserted before or after the variable as an escaped anchor.
+
+The editor color-codes regex operators, character classes, anchors and groups. It also warns about invalid syntax, missing capture groups, overly broad patterns, patterns that look tied to one sample, literal sample values embedded in a rule and potentially greedy exclusions. The goal is tolerant reusable parsing rather than a rule that works only for one copied message.
 
 ## Variable transformations
 
@@ -217,7 +225,7 @@ Each action can be included or excluded from the overlay and notification surfac
 
 ## App icon
 
-ShareParser now uses **Logo 3 exclusively** for the Android launcher and Sharesheet receiver. The previous runtime launcher-icon switcher was removed because launcher caching and alias switching were not reliable enough across tested Android launchers. Logo 3 is also wired through the canonical Android launcher icon resources used by the application manifest.
+ShareParser uses **Logo 3 exclusively** for the Android launcher, package icon and Sharesheet receiver. The manifest references the supplied Logo 3 artwork directly so the package installer and share surfaces do not fall back to Android's generic application icon. The previous runtime launcher-icon switcher was removed because launcher caching and alias switching were not reliable enough across tested Android launchers. Logo 3 is also wired through the canonical Android launcher icon resources used by the application manifest.
 
 The compact ShareParser graphic used inside the app and share overlay is rendered without a dark background and at a larger size than earlier builds.
 
