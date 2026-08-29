@@ -929,30 +929,7 @@ internal fun ProfileEditorScreen(
                 highlighted = highlightField == rule.key,
                 advanced = advanced,
                 onChange = { changed ->
-                    if (index >= 0) {
-                        val oldKey = extractors[index].key
-                        extractors[index] = changed
-                        if (oldKey != changed.key) {
-                            for (i in matchers.indices) {
-                                if (matchers[i].variableKey == oldKey) {
-                                    val matcher = matchers[i]
-                                    matchers[i] = matcher.copy(
-                                        variableKey = changed.key,
-                                        friendlyText = when (matcher.valueMode) {
-                                            MatcherValueMode.EMPTY -> changed.key + " ist leer"
-                                            MatcherValueMode.NOT_EMPTY -> changed.key + " ist nicht leer"
-                                            MatcherValueMode.REGEX -> changed.key + " erfüllt die Inhaltsprüfung"
-                                        }
-                                    )
-                                }
-                            }
-                            for (i in (index + 1) until extractors.size) {
-                                if (extractors[i].sourceVariableKey == oldKey) {
-                                    extractors[i] = extractors[i].copy(sourceVariableKey = changed.key)
-                                }
-                            }
-                        }
-                    }
+                    if (index >= 0) applyExtractor(changed, index)
                 },
                 onSplit = { firstKey, secondKey, separator ->
                     if (index >= 0 && rule.key.isNotBlank()) {
