@@ -55,7 +55,8 @@ data class MatcherRule(
 enum class InputSource {
     COMBINED,
     TEXT,
-    SUBJECT
+    SUBJECT,
+    LINKS
 }
 
 @Serializable
@@ -264,7 +265,8 @@ data class SharedPayload(
     val mimeType: String = "text/plain",
     val sourcePackage: String = "",
     val sourceApp: String = "",
-    val fileName: String = ""
+    val fileName: String = "",
+    val linkTargets: List<String> = emptyList()
 ) {
     val combined: String
         get() = buildString {
