@@ -1026,6 +1026,27 @@ internal fun ProfileEditorScreen(
             }
         }
 
+        item {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                OutlinedTextField(
+                    value = customMatcher,
+                    onValueChange = { customMatcher = it },
+                    label = { Text("Fester Text als Merkmal") },
+                    modifier = Modifier.weight(1f),
+                    singleLine = true
+                )
+                Spacer(Modifier.width(8.dp))
+                Button(onClick = {
+                    if (customMatcher.isNotBlank()) {
+                        matchers += GuidedRuleFactory.matcherFromText(customMatcher)
+                        customMatcher = ""
+                    }
+                }) { Text("Hinzufügen") }
+            }
+        }
+        item {
+            Text("Angewendete Filter", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+        }
         if (matchers.isNotEmpty()) {
             item { Text("Aktive Merkmale", style = MaterialTheme.typography.labelLarge) }
             itemsIndexed(matchers, key = { index, matcher -> matcher.variableKey + "-" + matcher.regex + "-" + matcher.valueMode + "-" + index }) { index, matcher ->
@@ -1053,24 +1074,6 @@ internal fun ProfileEditorScreen(
             }
         } else {
             item { Text("Noch kein Merkmal. Ohne Merkmale dient dieses Profil nur als Fallback.", style = MaterialTheme.typography.bodySmall) }
-        }
-        item {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                OutlinedTextField(
-                    value = customMatcher,
-                    onValueChange = { customMatcher = it },
-                    label = { Text("Fester Text als Merkmal") },
-                    modifier = Modifier.weight(1f),
-                    singleLine = true
-                )
-                Spacer(Modifier.width(8.dp))
-                Button(onClick = {
-                    if (customMatcher.isNotBlank()) {
-                        matchers += GuidedRuleFactory.matcherFromText(customMatcher)
-                        customMatcher = ""
-                    }
-                }) { Text("Hinzufügen") }
-            }
         }
 
         if (sample != null) {
