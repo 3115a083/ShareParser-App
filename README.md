@@ -6,6 +6,8 @@
 
 ShareParser is a privacy-focused Android app for parsing and transforming text, emails and text files shared from other apps.
 
+This is a **vibe-coded project** that was created primarily for the author's own day-to-day needs. It is shared publicly in case the app or parts of its implementation are useful to other people. Contributions, testing feedback and improvements from the community are welcome.
+
 A reusable profile recognizes incoming content, extracts named variables and turns the result into calendar events, URLs, rebuilt messages or generated text files. The normal workflow is visual. Regex remains available for advanced users, but is not required for common profiles.
 
 ## Main use cases
@@ -35,7 +37,7 @@ Opening a profile for editing activates editing mode. While that editor is open,
 
 Editor changes remain local until **Save profile** is used. Undo and redo are available directly in the editor top bar. If the user leaves the editor with unsaved changes, ShareParser asks whether to apply them, discard them or continue editing. Deleting a profile requires confirmation.
 
-The editor has a section navigation row for profile recognition, variables from the example, variables and processing actions. The example section is shown only when an example is available. Processing-action cards are collapsed by default so large profiles remain manageable.
+The editor has a sticky section navigation row for profile recognition, variables from the example, variables and processing actions. It remains visible while scrolling and indicates the current section. The example section is shown only when an example is available. Processing-action cards are collapsed by default so large profiles remain manageable.
 
 ## Visual extraction without Regex
 
@@ -50,9 +52,9 @@ Buchungsnummer: ICE-612
 Straße Hausnummer  Teststraße 151
 ```
 
-Configured variables are highlighted in the example text with different colors. Highlighting is constrained to the extracted value so a broad extraction pattern cannot color the entire sample. Example values can be copied for later transformations.
+Configured variables are highlighted in the example text with different colors. Highlighting is constrained to the extracted value so a broad extraction pattern cannot color the entire sample. Variable cards expose the recognition logic directly and include a guided regex assistant with common building blocks, colored syntax and warnings for invalid, overly broad or overly restrictive patterns. Example values can be copied for later transformations.
 
-The suggestion engine also recognizes common web links, `mailto:` links, email addresses, telephone links and plain telephone numbers as candidate variables.
+The suggestion engine also recognizes common web links, `mailto:` links, email addresses, telephone links and plain telephone numbers as candidate variables, including formatted Android URL spans and HTML link targets when the sharing app provides them.
 
 ### Built-in variables
 
@@ -215,7 +217,7 @@ Each action can be included or excluded from the overlay and notification surfac
 
 ## App icon
 
-ShareParser now uses **Logo 3 exclusively** for the Android launcher and Sharesheet receiver. The previous runtime launcher-icon switcher was removed because launcher caching and alias switching were not reliable enough across tested Android launchers.
+ShareParser now uses **Logo 3 exclusively** for the Android launcher and Sharesheet receiver. The previous runtime launcher-icon switcher was removed because launcher caching and alias switching were not reliable enough across tested Android launchers. Logo 3 is also wired through the canonical Android launcher icon resources used by the application manifest.
 
 The compact ShareParser graphic used inside the app and share overlay is rendered without a dark background and at a larger size than earlier builds.
 
