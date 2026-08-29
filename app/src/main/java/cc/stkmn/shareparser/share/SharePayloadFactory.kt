@@ -4,6 +4,8 @@ import android.app.Activity
 import android.content.Intent
 import android.net.Uri
 import android.provider.OpenableColumns
+import android.text.Spanned
+import android.text.style.URLSpan
 import cc.stkmn.shareparser.data.SharedPayload
 import java.io.InputStreamReader
 
@@ -25,10 +27,22 @@ object SharePayloadFactory {
             ?.takeIf { isSupportedTextPayload(mimeType, fileName) }
             ?.let { readSharedText(activity, it) }
             .orEmpty()
-        val inlineText = intent.getCharSequenceExtra(Intent.EXTRA_TEXT)?.toString()
-            ?: intent.getStringExtra(Intent.EXTRA_HTML_TEXT)
-            ?: ""
+        val inlineValue = intent.getCharSequenceExtra(Intent.EXTRA_TEXT)
+        val htmlText = intent.getStringExtra(Intent.EXTRA_HTML_TEXT).orEmpty()
+        val inlineText = inlineValue?.toString()
+            ?: htmlText
         val text = streamText.ifBlank { inlineText }
+        val linkTargets = buildList {
+            if (inlineValue is Spanned) {
+                inlineValue.getSpans(0, inlineValue.length, URLSpan::class.java)
+                    .mapNotNull { it.url?.trim()?.takeIf(String::isNotBlank) }
+                    .forEach(::add)
+            }
+            Regex("(?i)href\\s*=\\s*[\"']([^\"']+)[\"']")
+                .findAll(htmlText)
+                .mapNotNull { it.groups[1]?.value?.trim()?.takeIf(String::isNotBlank) }
+                .forEach(::add)
+        }.distinct()
         val subject = intent.getCharSequenceExtra(Intent.EXTRA_SUBJECT)?.toString().orEmpty()
         if (text.isBlank() && subject.isBlank()) return null
 
@@ -44,7 +58,8 @@ object SharePayloadFactory {
             mimeType = mimeType,
             sourcePackage = sourcePackage,
             sourceApp = sourceApp,
-            fileName = fileName
+            fileName = fileName,
+            linkTargets = linkTargets
         )
     }
 
