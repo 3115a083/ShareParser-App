@@ -20,6 +20,8 @@ import android.widget.TextView
 import cc.stkmn.shareparser.AppArtwork
 import cc.stkmn.shareparser.AppLocale
 import cc.stkmn.shareparser.MainActivity
+import cc.stkmn.shareparser.data.ShareSelectionMode
+import cc.stkmn.shareparser.MainActivity
 import cc.stkmn.shareparser.data.PendingShareStore
 
 class ShareOverlayService : Service() {
@@ -50,7 +52,7 @@ class ShareOverlayService : Service() {
             return
         }
         val coordinator = ShareCoordinator(this)
-        val choices = coordinator.choices(pending.payload)
+        val choices = coordinator.choices(pending.payload, ShareSelectionMode.OVERLAY)
         if (choices.isEmpty()) {
             stopSelf()
             return
@@ -135,6 +137,27 @@ class ShareOverlayService : Service() {
             })
         }
 
+        if (choices.size > 4) {
+            content.addView(Button(this).apply {
+                text = AppLocale.text("Alle ${choices.size} Aktionen in der App anzeigen", "Show all ${choices.size} actions in app")
+                isAllCaps = false
+                textSize = 14f
+                setTextColor(0xFF1F5FBF.toInt())
+                background = roundedStrokeBackground(0x00FFFFFF, 0xFF9AA7BD.toInt(), 14f)
+                setOnClickListener {
+                    startActivity(
+                        Intent(this@ShareOverlayService, MainActivity::class.java).apply {
+                            action = MainActivity.ACTION_OPEN_PENDING_SHARE
+                            putExtra(MainActivity.EXTRA_PENDING_SHARE_ID, id)
+                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+                        }
+                    )
+                    dismiss(removePending = false)
+                }
+            }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+                topMargin = dp(10)
+            })
+        }
         content.addView(Button(this).apply {
             text = "Abbrechen"
             isAllCaps = false
