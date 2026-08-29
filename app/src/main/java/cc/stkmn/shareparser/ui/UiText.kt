@@ -10,12 +10,11 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.intl.Locale
+import java.util.Locale
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.TextUnit
-import androidx.compose.ui.unit.sp
 
 private val exactEnglish = mapOf(
     "Profile" to "Profiles",
@@ -177,7 +176,7 @@ private fun englishFallback(value: String): String {
 }
 
 internal fun localized(value: String): String =
-    if (Locale.current.language == "de") value else englishFallback(value)
+    if (Locale.getDefault().language == "de") value else englishFallback(value)
 
 @Composable
 internal fun Text(
