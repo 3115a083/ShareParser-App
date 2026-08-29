@@ -177,6 +177,8 @@ internal fun ProfileEditorScreen(
     var variableMatcherMode by remember { mutableStateOf(MatcherValueMode.NOT_EMPTY) }
     var matcherPatternKind by remember { mutableStateOf("contains") }
     var matcherPatternValue by remember { mutableStateOf("") }
+    var sourceAppMenu by remember { mutableStateOf(false) }
+    var sourceAppNegated by remember { mutableStateOf(false) }
 
     var subjectSelection by remember(sample?.subject) { mutableStateOf(TextFieldValue(sample?.subject.orEmpty())) }
     var bodySelection by remember(sample?.text) { mutableStateOf(TextFieldValue(sample?.text.orEmpty())) }
@@ -579,24 +581,88 @@ internal fun ProfileEditorScreen(
             Text("Kombiniere feste Textteile, teilende App und Variablen. Ab dem zweiten Merkmal kannst du UND oder ODER wählen.")
         }
 
-        if (sample != null) {
-            if (sample.sourcePackage.isNotBlank()) {
-                item {
-                    val active = matchers.any { it.variableKey == "source_package" && it.regex == Regex.escape(sample.sourcePackage) }
-                    FilterChip(
-                        selected = active,
-                        onClick = {
-                            if (active) matchers.removeAll { it.variableKey == "source_package" && it.regex == Regex.escape(sample.sourcePackage) }
-                            else matchers += MatcherRule(
-                                regex = Regex.escape(sample.sourcePackage),
-                                friendlyText = "Geteilt aus ${sample.sourceApp.ifBlank { sample.sourcePackage }}",
-                                variableKey = "source_package"
-                            )
-                        },
-                        label = { Text("Nur aus ${sample.sourceApp.ifBlank { sample.sourcePackage }}") }
+        item {
+            val sourceApps = remember(sample?.sourcePackage, sample?.sourceApp) {
+                ShareSourceAppCatalog.list(
+                    context,
+                    includePackage = sample?.sourcePackage.orEmpty(),
+                    includeLabel = sample?.sourceApp.orEmpty()
+                )
+            }
+            val activeAppMatcher = matchers.firstOrNull { it.variableKey == "source_package" }
+            val activePackage = activeAppMatcher?.regex
+                ?.removePrefix("\\Q")
+                ?.removeSuffix("\\E")
+                .orEmpty()
+            Card(Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Teilende App", fontWeight = FontWeight.SemiBold)
+                    Text(
+                        "Optional. Wähle eine installierte App und ob geteilte Inhalte von dieser App stammen sollen oder nicht.",
+                        style = MaterialTheme.typography.bodySmall
                     )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        RadioButton(
+                            selected = !sourceAppNegated,
+                            onClick = { sourceAppNegated = false }
+                        )
+                        Text("Ist")
+                        Spacer(Modifier.width(12.dp))
+                        RadioButton(
+                            selected = sourceAppNegated,
+                            onClick = { sourceAppNegated = true }
+                        )
+                        Text("Ist nicht")
+                    }
+                    OutlinedButton(
+                        onClick = { sourceAppMenu = true },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            activeAppMatcher?.friendlyText
+                                ?.substringAfter("Teilende App ")
+                                ?.ifBlank { null }
+                                ?: "App auswählen"
+                        )
+                    }
+                    DropdownMenu(expanded = sourceAppMenu, onDismissRequest = { sourceAppMenu = false }) {
+                        sourceApps.forEach { app ->
+                            DropdownMenuItem(
+                                text = {
+                                    Column {
+                                        Text(app.label)
+                                        Text(app.packageName, style = MaterialTheme.typography.bodySmall)
+                                    }
+                                },
+                                onClick = {
+                                    val join = activeAppMatcher?.join ?: MatcherJoin.AND
+                                    matchers.removeAll { it.variableKey == "source_package" }
+                                    matchers += MatcherRule(
+                                        regex = Regex.escape(app.packageName),
+                                        ignoreCase = false,
+                                        friendlyText = "Teilende App " +
+                                            (if (sourceAppNegated) "ist nicht " else "ist ") +
+                                            app.label,
+                                        variableKey = "source_package",
+                                        join = join,
+                                        valueMode = MatcherValueMode.REGEX,
+                                        negate = sourceAppNegated
+                                    )
+                                    sourceAppMenu = false
+                                }
+                            )
+                        }
+                    }
+                    if (activeAppMatcher != null) {
+                        TextButton(onClick = { matchers.remove(activeAppMatcher) }) {
+                            Text("App-Filter entfernen")
+                        }
+                    }
                 }
             }
+        }
+
+        if (sample != null) {
             if (sample.fileName.isNotBlank()) {
                 item {
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
