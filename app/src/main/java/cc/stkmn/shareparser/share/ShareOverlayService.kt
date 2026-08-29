@@ -23,6 +23,7 @@ import cc.stkmn.shareparser.MainActivity
 import cc.stkmn.shareparser.data.ShareSelectionMode
 import cc.stkmn.shareparser.MainActivity
 import cc.stkmn.shareparser.data.PendingShareStore
+import cc.stkmn.shareparser.data.ShareSelectionMode
 
 class ShareOverlayService : Service() {
     private val handler = Handler(Looper.getMainLooper())
