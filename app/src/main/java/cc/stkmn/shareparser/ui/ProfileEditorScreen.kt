@@ -20,6 +20,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Add
@@ -63,8 +64,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
-import androidx.compose.foundation.relocation.BringIntoViewRequester
-import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
@@ -131,10 +130,7 @@ internal fun ProfileEditorScreen(
     val clipboard = LocalClipboardManager.current
     val parser = remember { ParserEngine() }
     val navigationScope = rememberCoroutineScope()
-    val recognitionAnchor = remember { BringIntoViewRequester() }
-    val exampleAnchor = remember { BringIntoViewRequester() }
-    val variablesAnchor = remember { BringIntoViewRequester() }
-    val actionsAnchor = remember { BringIntoViewRequester() }
+    val editorListState = rememberLazyListState()
     val profileId = remember(existing?.id) { existing?.id ?: UUID.randomUUID().toString() }
     val editorModeStore = remember { EditorModeStore(context) }
 
@@ -518,7 +514,29 @@ internal fun ProfileEditorScreen(
         )
     }
 
+    val sampleCandidates = remember(sample) {
+        sample?.let { GuidedRuleFactory.candidates(it).filter { candidate -> candidate.source == InputSource.TEXT }.take(30) }.orEmpty()
+    }
+    val recognitionIndex = 6 + if (highlightField != null) 1 else 0
+    val sampleRecognitionCount = if (sample == null) 0 else {
+        (if (sample.fileName.isNotBlank()) 1 else 0) +
+            (if (sample.subject.isNotBlank()) 1 else 0) +
+            3
+    }
+    val variableMatcherItemCount = if (extractors.any { it.key.isNotBlank() }) 1 else 0
+    val activeMatcherItemCount = if (matchers.isNotEmpty()) 1 + matchers.size else 1
+    val recognitionEndIndex = recognitionIndex + 1 + 1 + 1 +
+        sampleRecognitionCount + variableMatcherItemCount + activeMatcherItemCount + 1
+    val exampleIndex = recognitionEndIndex
+    val variablesIndex = if (sample != null) {
+        exampleIndex + 1 + 1 + sampleCandidates.size
+    } else {
+        recognitionEndIndex
+    }
+    val actionsIndex = variablesIndex + 1 + extractors.size
+
     LazyColumn(
+        state = editorListState,
         contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
@@ -526,27 +544,27 @@ internal fun ProfileEditorScreen(
             LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 item {
                     AssistChip(
-                        onClick = { navigationScope.launch { recognitionAnchor.bringIntoView() } },
+                        onClick = { navigationScope.launch { editorListState.animateScrollToItem(recognitionIndex) } },
                         label = { Text("Profil erkennen") }
                     )
                 }
                 if (sample != null) {
                     item {
                         AssistChip(
-                            onClick = { navigationScope.launch { exampleAnchor.bringIntoView() } },
+                            onClick = { navigationScope.launch { editorListState.animateScrollToItem(exampleIndex) } },
                             label = { Text("Variablen aus Beispiel") }
                         )
                     }
                 }
                 item {
                     AssistChip(
-                        onClick = { navigationScope.launch { variablesAnchor.bringIntoView() } },
+                        onClick = { navigationScope.launch { editorListState.animateScrollToItem(variablesIndex) } },
                         label = { Text("Variablen") }
                     )
                 }
                 item {
                     AssistChip(
-                        onClick = { navigationScope.launch { actionsAnchor.bringIntoView() } },
+                        onClick = { navigationScope.launch { editorListState.animateScrollToItem(actionsIndex) } },
                         label = { Text("Weiterverarbeitung") }
                     )
                 }
@@ -624,7 +642,7 @@ internal fun ProfileEditorScreen(
         item {
             EditorSectionHeader(
                 "Profil automatisch erkennen",
-                Modifier.bringIntoViewRequester(recognitionAnchor)
+                Modifier
             )
         }
         item {
@@ -1010,11 +1028,11 @@ internal fun ProfileEditorScreen(
             item {
                 EditorSectionHeader(
                     "Variablen aus dem Beispiel",
-                    Modifier.bringIntoViewRequester(exampleAnchor)
+                    Modifier
                 )
             }
             item { Text("Markiere einen veränderlichen Wert oben und tippe auf „Als Variable“. Bereits definierte Variablen werden im Beispiel farbig markiert. Beispielwerte lassen sich kopieren und anschließend in Umwandlungen verwenden.") }
-            items(GuidedRuleFactory.candidates(sample).filter { it.source == InputSource.TEXT }.take(30)) { candidate ->
+            items(sampleCandidates) { candidate ->
                 Card(Modifier.fillMaxWidth()) {
                     Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
                         Column(Modifier.weight(1f)) {
@@ -1038,7 +1056,7 @@ internal fun ProfileEditorScreen(
         }
 
         item {
-            Card(Modifier.fillMaxWidth().bringIntoViewRequester(variablesAnchor)) {
+            Card(Modifier.fillMaxWidth()) {
                 Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
                     SectionTitle("Variablen", Modifier.weight(1f))
                     TextButton(onClick = {
@@ -1119,7 +1137,7 @@ internal fun ProfileEditorScreen(
         }
 
         item {
-            Card(Modifier.fillMaxWidth().bringIntoViewRequester(actionsAnchor)) {
+            Card(Modifier.fillMaxWidth()) {
                 Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
                     SectionTitle("Weiterverarbeitung", Modifier.weight(1f))
                     Column {
