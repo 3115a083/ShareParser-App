@@ -64,7 +64,9 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         CrashRecorder.install(this)
-        LauncherIconManager.apply(this, ProfileRepository(this).settings().launcherIcon)
+        val startupSettings = ProfileRepository(this).settings()
+        AppLocale.apply(this, startupSettings.appLanguage)
+        LauncherIconManager.apply(this, startupSettings.launcherIcon)
         val pendingCrash = CrashRecorder.consumePending(this)
         latestIntent.value = if (pendingCrash && intent.action == Intent.ACTION_MAIN) {
             Intent(Intent.ACTION_VIEW, Uri.parse("shareparser://failure/crash"))
@@ -181,7 +183,7 @@ private fun ShareParserApp(startIntent: Intent?, onIntentConsumed: () -> Unit) {
                             Image(
                                 painter = painterResource(R.drawable.ic_launcher_foreground),
                                 contentDescription = null,
-                                modifier = Modifier.size(32.dp)
+                                modifier = Modifier.size(42.dp)
                             )
                             Spacer(Modifier.width(10.dp))
                             Text(
