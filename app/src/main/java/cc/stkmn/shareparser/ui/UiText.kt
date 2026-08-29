@@ -257,7 +257,8 @@ private val exactEnglish = mapOf(
     "Dateiendung" to "File extension",
     "Unbekannte Endung. Die Datei wird trotzdem als Textdatei mit dieser Endung erzeugt." to "Unknown extension. The file will still be created as a text file with this extension.",
     "ShareParser wählt den passenden Text-Inhaltstyp automatisch." to "ShareParser selects the matching text content type automatically.",
-    "Die gewählte Inhaltsprüfung ist noch unvollständig oder der Regex ist ungültig." to "The selected content check is incomplete or the regex is invalid."
+    "Die gewählte Inhaltsprüfung ist noch unvollständig oder der Regex ist ungültig." to "The selected content check is incomplete or the regex is invalid.",
+    "JSON übernommen. Speichere das Profil, um die Änderungen anzuwenden." to "JSON loaded. Save the profile to apply the changes."
 )
 
 private fun englishFallback(value: String): String {
