@@ -218,7 +218,9 @@ internal fun ProfileEditorScreen(
 
         val available = reservedVariables + keys
         profile.matchers.forEach { matcher ->
-            runCatching { Regex(matcher.regex) }.getOrElse { return "Ein Profilmerkmal ist ungültig: ${it.message}" }
+            if (matcher.valueMode == MatcherValueMode.REGEX) {
+                runCatching { Regex(matcher.regex) }.getOrElse { return "Ein Profilmerkmal ist ungültig: ${it.message}" }
+            }
             if (matcher.variableKey.isNotBlank() && matcher.variableKey !in available) {
                 return "Profilmerkmal verweist auf unbekannte Variable '${matcher.variableKey}'."
             }
@@ -429,7 +431,7 @@ internal fun ProfileEditorScreen(
         item { HorizontalDivider() }
         item { SectionTitle("Profil automatisch erkennen") }
         item {
-            Text("Wähle feste Textteile, die teilende App oder erkannte Variablen als Merkmale. Alle gewählten Merkmale müssen passen.")
+            Text("Kombiniere feste Textteile, teilende App und Variablen. Ab dem zweiten Merkmal kannst du UND oder ODER wählen.")
         }
 
         if (sample != null) {
@@ -788,9 +790,14 @@ internal fun ProfileEditorScreen(
                         if (oldKey != changed.key) {
                             for (i in matchers.indices) {
                                 if (matchers[i].variableKey == oldKey) {
-                                    matchers[i] = matchers[i].copy(
+                                    val matcher = matchers[i]
+                                    matchers[i] = matcher.copy(
                                         variableKey = changed.key,
-                                        friendlyText = "Variable '${changed.key}' erkannt"
+                                        friendlyText = when (matcher.valueMode) {
+                                            MatcherValueMode.EMPTY -> changed.key + " ist leer"
+                                            MatcherValueMode.NOT_EMPTY -> changed.key + " ist nicht leer"
+                                            MatcherValueMode.REGEX -> changed.key + " erfüllt die Inhaltsprüfung"
+                                        }
                                     )
                                 }
                             }
