@@ -117,6 +117,7 @@ class ParserEngine {
         InputSource.COMBINED -> payload.combined
         InputSource.TEXT -> payload.text
         InputSource.SUBJECT -> payload.subject
+        InputSource.LINKS -> payload.linkTargets.joinToString("\n")
     }
 
     private fun extractOne(input: String, rule: ExtractorRule, direction: ParseDirection): String? {
