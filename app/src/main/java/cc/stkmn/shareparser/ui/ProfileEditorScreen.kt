@@ -929,6 +929,12 @@ private fun SelectionSourceCard(
                 IconButton(onClick = { expanded = !expanded }) {
                     Icon(if (expanded) Icons.Outlined.FullscreenExit else Icons.Outlined.Fullscreen, if (expanded) "Textfeld verkleinern" else "Textfeld maximieren")
                 }
+                IconButton(onClick = { expanded = !expanded }) {
+                    Icon(
+                        if (expanded) Icons.Outlined.CloseFullscreen else Icons.Outlined.OpenInFull,
+                        if (expanded) "Textfeld verkleinern" else "Textfeld maximieren"
+                    )
+                }
                 IconButton(onClick = { clipboard.setText(AnnotatedString(fixedText)) }) {
                     Icon(Icons.Outlined.ContentCopy, "Text kopieren")
                 }
