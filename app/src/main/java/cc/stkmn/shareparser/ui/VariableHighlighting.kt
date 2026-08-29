@@ -51,6 +51,11 @@ internal fun rememberVariableHighlighting(
                 if (group == null) return@forEach
                 val range = group.range
                 if (range.first < 0 || range.last < range.first || range.last >= text.length) return@forEach
+                val length = range.last - range.first + 1
+                val expected = rule.sampleLabel.length
+                val suspiciouslyLarge = length > 1000 ||
+                    (expected > 0 && length > maxOf(expected * 4, expected + 80))
+                if (suspiciouslyLarge) return@forEach
                 if (occupied.any { it.first <= range.last && range.first <= it.last }) return@forEach
                 occupied += range
                 builder.addStyle(
