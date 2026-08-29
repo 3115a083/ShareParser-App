@@ -471,6 +471,35 @@ internal fun ProfileEditorScreen(
             }
         }
 
+        if (extractors.isNotEmpty()) {
+            item {
+                Card(Modifier.fillMaxWidth()) {
+                    Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("Variable genauer prüfen", fontWeight = FontWeight.SemiBold)
+                        Text("Wähle eine Variable und beschreibe ihren Inhalt. Beispiele: nicht leer = .+, PLZ = \\d{5}, exakt fünf Ziffern = ^\\d{5}$.", style = MaterialTheme.typography.bodySmall)
+                        LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            items(extractors.filter { it.key.isNotBlank() }, key = { it.id }) { rule ->
+                                FilterChip(selected = matcherVariable == rule.key, onClick = { matcherVariable = rule.key }, label = { Text(variableLabel(rule.key)) })
+                            }
+                        }
+                        OutlinedTextField(value = matcherPattern, onValueChange = { matcherPattern = it }, label = { Text("Prüfmuster (Regex)") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+                        LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            item { AssistChip(onClick = { matcherPattern = ".+" }, label = { Text("Nicht leer") }) }
+                            item { AssistChip(onClick = { matcherPattern = "^\\d{5}$" }, label = { Text("PLZ, 5 Ziffern") }) }
+                            item { AssistChip(onClick = { matcherPattern = "^\\d+$" }, label = { Text("Nur Ziffern") }) }
+                        }
+                        Button(onClick = {
+                            val key = matcherVariable
+                            if (key.isNotBlank() && runCatching { Regex(matcherPattern) }.isSuccess) {
+                                matchers.removeAll { it.variableKey == key }
+                                matchers += MatcherRule(regex = matcherPattern, friendlyText = "Variable '" + key + "' passt zu " + matcherPattern, variableKey = key)
+                            }
+                        }, enabled = matcherVariable.isNotBlank() && matcherPattern.isNotBlank(), modifier = Modifier.fillMaxWidth()) { Text("Variablen-Prüfung hinzufügen") }
+                    }
+                }
+            }
+        }
+
         if (matchers.isNotEmpty()) {
             item { Text("Aktive Merkmale", style = MaterialTheme.typography.labelLarge) }
             itemsIndexed(matchers, key = { index, matcher -> "${matcher.variableKey}-${matcher.regex}-$index" }) { _, matcher ->
