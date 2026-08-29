@@ -6,7 +6,7 @@ import java.util.UUID
 
 @Serializable
 data class ProfileBundle(
-    val schemaVersion: Int = 8,
+    val schemaVersion: Int = 9,
     val profile: Profile
 )
 
@@ -28,11 +28,26 @@ enum class ParseDirection {
 }
 
 @Serializable
+enum class MatcherJoin {
+    AND,
+    OR
+}
+
+@Serializable
+enum class MatcherValueMode {
+    REGEX,
+    EMPTY,
+    NOT_EMPTY
+}
+
+@Serializable
 data class MatcherRule(
     val regex: String,
     val ignoreCase: Boolean = true,
     val friendlyText: String = "",
-    val variableKey: String = ""
+    val variableKey: String = "",
+    val join: MatcherJoin = MatcherJoin.AND,
+    val valueMode: MatcherValueMode = MatcherValueMode.REGEX
 )
 
 @Serializable
@@ -208,6 +223,7 @@ sealed class ProcessingAction {
         val textTemplate: String = "{{text}}",
         val subjectTemplate: String = "{{subject}}",
         val mimeType: String = "text/plain",
+        val fileExtension: String = "txt",
         val asFile: Boolean = false,
         val fileMode: TextFileMode = TextFileMode.SHARE,
         val fileNameTemplate: String = "ShareParser.txt",
