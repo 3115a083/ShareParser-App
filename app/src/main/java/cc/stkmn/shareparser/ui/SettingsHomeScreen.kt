@@ -45,8 +45,10 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import cc.stkmn.shareparser.AppArtwork
+import cc.stkmn.shareparser.AppLocale
 import cc.stkmn.shareparser.AppArtworkImage
 import cc.stkmn.shareparser.LauncherIconManager
+import cc.stkmn.shareparser.data.AppLanguage
 import cc.stkmn.shareparser.data.LauncherIcon
 import cc.stkmn.shareparser.data.ProfileRepository
 import cc.stkmn.shareparser.data.ShareSelectionMode
@@ -80,6 +82,12 @@ internal fun SettingsHomeScreen(
         LauncherIconManager.apply(context, icon)
     }
 
+    fun saveLanguage(language: AppLanguage) {
+        settings = settings.copy(appLanguage = language)
+        repository.saveSettings(settings)
+        AppLocale.apply(context, language)
+    }
+
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
         overlayGranted = Settings.canDrawOverlays(context)
         if (overlayPermissionRequested && overlayGranted) {
@@ -106,6 +114,37 @@ internal fun SettingsHomeScreen(
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
+        item {
+            Text("Sprache / Language", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+        }
+        item {
+            Text("Beim ersten Start folgt ShareParser der Systemsprache. Diese Auswahl kann jederzeit geändert werden.", style = MaterialTheme.typography.bodySmall)
+        }
+        item {
+            ChoiceCard(
+                selected = settings.appLanguage == AppLanguage.SYSTEM,
+                title = "Systemstandard / System default",
+                description = "Verwendet die Sprache des Geräts.",
+                onClick = { saveLanguage(AppLanguage.SYSTEM) }
+            )
+        }
+        item {
+            ChoiceCard(
+                selected = settings.appLanguage == AppLanguage.DE,
+                title = "Deutsch",
+                description = "Deutsch als App-Sprache verwenden.",
+                onClick = { saveLanguage(AppLanguage.DE) }
+            )
+        }
+        item {
+            ChoiceCard(
+                selected = settings.appLanguage == AppLanguage.EN,
+                title = "English",
+                description = "Use English as the app language.",
+                onClick = { saveLanguage(AppLanguage.EN) }
+            )
+        }
+
         item {
             Text("Darstellung", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
         }
