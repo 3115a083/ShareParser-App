@@ -25,7 +25,7 @@ class ParserEngine {
                         } else {
                             triggerValues[matcher.variableKey].orEmpty()
                         }
-                        when (matcher.valueMode) {
+                        val matchedValue = when (matcher.valueMode) {
                             MatcherValueMode.EMPTY -> source.isBlank()
                             MatcherValueMode.NOT_EMPTY -> source.isNotBlank()
                             MatcherValueMode.REGEX -> {
@@ -36,6 +36,7 @@ class ParserEngine {
                                 Regex(matcher.regex, options).containsMatchIn(source)
                             }
                         }
+                        if (matcher.negate) !matchedValue else matchedValue
                     }.getOrDefault(false)
                 }.let { results ->
                     var matchedResult = results.first()
