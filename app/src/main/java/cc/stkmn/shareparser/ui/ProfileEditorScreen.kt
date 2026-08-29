@@ -1089,6 +1089,11 @@ internal fun ProfileEditorScreen(
     }
 }
 
+private data class VariableConflict(
+    val proposed: ExtractorRule,
+    val index: Int?
+)
+
 private data class SelectionDraft(
     val sourceText: String,
     val start: Int,
