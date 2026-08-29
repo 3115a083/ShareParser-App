@@ -129,7 +129,7 @@ object GuidedRuleFactory {
                 regex = "(?s)^\\s*(.+?)\\s*$",
                 required = required,
                 source = InputSource.SUBJECT,
-                sampleLabel = candidate.label
+                sampleLabel = candidate.value.take(80)
             )
         }
 
@@ -142,7 +142,7 @@ object GuidedRuleFactory {
                 key = normalizedKey,
                 source = candidate.source,
                 required = required
-            ).copy(sampleLabel = candidate.label)
+            ).copy(sampleLabel = candidate.value.take(80))
         }
 
         val split = splitLabelAndValue(candidate.sourceLine)
@@ -154,7 +154,7 @@ object GuidedRuleFactory {
                 regex = "(?m)^\\s*$label\\s*$separator\\s*(.+?)\\s*$",
                 required = required,
                 source = InputSource.TEXT,
-                sampleLabel = split.first
+                sampleLabel = candidate.value.take(80)
             )
         } else {
             val literal = Regex.escape(candidate.sourceLine)
