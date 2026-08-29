@@ -21,6 +21,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material.icons.outlined.Undo
+import androidx.compose.material.icons.outlined.Redo
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
@@ -129,6 +131,10 @@ private fun ShareParserApp(startIntent: Intent?, onIntentConsumed: () -> Unit) {
     var importError by remember { mutableStateOf<String?>(null) }
     var editorDirty by remember { mutableStateOf(false) }
     var editorExitRequest by remember { mutableIntStateOf(0) }
+    var editorUndoRequest by remember { mutableIntStateOf(0) }
+    var editorRedoRequest by remember { mutableIntStateOf(0) }
+    var editorCanUndo by remember { mutableStateOf(false) }
+    var editorCanRedo by remember { mutableStateOf(false) }
 
     fun requestBack() {
         if (screen is Screen.Editor && editorDirty) {
@@ -216,6 +222,20 @@ private fun ShareParserApp(startIntent: Intent?, onIntentConsumed: () -> Unit) {
                         }
                     },
                     actions = {
+                        if (screen is Screen.Editor) {
+                            IconButton(
+                                onClick = { editorUndoRequest += 1 },
+                                enabled = editorCanUndo
+                            ) {
+                                Icon(Icons.Outlined.Undo, "Änderung rückgängig")
+                            }
+                            IconButton(
+                                onClick = { editorRedoRequest += 1 },
+                                enabled = editorCanRedo
+                            ) {
+                                Icon(Icons.Outlined.Redo, "Änderung wiederholen")
+                            }
+                        }
                         if (screen is Screen.Home) {
                             IconButton(onClick = { screen = Screen.Settings }) {
                                 Icon(Icons.Outlined.Settings, "Einstellungen")
@@ -273,8 +293,18 @@ private fun ShareParserApp(startIntent: Intent?, onIntentConsumed: () -> Unit) {
                             screen = Screen.Home
                         },
                         exitRequest = editorExitRequest,
+                        undoRequest = editorUndoRequest,
+                        redoRequest = editorRedoRequest,
                         onDirtyChanged = { editorDirty = it },
+                        onHistoryChanged = { canUndo, canRedo ->
+                            editorCanUndo = canUndo
+                            editorCanRedo = canRedo
+                        },
                         onExitRequestHandled = { editorExitRequest = 0 },
+                        onHistoryRequestHandled = {
+                            editorUndoRequest = 0
+                            editorRedoRequest = 0
+                        },
                         onDiscarded = {
                             editorMode.clear()
                             editorDirty = false
