@@ -354,12 +354,20 @@ internal fun ProfileEditorScreen(
                 Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Outlined.Share, null)
                     Spacer(Modifier.width(10.dp))
-                    Column {
+                    Column(Modifier.weight(1f)) {
                         Text("Bearbeitungsmodus aktiv", fontWeight = FontWeight.SemiBold)
                         Text(
                             "Neue Nachrichten oder Textdateien, die du jetzt an ShareParser teilst, werden direkt als Beispiel in dieses Profil geladen.",
                             style = MaterialTheme.typography.bodySmall
                         )
+                    }
+                    IconButton(
+                        onClick = {
+                            if (undoStack.isNotEmpty()) restoreProfile(undoStack.removeAt(undoStack.lastIndex))
+                        },
+                        enabled = undoStack.isNotEmpty()
+                    ) {
+                        Icon(Icons.Outlined.Undo, "Letzte Änderung rückgängig")
                     }
                 }
             }
