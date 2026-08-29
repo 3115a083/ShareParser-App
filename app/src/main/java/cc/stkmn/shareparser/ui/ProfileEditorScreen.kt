@@ -931,31 +931,38 @@ internal fun ProfileEditorScreen(
                 onChange = { changed ->
                     if (index >= 0) applyExtractor(changed, index)
                 },
-                onSplit = { firstKey, secondKey, separator ->
-                    if (index >= 0 && rule.key.isNotBlank()) {
+                onSplit = { keys, separator ->
+                    if (index >= 0 && rule.key.isNotBlank() && keys.size >= 2) {
                         val splitRegex = if (separator.isBlank()) {
-                            "^\\s*(\\S+)\\s+(.+?)\\s*$"
+                            buildString {
+                                append("^\\s*")
+                                keys.indices.forEach { childIndex ->
+                                    if (childIndex == keys.lastIndex) append("(.+?)\\s*$")
+                                    else append("(\\S+)\\s+")
+                                }
+                            }
                         } else {
-                            "^\\s*(.*?)\\s*${Regex.escape(separator)}\\s*(.+?)\\s*$"
+                            val escaped = Regex.escape(separator)
+                            buildString {
+                                append("^\\s*")
+                                keys.indices.forEach { childIndex ->
+                                    if (childIndex == keys.lastIndex) append("(.+?)\\s*$")
+                                    else append("(.*?)\\s*").append(escaped).append("\\s*")
+                                }
+                            }
                         }
-                        val first = ExtractorRule(
-                            key = firstKey,
-                            regex = splitRegex,
-                            group = 1,
-                            required = rule.required,
-                            sourceVariableKey = rule.key,
-                            transforms = listOf(ValueTransform.Trim)
-                        )
-                        val second = ExtractorRule(
-                            key = secondKey,
-                            regex = splitRegex,
-                            group = 2,
-                            required = rule.required,
-                            sourceVariableKey = rule.key,
-                            transforms = listOf(ValueTransform.Trim)
-                        )
-                        extractors.add(index + 1, first)
-                        extractors.add(index + 2, second)
+                        keys.forEachIndexed { childIndex, key ->
+                            applyExtractor(
+                                ExtractorRule(
+                                    key = key,
+                                    regex = splitRegex,
+                                    group = childIndex + 1,
+                                    required = rule.required,
+                                    sourceVariableKey = rule.key,
+                                    transforms = listOf(ValueTransform.Trim)
+                                )
+                            )
+                        }
                     }
                 },
                 onDelete = {
