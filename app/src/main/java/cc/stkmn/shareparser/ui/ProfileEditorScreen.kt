@@ -1491,8 +1491,6 @@ private fun UrlActionFields(action: ProcessingAction.Url, variables: List<String
 private fun ShareActionFields(action: ProcessingAction.Share, variables: List<String>, onChange: (ProcessingAction) -> Unit) {
     TemplateField("Betreff", action.subjectTemplate, variables) { onChange(action.copy(subjectTemplate = it)) }
     TemplateField("Nachricht", action.textTemplate, variables, minLines = 4) { onChange(action.copy(textTemplate = it)) }
-    OutlinedTextField(action.mimeType, { onChange(action.copy(mimeType = it)) }, label = { Text("Inhaltstyp, z. B. text/plain, text/markdown, text/html") }, modifier = Modifier.fillMaxWidth())
-
     Row(verticalAlignment = Alignment.CenterVertically) {
         Checkbox(action.asFile, { onChange(action.copy(asFile = it)) })
         Column {
@@ -1502,11 +1500,27 @@ private fun ShareActionFields(action: ProcessingAction.Share, variables: List<St
     }
 
     if (action.asFile) {
+        val shownExtension = action.fileExtension.ifBlank { inferEditorExtension(action.fileNameTemplate, action.mimeType) }
+        OutlinedTextField(
+            value = shownExtension,
+            onValueChange = { onChange(action.copy(fileExtension = it.removePrefix("."))) },
+            label = { Text("Dateiendung") },
+            placeholder = { Text("z. B. txt, md, html, json") },
+            supportingText = {
+                if (!isKnownTextExtension(shownExtension)) {
+                    Text("Unbekannte Endung. Die Datei wird trotzdem als Textdatei mit dieser Endung erzeugt.")
+                } else {
+                    Text("ShareParser wählt den passenden Text-Inhaltstyp automatisch.")
+                }
+            },
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true
+        )
         TemplateField(
             "Dateiname",
             action.fileNameTemplate,
             variables,
-            placeholder = "z. B. {{datum}}-{{ort}}.md"
+            placeholder = "z. B. {{datum}}-{{ort}}"
         ) { onChange(action.copy(fileNameTemplate = it)) }
         TemplateField(
             "Unterordner, optional",
@@ -1689,7 +1703,7 @@ private fun actionTemplates(action: ProcessingAction): List<Pair<String, String>
 
 private fun defaultCalendarAction() = ProcessingAction.Calendar(UUID.randomUUID().toString(), "Kalender öffnen")
 private fun defaultUrlAction() = ProcessingAction.Url(UUID.randomUUID().toString(), "Link öffnen")
-private fun defaultShareAction() = ProcessingAction.Share(UUID.randomUUID().toString(), "Text weiterleiten")
+private fun defaultShareAction() = ProcessingAction.Share(UUID.randomUUID().toString(), "Text weiterleiten", fileExtension = "txt")
 private fun defaultWebhookAction() = ProcessingAction.Webhook(UUID.randomUUID().toString(), "Webhook senden")
 
 private fun withFriendlyName(action: ProcessingAction, name: String): ProcessingAction = when (action) {
@@ -1737,6 +1751,27 @@ private fun variableLabel(key: String): String = when (key) {
     "mime_type" -> "Inhaltstyp"
     else -> key
 }
+
+private fun inferEditorExtension(fileNameTemplate: String, mimeType: String): String {
+    val fromName = fileNameTemplate.substringAfterLast('.', "").takeIf { it.isNotBlank() }
+    if (fromName != null) return fromName
+    return when (mimeType.lowercase()) {
+        "text/markdown" -> "md"
+        "text/html" -> "html"
+        "text/csv" -> "csv"
+        "application/json" -> "json"
+        "application/xml", "text/xml" -> "xml"
+        "application/yaml", "text/yaml" -> "yaml"
+        else -> "txt"
+    }
+}
+
+private fun isKnownTextExtension(value: String): Boolean =
+    value.trim().removePrefix(".").lowercase() in setOf(
+        "txt", "log", "ini", "conf", "cfg", "md", "markdown", "html", "htm",
+        "csv", "tsv", "json", "xml", "yaml", "yml", "css", "js", "mjs", "ics",
+        "sql", "kt", "java", "py", "sh"
+    )
 
 private fun safeFileName(name: String): String = name
     .trim()
