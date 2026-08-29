@@ -61,6 +61,7 @@ import cc.stkmn.shareparser.data.ProcessingAction
 import cc.stkmn.shareparser.data.Profile
 import cc.stkmn.shareparser.data.ProfileRepository
 import cc.stkmn.shareparser.data.SharedPayload
+import cc.stkmn.shareparser.data.WebhookMode
 import cc.stkmn.shareparser.engine.ActionExecutor
 import cc.stkmn.shareparser.engine.ParserEngine
 import cc.stkmn.shareparser.engine.ProcessingException
@@ -301,8 +302,12 @@ internal fun SharedScreen(
         }
     }
 
-    LaunchedEffect(selected?.id) {
-        showActionPicker = selected?.actions?.size?.let { it > 1 } == true
+    val selectableActions = selected?.actions
+        ?.filterNot { it is ProcessingAction.Webhook && it.mode == WebhookMode.ALWAYS }
+        .orEmpty()
+
+    LaunchedEffect(selected?.id, selectableActions.size) {
+        showActionPicker = selectableActions.size > 1
     }
 
     if (showActionPicker && selected != null) {
@@ -310,7 +315,7 @@ internal fun SharedScreen(
             Column(Modifier.padding(horizontal = 16.dp).padding(bottom = 32.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("Wie weiterverarbeiten?", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
                 Text(selected!!.name)
-                selected!!.actions.forEach { action ->
+                selectableActions.forEach { action ->
                     ElevatedButton(
                         onClick = {
                             showActionPicker = false
@@ -410,10 +415,10 @@ internal fun SharedScreen(
 
             item { HorizontalDivider() }
             item { Text("Weiterverarbeitung", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold) }
-            when (selected!!.actions.size) {
-                0 -> item { Text("Dieses Profil hat noch keine Aktion.") }
+            when (selectableActions.size) {
+                0 -> item { Text("Dieses Profil hat noch keine auswählbare Aktion.") }
                 1 -> {
-                    val action = selected!!.actions.first()
+                    val action = selectableActions.first()
                     item {
                         ElevatedButton(onClick = { runAction(selected!!, action) }, modifier = Modifier.fillMaxWidth()) {
                             Icon(actionIcon(action.icon), null)
