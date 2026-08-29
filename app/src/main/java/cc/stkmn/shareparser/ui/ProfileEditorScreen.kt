@@ -1105,9 +1105,15 @@ internal fun ProfileEditorScreen(
         }
 
         item {
-            Card(Modifier.fillMaxWidth()) {
-                Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                    SectionTitle("Variablen", Modifier.weight(1f))
+            Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                HorizontalDivider()
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        "Variablen",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.weight(1f)
+                    )
                     TextButton(onClick = {
                         applyExtractor(ExtractorRule(key = "", regex = "(.+)", required = false))
                     }) {
@@ -1186,20 +1192,26 @@ internal fun ProfileEditorScreen(
         }
 
         item {
-            Card(Modifier.fillMaxWidth()) {
-                Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                    SectionTitle("Weiterverarbeitung", Modifier.weight(1f))
+            Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                HorizontalDivider()
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        "Weiterverarbeitung",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.weight(1f)
+                    )
                     Column {
-                    TextButton(onClick = { addActionMenu = true }) {
-                        Icon(Icons.Outlined.Add, null)
-                        Text("Aktion")
-                    }
-                    DropdownMenu(expanded = addActionMenu, onDismissRequest = { addActionMenu = false }) {
-                        DropdownMenuItem(text = { Text("Kalendereintrag") }, onClick = { actions += defaultCalendarAction(); addActionMenu = false })
-                        DropdownMenuItem(text = { Text("URL öffnen") }, onClick = { actions += defaultUrlAction(); addActionMenu = false })
-                        DropdownMenuItem(text = { Text("Text oder Textdatei") }, onClick = { actions += defaultShareAction(); addActionMenu = false })
-                        DropdownMenuItem(text = { Text("Webhook") }, onClick = { actions += defaultWebhookAction(); addActionMenu = false })
-                    }
+                        TextButton(onClick = { addActionMenu = true }) {
+                            Icon(Icons.Outlined.Add, null)
+                            Text("Aktion")
+                        }
+                        DropdownMenu(expanded = addActionMenu, onDismissRequest = { addActionMenu = false }) {
+                            DropdownMenuItem(text = { Text("Kalendereintrag") }, onClick = { actions += defaultCalendarAction(); addActionMenu = false })
+                            DropdownMenuItem(text = { Text("URL öffnen") }, onClick = { actions += defaultUrlAction(); addActionMenu = false })
+                            DropdownMenuItem(text = { Text("Text oder Textdatei") }, onClick = { actions += defaultShareAction(); addActionMenu = false })
+                            DropdownMenuItem(text = { Text("Webhook") }, onClick = { actions += defaultWebhookAction(); addActionMenu = false })
+                        }
                     }
                 }
             }
@@ -2108,12 +2120,12 @@ private fun TemplateField(
 
 @Composable
 private fun EditorSectionHeader(text: String, modifier: Modifier = Modifier) {
-    Card(modifier.fillMaxWidth()) {
+    Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        HorizontalDivider()
         Text(
             text,
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp)
+            style = MaterialTheme.typography.titleLarge,
+            fontWeight = FontWeight.Bold
         )
     }
 }
