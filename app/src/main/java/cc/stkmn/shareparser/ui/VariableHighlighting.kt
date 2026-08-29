@@ -28,7 +28,15 @@ internal fun rememberVariableHighlighting(
         MaterialTheme.colorScheme.tertiaryContainer,
         MaterialTheme.colorScheme.surfaceVariant
     )
-    val relevant = extractors.filter { it.source == source && it.key.isNotBlank() }
+    // Only rules that directly read this source can be mapped back to positions in the
+    // displayed text. Derived-variable rules previously ran against the original text
+    // as well and could accidentally highlight very large ranges.
+    val relevant = extractors.filter {
+        it.source == source &&
+            it.sourceVariableKey.isBlank() &&
+            it.key.isNotBlank() &&
+            it.regex.isNotBlank()
+    }
     val highlights = relevant.map { rule ->
         VariableHighlight(rule.key, palette[(rule.id.hashCode() and Int.MAX_VALUE) % palette.size])
     }
@@ -40,13 +48,19 @@ internal fun rememberVariableHighlighting(
             val color = byKey[rule.key]?.color ?: return@forEach
             runCatching { Regex(rule.regex, setOf(RegexOption.MULTILINE)).findAll(text.text).toList() }
                 .getOrDefault(emptyList())
+                .asSequence()
+                .take(250)
                 .forEach { match ->
                     val group = if (rule.group in match.groupValues.indices) match.groups[rule.group] else null
-                    if (group != null && group.range.first >= 0 && group.range.last < text.length) {
+                    val start = group?.range?.first ?: return@forEach
+                    val endExclusive = (group.range.last + 1).coerceAtMost(text.length)
+                    // Empty capture groups use an empty range. Never style them. This also
+                    // protects AnnotatedString from malformed/oversized regex group ranges.
+                    if (group.value.isNotEmpty() && start in 0 until text.length && endExclusive > start) {
                         builder.addStyle(
                             SpanStyle(background = color, fontWeight = FontWeight.SemiBold),
-                            group.range.first,
-                            group.range.last + 1
+                            start,
+                            endExclusive
                         )
                     }
                 }
