@@ -1052,6 +1052,7 @@ internal fun ProfileEditorScreen(
             }
         }
 
+        item { HorizontalDivider() }
         item {
             Text("Angewendete Filter", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
         }
@@ -1777,17 +1778,37 @@ private fun RegexAssistant(
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true
             )
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedButton(
-                    onClick = { if (literalText.isNotBlank()) onChange(Regex.escape(literalText) + "\\s*" + regex) },
-                    enabled = literalText.isNotBlank()
-                ) { Text("Davor setzen") }
-                OutlinedButton(
-                    onClick = { if (literalText.isNotBlank()) onChange(regex + "\\s*" + Regex.escape(literalText)) },
-                    enabled = literalText.isNotBlank()
-                ) { Text("Danach setzen") }
+            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                item {
+                    OutlinedButton(
+                        onClick = { if (literalText.isNotBlank()) onChange(Regex.escape(literalText) + "\\s*" + regex) },
+                        enabled = literalText.isNotBlank()
+                    ) { Text("Davor setzen") }
+                }
+                item {
+                    OutlinedButton(
+                        onClick = { if (literalText.isNotBlank()) onChange(regex + "\\s*" + Regex.escape(literalText)) },
+                        enabled = literalText.isNotBlank()
+                    ) { Text("Danach setzen") }
+                }
+                item {
+                    OutlinedButton(
+                        onClick = {
+                            if (literalText.isNotBlank()) {
+                                onChange(regex + "[" + escapeRegexCharacterClass(literalText) + "]+")
+                            }
+                        },
+                        enabled = literalText.isNotBlank()
+                    ) { Text("Nur diese Zeichen") }
+                }
             }
+            Text(
+                "Beispiel: Eingabe XYZ erzeugt [XYZ]+. Eingabe 0123 erzeugt [0123]+. Das erlaubt beliebig viele Zeichen ausschließlich aus dieser Menge.",
+                style = MaterialTheme.typography.bodySmall
+            )
 
+            Text("Farblegende", fontWeight = FontWeight.SemiBold)
+            RegexLegend()
             Text("Regex-Vorschau", fontWeight = FontWeight.SemiBold)
             RegexColorPreview(regex)
 
@@ -1802,6 +1823,28 @@ private fun RegexAssistant(
                 style = MaterialTheme.typography.bodySmall
             )
         }
+    }
+}
+
+@Composable
+private fun RegexLegend() {
+    val operatorColor = MaterialTheme.colorScheme.tertiary
+    val classColor = MaterialTheme.colorScheme.primary
+    val anchorColor = MaterialTheme.colorScheme.secondary
+    val groupColor = MaterialTheme.colorScheme.error
+    LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        item { Text("+ * ? { } Operatoren", color = operatorColor, fontWeight = FontWeight.SemiBold) }
+        item { Text("[ ] \\d Zeichenklassen", color = classColor, fontWeight = FontWeight.SemiBold) }
+        item { Text("[^ ] Ausschluss", color = classColor, fontWeight = FontWeight.SemiBold) }
+        item { Text("^ $ Anker", color = anchorColor, fontWeight = FontWeight.SemiBold) }
+        item { Text("( ) Gruppen", color = groupColor, fontWeight = FontWeight.SemiBold) }
+    }
+}
+
+private fun escapeRegexCharacterClass(value: String): String = buildString {
+    value.forEach { ch ->
+        if (ch == '\\' || ch == ']' || ch == '^' || ch == '-') append('\\')
+        append(ch)
     }
 }
 
