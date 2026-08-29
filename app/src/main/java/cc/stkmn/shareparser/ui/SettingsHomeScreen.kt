@@ -57,7 +57,7 @@ internal fun SettingsHomeScreen(
     }
     val versionName = packageInfo?.versionName.orEmpty().ifBlank { "?" }
     val versionCode = if (Build.VERSION.SDK_INT >= 28) packageInfo?.longVersionCode ?: 0L
-        else @Suppress("DEPRECATION") (packageInfo?.versionCode?.toLong() ?: 0L)
+        else packageInfo?.versionCode?.toLong() ?: 0L
     var overlayGranted by remember { mutableStateOf(Settings.canDrawOverlays(context)) }
     var overlayPermissionRequested by remember { mutableStateOf(false) }
 
