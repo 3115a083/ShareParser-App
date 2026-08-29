@@ -6,7 +6,7 @@ import java.util.UUID
 
 @Serializable
 data class ProfileBundle(
-    val schemaVersion: Int = 9,
+    val schemaVersion: Int = 10,
     val profile: Profile
 )
 
@@ -174,7 +174,7 @@ enum class LauncherIcon {
 data class AppSettings(
     val dateTimeLocale: DateTimeLocale = DateTimeLocale.SYSTEM,
     val shareSelectionMode: ShareSelectionMode = ShareSelectionMode.APP,
-    val launcherIcon: LauncherIcon = LauncherIcon.LOGO_1,
+    val launcherIcon: LauncherIcon = LauncherIcon.LOGO_3,
     val defaultSaveTreeUri: String = "",
     val appLanguage: AppLanguage = AppLanguage.SYSTEM
 )
@@ -188,6 +188,8 @@ sealed class ProcessingAction {
     @Serializable
     @SerialName("calendar")
     data class Calendar(
+        val showInOverlay: Boolean = true,
+        val showInNotification: Boolean = true,
         override val id: String,
         override val friendlyName: String,
         override val icon: String = "event",
@@ -208,6 +210,8 @@ sealed class ProcessingAction {
     @Serializable
     @SerialName("url")
     data class Url(
+        val showInOverlay: Boolean = true,
+        val showInNotification: Boolean = true,
         override val id: String,
         override val friendlyName: String,
         override val icon: String = "link",
@@ -218,6 +222,8 @@ sealed class ProcessingAction {
     @Serializable
     @SerialName("share")
     data class Share(
+        val showInOverlay: Boolean = true,
+        val showInNotification: Boolean = true,
         override val id: String,
         override val friendlyName: String,
         override val icon: String = "share",
@@ -237,6 +243,8 @@ sealed class ProcessingAction {
     @Serializable
     @SerialName("webhook")
     data class Webhook(
+        val showInOverlay: Boolean = true,
+        val showInNotification: Boolean = true,
         override val id: String,
         override val friendlyName: String,
         override val icon: String = "send",
