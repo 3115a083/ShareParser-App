@@ -352,7 +352,15 @@ private val exactEnglish = mapOf(
     "1 Ziffer" to "1 digit",
     "Mehrere gierige Platzhalter können zu unerwartet großen Treffern führen. Verwende feste Anker oder möglichst kurze Treffer wie .+?." to "Several greedy wildcards can produce unexpectedly large matches. Use fixed anchors or shortest-match patterns such as .+?.",
     "Eine Ausschlussklasse ohne Zeilengrenze kann über unerwartet viel Text laufen. Prüfe, ob Zeilenumbrüche ausgeschlossen werden sollten." to "An exclusion class without a line boundary may run across unexpected amounts of text. Consider excluding line breaks.",
-    "Dieses Projekt ist vibecoded. Es wurde vor allem für den eigenen Bedarf erstellt und mit der Community geteilt, falls es auch anderen hilfreich ist." to "This project is vibe-coded. It was created mainly for personal use and shared with the community in case it is useful to others."
+    "Dieses Projekt ist vibecoded. Es wurde vor allem für den eigenen Bedarf erstellt und mit der Community geteilt, falls es auch anderen hilfreich ist." to "This project is vibe-coded. It was created mainly for personal use and shared with the community in case it is useful to others.",
+    "Nur diese Zeichen" to "Only these characters",
+    "Beispiel: Eingabe XYZ erzeugt [XYZ]+. Eingabe 0123 erzeugt [0123]+. Das erlaubt beliebig viele Zeichen ausschließlich aus dieser Menge." to "Example: entering XYZ creates [XYZ]+. Entering 0123 creates [0123]+. This allows any number of characters exclusively from that set.",
+    "Farblegende" to "Color legend",
+    "+ * ? { } Operatoren" to "+ * ? { } operators",
+    "[ ] \\d Zeichenklassen" to "[ ] \\d character classes",
+    "[^ ] Ausschluss" to "[^ ] exclusion",
+    "^ $ Anker" to "^ $ anchors",
+    "( ) Gruppen" to "( ) groups"
 )
 
 private fun englishFallback(value: String): String {
