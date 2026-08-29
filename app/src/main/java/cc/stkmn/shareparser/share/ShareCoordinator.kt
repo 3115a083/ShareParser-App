@@ -7,6 +7,7 @@ import cc.stkmn.shareparser.data.ProcessingAction
 import cc.stkmn.shareparser.data.Profile
 import cc.stkmn.shareparser.data.ProfileRepository
 import cc.stkmn.shareparser.data.SharedPayload
+import cc.stkmn.shareparser.data.ShareSelectionMode
 import cc.stkmn.shareparser.data.WebhookMode
 import cc.stkmn.shareparser.engine.ActionExecutor
 import cc.stkmn.shareparser.engine.ParserEngine
@@ -32,18 +33,42 @@ class ShareCoordinator(context: Context) {
 
     fun matchingProfiles(payload: SharedPayload): List<Profile> = parser.matchingProfiles(payload, repository.profiles())
 
-    fun choices(payload: SharedPayload): List<Choice> = matchingProfiles(payload).flatMap { profile ->
+    fun choices(
+        payload: SharedPayload,
+        mode: ShareSelectionMode = ShareSelectionMode.APP
+    ): List<Choice> = matchingProfiles(payload).flatMap { profile ->
         profile.actions
             .filterNot { it is ProcessingAction.Webhook && it.mode == WebhookMode.ALWAYS }
+            .filter { action ->
+                when (mode) {
+                    ShareSelectionMode.APP -> true
+                    ShareSelectionMode.OVERLAY -> actionShownInOverlay(action)
+                    ShareSelectionMode.NOTIFICATION -> actionShownInNotification(action)
+                }
+            }
             .map { action ->
-            Choice(
-                profileId = profile.id,
-                actionId = action.id,
-                profileName = profile.name,
-                actionName = action.friendlyName,
-                icon = action.icon
-            )
-        }
+                Choice(
+                    profileId = profile.id,
+                    actionId = action.id,
+                    profileName = profile.name,
+                    actionName = action.friendlyName,
+                    icon = action.icon
+                )
+            }
+    }
+
+    private fun actionShownInOverlay(action: ProcessingAction): Boolean = when (action) {
+        is ProcessingAction.Calendar -> action.showInOverlay
+        is ProcessingAction.Url -> action.showInOverlay
+        is ProcessingAction.Share -> action.showInOverlay
+        is ProcessingAction.Webhook -> action.showInOverlay
+    }
+
+    private fun actionShownInNotification(action: ProcessingAction): Boolean = when (action) {
+        is ProcessingAction.Calendar -> action.showInNotification
+        is ProcessingAction.Url -> action.showInNotification
+        is ProcessingAction.Share -> action.showInNotification
+        is ProcessingAction.Webhook -> action.showInNotification
     }
 
     fun execute(payload: SharedPayload, profileId: String, actionId: String): Boolean {
