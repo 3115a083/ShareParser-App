@@ -1137,6 +1137,12 @@ internal fun ProfileEditorScreen(
                 }
             }
         }
+        item {
+            Text(
+                "Die Reihenfolge bestimmt auch die Auswahl beim Teilen. Benachrichtigungen zeigen die ersten 3 Aktionen, das Overlay die ersten 4. In der App bleibt die vollständige Liste verfügbar.",
+                style = MaterialTheme.typography.bodySmall
+            )
+        }
         val variables = listOf("subject", "text", "input", "source_app", "source_package", "file_name", "mime_type") + extractors.map { it.key }.filter { it.isNotBlank() }
         items(actions, key = { it.id }) { action ->
             val index = actions.indexOfFirst { it.id == action.id }
