@@ -33,6 +33,8 @@ When multiple profiles match, ShareParser asks which one to use. If exactly one 
 
 Opening a profile for editing activates editing mode. While that editor is open, newly shared emails, messages or text files are loaded directly into the profile as a fresh example. This is useful for refining a rule against several real examples without recreating the profile.
 
+Editor changes remain local until **Save profile** is used. The editor provides an undo button for recent changes. If the user leaves the editor with unsaved changes, ShareParser asks whether to apply them, discard them or continue editing. Processing-action cards are collapsed by default so large profiles remain manageable.
+
 ## Visual extraction without Regex
 
 With a shared example, the user can select a value directly in the subject or message body and create a named variable from that selection. ShareParser builds a reusable extraction rule from the surrounding text.
@@ -64,7 +66,15 @@ The sharing application can be used as an additional profile criterion. SharePar
 
 ## Profile recognition
 
-Profiles can use several criteria at once. All selected criteria must match. Useful criteria include stable text fragments, extracted variables, sharing app/package, file name and MIME type. Multiple stable fragments can be selected to reduce false matches.
+Profiles can use several criteria at once. From the second criterion onward, each criterion can be connected to the previous result with **AND** or **OR**. This allows profiles to require several facts while still accepting alternative signatures.
+
+Useful criteria include stable text fragments, sharing app/package, file name, MIME type and extracted variables. Variable criteria are kept collapsed in the editor until needed. One or more variables can be selected together and checked for:
+
+- empty
+- not empty
+- content matching a guided rule
+
+The guided rule builder covers common cases such as contains, starts with, ends with, exact text, digits only and a chosen number of digits. Advanced users can still enter a custom regular expression, which is validated before it is stored.
 
 ## Parsing direction
 
@@ -161,16 +171,27 @@ URL actions can open generated URLs in the standard browser/matching Android app
 
 The WebView accepts only HTTP(S). JavaScript, DOM storage, file/content access, geolocation, mixed content and third-party cookies are disabled.
 
+
+## Webhook actions
+
+A profile can send an HTTP POST webhook. URL and body fields support the same variables as other actions.
+
+A webhook can either appear as a normal selectable action or fire automatically whenever its profile matches. Automatic webhooks are excluded from the action picker so they do not create duplicate choices. Empty webhook bodies can use a fallback body or stop with an error.
+
 ## Rebuilt text and text files
 
 A text action can generate a new subject and body from variables and fixed text. The result can be shared as normal Android text, generated as a file and shared, opened directly in another app, or saved through Android's file system.
 
+For file output, the user enters the file extension directly, for example `txt`, `md`, `html`, `json` or `xml`. ShareParser chooses the corresponding text MIME type automatically. Unknown extensions are allowed. ShareParser warns the user and continues with text content while keeping the requested extension, so an extension such as `.pdf` does not turn the generated text into a real PDF.
+
 File names and subfolders can contain variables:
 
 ```text
-{{datum}}-{{Ort}}.md
+{{datum}}-{{Ort}}
 Termine/{{jahr}}
 ```
+
+The selected extension is appended to the generated file name. Empty variables or invalid file-system characters can either use configured fallback values or stop the action with a visible error.
 
 A default destination folder can be selected in Settings. ShareParser uses Android's Storage Access Framework and needs no broad storage permission. If the preset destination is unavailable, Android's normal save dialog is shown.
 
@@ -184,9 +205,9 @@ When more than one profile/action is possible, the selector can appear inside Sh
 
 ## App icons
 
-ShareParser includes four selectable launcher icons. **Logo 1 is the default** and is explicitly assigned to the Android Sharesheet receiver. Launcher artwork is stored as PNG to avoid device-specific WebP drawable decoder problems seen on Android 16.
+ShareParser includes four selectable launcher icons. **Logo 1 is the default** and is explicitly assigned to the Android Sharesheet receiver. Launcher aliases are switched explicitly and synchronously to improve launcher refresh reliability.
 
-The compact `ic_launcher_foreground.png` graphic is used next to the ShareParser title inside the app and in the overlay.
+The settings preview uses a robust bitmap decoder for the supplied PNG artwork. The compact ShareParser graphic is rendered without its dark source background and is displayed at a larger size next to the title and in the share overlay.
 
 ## Failure handling
 
