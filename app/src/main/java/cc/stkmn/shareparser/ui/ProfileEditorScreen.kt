@@ -1745,12 +1745,18 @@ private fun RegexAssistant(
                 item { AssistChip(onClick = { onChange(regex + "\\s*") }, label = { Text("optionaler Abstand") }) }
                 item { AssistChip(onClick = { onChange(regex + "[^,;\\n]+") }, label = { Text("bis Komma/Semikolon") }) }
                 item { AssistChip(onClick = { onChange(regex + "\\d{5}") }, label = { Text("PLZ") }) }
+                item { AssistChip(onClick = { onChange(regex + "[\\p{L} .'-]+") }, label = { Text("Ort / Wörter") }) }
                 item { AssistChip(onClick = { onChange(regex + "[\\p{L} .'-]+\\s+\\d+[A-Za-z]?") }, label = { Text("Adresse + Hausnummer") }) }
+                item { AssistChip(onClick = { onChange(regex + "[\\p{L} .'-]+(?:\\s+\\d+[A-Za-z]?)?") }, label = { Text("Adresse, Hausnummer optional") }) }
+                item { AssistChip(onClick = { onChange(regex + "[A-Za-z0-9][A-Za-z0-9._/-]*") }, label = { Text("ID / Buchungsnummer") }) }
                 item { AssistChip(onClick = { onChange(regex + "\\d{1,2}[./-]\\d{1,2}(?:[./-]\\d{2,4})?") }, label = { Text("Datum") }) }
+                item { AssistChip(onClick = { onChange(regex + "\\d{1,2}:\\d{2}") }, label = { Text("Uhrzeit") }) }
                 item { AssistChip(onClick = { onChange(regex + "[A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z]{2,}") }, label = { Text("E-Mail") }) }
                 item { AssistChip(onClick = { onChange(regex + "\\+?[0-9 ()/.-]{6,}") }, label = { Text("Telefon") }) }
+                item { AssistChip(onClick = { onChange(regex + "[^\\r\\n]+") }, label = { Text("bis Zeilenende") }) }
                 item { AssistChip(onClick = { onChange("^" + regex) }, label = { Text("Zeilenanfang ^") }) }
                 item { AssistChip(onClick = { onChange(regex + "$") }, label = { Text("Zeilenende $") }) }
+                item { AssistChip(onClick = { onChange("(" + regex + ")") }, label = { Text("als Capture Group") }) }
             }
             OutlinedTextField(
                 value = literalText,
