@@ -650,13 +650,34 @@ internal fun ProfileEditorScreen(
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         RadioButton(
                             selected = !sourceAppNegated,
-                            onClick = { sourceAppNegated = false }
+                            onClick = {
+                                sourceAppNegated = false
+                                val currentIndex = matchers.indexOfFirst { it.variableKey == "source_package" }
+                                if (currentIndex >= 0) {
+                                    val current = matchers[currentIndex]
+                                    matchers[currentIndex] = current.copy(
+                                        negate = false,
+                                        friendlyText = current.friendlyText.replace("ist nicht ", "ist ")
+                                    )
+                                }
+                            }
                         )
                         Text("Ist")
                         Spacer(Modifier.width(12.dp))
                         RadioButton(
                             selected = sourceAppNegated,
-                            onClick = { sourceAppNegated = true }
+                            onClick = {
+                                sourceAppNegated = true
+                                val currentIndex = matchers.indexOfFirst { it.variableKey == "source_package" }
+                                if (currentIndex >= 0) {
+                                    val current = matchers[currentIndex]
+                                    matchers[currentIndex] = current.copy(
+                                        negate = true,
+                                        friendlyText = if ("ist nicht " in current.friendlyText) current.friendlyText
+                                            else current.friendlyText.replace("ist ", "ist nicht ")
+                                    )
+                                }
+                            }
                         )
                         Text("Ist nicht")
                     }
