@@ -27,8 +27,6 @@ import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Download
 import androidx.compose.material.icons.outlined.ErrorOutline
 import androidx.compose.material.icons.outlined.ExpandMore
-import androidx.compose.material.icons.outlined.OpenInFull
-import androidx.compose.material.icons.outlined.CloseFullscreen
 import androidx.compose.material.icons.outlined.Fullscreen
 import androidx.compose.material.icons.outlined.FullscreenExit
 import androidx.compose.material.icons.outlined.Share
@@ -76,7 +74,6 @@ import cc.stkmn.shareparser.data.EditorModeStore
 import cc.stkmn.shareparser.data.EmptyValuePolicy
 import cc.stkmn.shareparser.data.ExtractorRule
 import cc.stkmn.shareparser.data.InputSource
-import cc.stkmn.shareparser.data.InvalidValuePolicy
 import cc.stkmn.shareparser.data.MatcherRule
 import cc.stkmn.shareparser.data.ParseDirection
 import cc.stkmn.shareparser.data.ProcessingAction
@@ -86,7 +83,6 @@ import cc.stkmn.shareparser.data.SharedPayload
 import cc.stkmn.shareparser.data.TextFileMode
 import cc.stkmn.shareparser.data.UrlOpenMode
 import cc.stkmn.shareparser.data.ValueTransform
-import cc.stkmn.shareparser.data.WebhookFireMode
 import cc.stkmn.shareparser.data.WebhookMode
 import cc.stkmn.shareparser.engine.GuidedRuleFactory
 import cc.stkmn.shareparser.engine.ParserEngine
@@ -140,8 +136,6 @@ internal fun ProfileEditorScreen(
     var pendingExport by remember { mutableStateOf("") }
     var addActionMenu by remember { mutableStateOf(false) }
     var customMatcher by remember { mutableStateOf("") }
-    var matcherVariable by remember { mutableStateOf("") }
-    var matcherPattern by remember { mutableStateOf(".+") }
 
     var subjectSelection by remember(sample?.subject) { mutableStateOf(TextFieldValue(sample?.subject.orEmpty())) }
     var bodySelection by remember(sample?.text) { mutableStateOf(TextFieldValue(sample?.text.orEmpty())) }
@@ -466,35 +460,6 @@ internal fun ProfileEditorScreen(
                             },
                             label = { Text(variableLabel(rule.key)) }
                         )
-                    }
-                }
-            }
-        }
-
-        if (extractors.isNotEmpty()) {
-            item {
-                Card(Modifier.fillMaxWidth()) {
-                    Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text("Variable genauer prüfen", fontWeight = FontWeight.SemiBold)
-                        Text("Wähle eine Variable und beschreibe ihren Inhalt. Beispiele: nicht leer = .+, PLZ = \\d{5}, exakt fünf Ziffern = ^\\d{5}$.", style = MaterialTheme.typography.bodySmall)
-                        LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            items(extractors.filter { it.key.isNotBlank() }, key = { it.id }) { rule ->
-                                FilterChip(selected = matcherVariable == rule.key, onClick = { matcherVariable = rule.key }, label = { Text(variableLabel(rule.key)) })
-                            }
-                        }
-                        OutlinedTextField(value = matcherPattern, onValueChange = { matcherPattern = it }, label = { Text("Prüfmuster (Regex)") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
-                        LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            item { AssistChip(onClick = { matcherPattern = ".+" }, label = { Text("Nicht leer") }) }
-                            item { AssistChip(onClick = { matcherPattern = "^\\d{5}$" }, label = { Text("PLZ, 5 Ziffern") }) }
-                            item { AssistChip(onClick = { matcherPattern = "^\\d+$" }, label = { Text("Nur Ziffern") }) }
-                        }
-                        Button(onClick = {
-                            val key = matcherVariable
-                            if (key.isNotBlank() && runCatching { Regex(matcherPattern) }.isSuccess) {
-                                matchers.removeAll { it.variableKey == key }
-                                matchers += MatcherRule(regex = matcherPattern, friendlyText = "Variable '" + key + "' passt zu " + matcherPattern, variableKey = key)
-                            }
-                        }, enabled = matcherVariable.isNotBlank() && matcherPattern.isNotBlank(), modifier = Modifier.fillMaxWidth()) { Text("Variablen-Prüfung hinzufügen") }
                     }
                 }
             }
@@ -929,12 +894,6 @@ private fun SelectionSourceCard(
                 IconButton(onClick = { expanded = !expanded }) {
                     Icon(if (expanded) Icons.Outlined.FullscreenExit else Icons.Outlined.Fullscreen, if (expanded) "Textfeld verkleinern" else "Textfeld maximieren")
                 }
-                IconButton(onClick = { expanded = !expanded }) {
-                    Icon(
-                        if (expanded) Icons.Outlined.CloseFullscreen else Icons.Outlined.OpenInFull,
-                        if (expanded) "Textfeld verkleinern" else "Textfeld maximieren"
-                    )
-                }
                 IconButton(onClick = { clipboard.setText(AnnotatedString(fixedText)) }) {
                     Icon(Icons.Outlined.ContentCopy, "Text kopieren")
                 }
@@ -1364,34 +1323,6 @@ private fun ShareActionFields(action: ProcessingAction.Share, variables: List<St
                 singleLine = true
             )
         }
-        Text("Fehlerbehandlung für Dateiname", fontWeight = FontWeight.SemiBold)
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            RadioButton(action.fileNameInvalidPolicy == InvalidValuePolicy.FALLBACK, { onChange(action.copy(fileNameInvalidPolicy = InvalidValuePolicy.FALLBACK)) })
-            Text("Fallback verwenden")
-        }
-        if (action.fileNameInvalidPolicy == InvalidValuePolicy.FALLBACK) {
-            TemplateField("Fallback-Dateiname", action.fileNameFallback, variables, placeholder = "ShareParser.txt") {
-                onChange(action.copy(fileNameFallback = it))
-            }
-        }
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            RadioButton(action.fileNameInvalidPolicy == InvalidValuePolicy.ERROR, { onChange(action.copy(fileNameInvalidPolicy = InvalidValuePolicy.ERROR)) })
-            Text("Fehler melden und Aktion abbrechen")
-        }
-        Text("Fehlerbehandlung für Unterordner", fontWeight = FontWeight.SemiBold)
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            RadioButton(action.pathInvalidPolicy == InvalidValuePolicy.FALLBACK, { onChange(action.copy(pathInvalidPolicy = InvalidValuePolicy.FALLBACK)) })
-            Text("Fallback verwenden")
-        }
-        if (action.pathInvalidPolicy == InvalidValuePolicy.FALLBACK) {
-            TemplateField("Fallback-Unterordner, optional", action.pathFallback, variables, placeholder = "leer = Basisordner") {
-                onChange(action.copy(pathFallback = it))
-            }
-        }
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            RadioButton(action.pathInvalidPolicy == InvalidValuePolicy.ERROR, { onChange(action.copy(pathInvalidPolicy = InvalidValuePolicy.ERROR)) })
-            Text("Fehler melden und Aktion abbrechen")
-        }
         Text("Datei verwenden", fontWeight = FontWeight.SemiBold)
         Row(verticalAlignment = Alignment.CenterVertically) {
             RadioButton(action.fileMode == TextFileMode.SHARE, { onChange(action.copy(fileMode = TextFileMode.SHARE)) })
@@ -1443,35 +1374,6 @@ private fun WebhookActionFields(action: ProcessingAction.Webhook, variables: Lis
     }
     if (action.emptyValuePolicy == EmptyValuePolicy.FALLBACK) {
         OutlinedTextField(action.fallbackBody, { onChange(action.copy(fallbackBody = it)) }, label = { Text("Fallback-Inhalt") }, modifier = Modifier.fillMaxWidth(), minLines = 2)
-    }
-}
-
-@Composable
-private fun WebhookActionFields(
-    action: ProcessingAction.Webhook,
-    variables: List<String>,
-    onChange: (ProcessingAction) -> Unit
-) {
-    TemplateField("Webhook-URL", action.urlTemplate, variables, placeholder = "https://example.com/webhook", minLines = 2) {
-        onChange(action.copy(urlTemplate = it))
-    }
-    OutlinedTextField(action.method, { onChange(action.copy(method = it.uppercase())) }, label = { Text("HTTP-Methode, POST/PUT/PATCH") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
-    OutlinedTextField(action.contentType, { onChange(action.copy(contentType = it)) }, label = { Text("Content-Type") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
-    TemplateField("Body", action.bodyTemplate, variables, minLines = 4) { onChange(action.copy(bodyTemplate = it)) }
-    Text("Ausführung", fontWeight = FontWeight.SemiBold)
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        RadioButton(action.fireMode == WebhookFireMode.SELECTABLE, { onChange(action.copy(fireMode = WebhookFireMode.SELECTABLE)) })
-        Column {
-            Text("Nur bei Auswahl dieser Aktion")
-            Text("Der Webhook erscheint wie andere Aktionen in der Auswahl.", style = MaterialTheme.typography.bodySmall)
-        }
-    }
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        RadioButton(action.fireMode == WebhookFireMode.ALWAYS, { onChange(action.copy(fireMode = WebhookFireMode.ALWAYS)) })
-        Column {
-            Text("Immer bei passendem Profil")
-            Text("Der Webhook wird zusätzlich im Hintergrund ausgelöst und nicht als Auswahl angezeigt.", style = MaterialTheme.typography.bodySmall)
-        }
     }
 }
 
@@ -1572,7 +1474,6 @@ private fun actionTemplates(action: ProcessingAction): List<Pair<String, String>
 private fun defaultCalendarAction() = ProcessingAction.Calendar(UUID.randomUUID().toString(), "Kalender öffnen")
 private fun defaultUrlAction() = ProcessingAction.Url(UUID.randomUUID().toString(), "Link öffnen")
 private fun defaultShareAction() = ProcessingAction.Share(UUID.randomUUID().toString(), "Text weiterleiten")
-private fun defaultWebhookAction() = ProcessingAction.Webhook(UUID.randomUUID().toString(), "Webhook senden")
 private fun defaultWebhookAction() = ProcessingAction.Webhook(UUID.randomUUID().toString(), "Webhook senden")
 
 private fun withFriendlyName(action: ProcessingAction, name: String): ProcessingAction = when (action) {
