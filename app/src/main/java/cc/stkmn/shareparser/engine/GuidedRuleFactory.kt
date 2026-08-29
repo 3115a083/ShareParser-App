@@ -37,6 +37,30 @@ object GuidedRuleFactory {
                 )
             )
         }
+        payload.linkTargets.forEach { target ->
+            val trimmed = target.trim()
+            if (trimmed.isNotBlank()) {
+                val label = when {
+                    trimmed.startsWith("mailto:", true) -> "E-Mail-Link"
+                    trimmed.startsWith("tel:", true) -> "Telefon-Link"
+                    else -> "Web-Link"
+                }
+                val key = when {
+                    trimmed.startsWith("mailto:", true) -> "email"
+                    trimmed.startsWith("tel:", true) -> "telefon"
+                    else -> "link"
+                }
+                add(
+                    Candidate(
+                        label = label,
+                        value = trimmed,
+                        source = InputSource.LINKS,
+                        sourceLine = trimmed,
+                        suggestedKey = key
+                    )
+                )
+            }
+        }
         payload.text.lineSequence()
             .map { it.trim() }
             .filter { it.isNotBlank() }
@@ -129,6 +153,21 @@ object GuidedRuleFactory {
                 regex = "(?s)^\\s*(.+?)\\s*$",
                 required = required,
                 source = InputSource.SUBJECT,
+                sampleLabel = candidate.value.take(80)
+            )
+        }
+
+        if (candidate.source == InputSource.LINKS) {
+            val regex = when {
+                candidate.value.startsWith("mailto:", true) -> "(?im)^\\s*(mailto:[^\\r\\n]+?)\\s*$"
+                candidate.value.startsWith("tel:", true) -> "(?im)^\\s*(tel:[^\\r\\n]+?)\\s*$"
+                else -> "(?im)^\\s*((?:https?://|www\\.)[^\\s]+?)\\s*$"
+            }
+            return ExtractorRule(
+                key = normalizedKey,
+                regex = regex,
+                required = required,
+                source = InputSource.LINKS,
                 sampleLabel = candidate.value.take(80)
             )
         }
