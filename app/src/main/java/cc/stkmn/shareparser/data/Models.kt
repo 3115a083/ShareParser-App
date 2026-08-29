@@ -47,7 +47,8 @@ data class MatcherRule(
     val friendlyText: String = "",
     val variableKey: String = "",
     val join: MatcherJoin = MatcherJoin.AND,
-    val valueMode: MatcherValueMode = MatcherValueMode.REGEX
+    val valueMode: MatcherValueMode = MatcherValueMode.REGEX,
+    val negate: Boolean = false
 )
 
 @Serializable
