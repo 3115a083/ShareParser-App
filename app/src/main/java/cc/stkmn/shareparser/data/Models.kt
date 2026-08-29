@@ -6,7 +6,7 @@ import java.util.UUID
 
 @Serializable
 data class ProfileBundle(
-    val schemaVersion: Int = 7,
+    val schemaVersion: Int = 8,
     val profile: Profile
 )
 
@@ -111,6 +111,25 @@ enum class DateTimeLocale {
 }
 
 @Serializable
+enum class AppLanguage {
+    SYSTEM,
+    DE,
+    EN
+}
+
+@Serializable
+enum class EmptyValuePolicy {
+    FALLBACK,
+    ERROR
+}
+
+@Serializable
+enum class WebhookMode {
+    ON_SELECTION,
+    ALWAYS
+}
+
+@Serializable
 enum class ShareSelectionMode {
     APP,
     OVERLAY,
@@ -139,7 +158,8 @@ data class AppSettings(
     val dateTimeLocale: DateTimeLocale = DateTimeLocale.SYSTEM,
     val shareSelectionMode: ShareSelectionMode = ShareSelectionMode.APP,
     val launcherIcon: LauncherIcon = LauncherIcon.LOGO_1,
-    val defaultSaveTreeUri: String = ""
+    val defaultSaveTreeUri: String = "",
+    val appLanguage: AppLanguage = AppLanguage.SYSTEM
 )
 
 @Serializable
@@ -190,7 +210,24 @@ sealed class ProcessingAction {
         val asFile: Boolean = false,
         val fileMode: TextFileMode = TextFileMode.SHARE,
         val fileNameTemplate: String = "ShareParser.txt",
-        val relativePathTemplate: String = ""
+        val relativePathTemplate: String = "",
+        val emptyValuePolicy: EmptyValuePolicy = EmptyValuePolicy.FALLBACK,
+        val fallbackFileName: String = "ShareParser.txt",
+        val fallbackPath: String = ""
+    ) : ProcessingAction()
+
+    @Serializable
+    @SerialName("webhook")
+    data class Webhook(
+        override val id: String,
+        override val friendlyName: String,
+        override val icon: String = "send",
+        val urlTemplate: String = "",
+        val bodyTemplate: String = """{"text":"{{text}}","subject":"{{subject}}"}""",
+        val contentType: String = "application/json; charset=utf-8",
+        val mode: WebhookMode = WebhookMode.ON_SELECTION,
+        val emptyValuePolicy: EmptyValuePolicy = EmptyValuePolicy.ERROR,
+        val fallbackBody: String = "{}"
     ) : ProcessingAction()
 }
 
