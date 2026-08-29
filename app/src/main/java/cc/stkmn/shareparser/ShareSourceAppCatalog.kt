@@ -12,17 +12,31 @@ object ShareSourceAppCatalog {
     fun list(context: Context, includePackage: String = "", includeLabel: String = ""): List<ShareSourceApp> {
         val appContext = context.applicationContext
         val pm = appContext.packageManager
-        val launcherIntent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
-        val apps = pm.queryIntentActivities(launcherIntent, 0)
-            .mapNotNull { info ->
+
+        fun resolve(intent: Intent): List<ShareSourceApp> =
+            pm.queryIntentActivities(intent, 0).mapNotNull { info ->
                 val packageName = info.activityInfo?.packageName.orEmpty()
-                if (packageName.isBlank()) null
+                if (packageName.isBlank() || packageName == appContext.packageName) null
                 else ShareSourceApp(
                     label = info.loadLabel(pm)?.toString()?.ifBlank { packageName } ?: packageName,
                     packageName = packageName
                 )
             }
-            .toMutableList()
+
+        val apps = buildList {
+            addAll(
+                resolve(
+                    Intent(Intent.ACTION_SEND)
+                        .setType("text/plain")
+                )
+            )
+            addAll(
+                resolve(
+                    Intent(Intent.ACTION_MAIN)
+                        .addCategory(Intent.CATEGORY_LAUNCHER)
+                )
+            )
+        }.toMutableList()
 
         if (includePackage.isNotBlank() && apps.none { it.packageName == includePackage }) {
             apps += ShareSourceApp(includeLabel.ifBlank { includePackage }, includePackage)
