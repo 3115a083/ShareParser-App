@@ -7,7 +7,6 @@ import android.os.Build
 import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -15,11 +14,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material.icons.outlined.Folder
@@ -43,12 +38,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
-import cc.stkmn.shareparser.AppArtwork
 import cc.stkmn.shareparser.AppLocale
-import cc.stkmn.shareparser.AppArtworkImage
-import cc.stkmn.shareparser.LauncherIconManager
 import cc.stkmn.shareparser.data.AppLanguage
-import cc.stkmn.shareparser.data.LauncherIcon
 import cc.stkmn.shareparser.data.ProfileRepository
 import cc.stkmn.shareparser.data.ShareSelectionMode
 import cc.stkmn.shareparser.notify.ShareSelectionNotifier
@@ -271,11 +262,6 @@ internal fun SettingsHomeScreen(
 private fun folderLabel(uri: String): String = runCatching {
     Uri.parse(uri).lastPathSegment?.substringAfterLast(':')?.ifBlank { "Ausgewählter Ordner" }
 }.getOrNull().orEmpty().ifBlank { "Ausgewählter Ordner" }
-
-private fun normalizedLauncherIcon(icon: LauncherIcon): LauncherIcon = when (icon) {
-    LauncherIcon.LOGO_1, LauncherIcon.LOGO_2, LauncherIcon.LOGO_3, LauncherIcon.LOGO_4 -> icon
-    LauncherIcon.LOGO_5, LauncherIcon.LOGO_6 -> LauncherIcon.LOGO_1
-}
 
 @Composable
 private fun ChoiceCard(
