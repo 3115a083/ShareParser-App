@@ -1675,6 +1675,19 @@ private fun ActionEditorCard(
                         }
                     }
                 }
+                Text("Auswahl-Anzeige", fontWeight = FontWeight.SemiBold)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Checkbox(actionShowInOverlay(action), { onChange(withOverlayVisibility(action, it)) })
+                    Text("Im Overlay anzeigen")
+                }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Checkbox(actionShowInNotification(action), { onChange(withNotificationVisibility(action, it)) })
+                    Text("In Benachrichtigung anzeigen")
+                }
+                Text(
+                    "Die Reihenfolge bestimmt die Auswahlreihenfolge. Das Overlay zeigt maximal 4, die Benachrichtigung maximal 3 Aktionen. Weitere Aktionen bleiben in der App verfügbar.",
+                    style = MaterialTheme.typography.bodySmall
+                )
                 when (action) {
                     is ProcessingAction.Calendar -> CalendarActionFields(action, variables, onChange)
                     is ProcessingAction.Url -> UrlActionFields(action, variables, onChange)
@@ -2062,6 +2075,34 @@ private fun withIcon(action: ProcessingAction, icon: String): ProcessingAction =
     is ProcessingAction.Url -> action.copy(icon = icon)
     is ProcessingAction.Share -> action.copy(icon = icon)
     is ProcessingAction.Webhook -> action.copy(icon = icon)
+}
+
+private fun actionShowInOverlay(action: ProcessingAction): Boolean = when (action) {
+    is ProcessingAction.Calendar -> action.showInOverlay
+    is ProcessingAction.Url -> action.showInOverlay
+    is ProcessingAction.Share -> action.showInOverlay
+    is ProcessingAction.Webhook -> action.showInOverlay
+}
+
+private fun actionShowInNotification(action: ProcessingAction): Boolean = when (action) {
+    is ProcessingAction.Calendar -> action.showInNotification
+    is ProcessingAction.Url -> action.showInNotification
+    is ProcessingAction.Share -> action.showInNotification
+    is ProcessingAction.Webhook -> action.showInNotification
+}
+
+private fun withOverlayVisibility(action: ProcessingAction, visible: Boolean): ProcessingAction = when (action) {
+    is ProcessingAction.Calendar -> action.copy(showInOverlay = visible)
+    is ProcessingAction.Url -> action.copy(showInOverlay = visible)
+    is ProcessingAction.Share -> action.copy(showInOverlay = visible)
+    is ProcessingAction.Webhook -> action.copy(showInOverlay = visible)
+}
+
+private fun withNotificationVisibility(action: ProcessingAction, visible: Boolean): ProcessingAction = when (action) {
+    is ProcessingAction.Calendar -> action.copy(showInNotification = visible)
+    is ProcessingAction.Url -> action.copy(showInNotification = visible)
+    is ProcessingAction.Share -> action.copy(showInNotification = visible)
+    is ProcessingAction.Webhook -> action.copy(showInNotification = visible)
 }
 
 private fun actionHighlightPrefix(action: ProcessingAction): String = when (action) {
