@@ -1808,7 +1808,52 @@ private fun RegexColorPreview(regex: String) {
                     addStyle(SpanStyle(color = operatorColor, fontWeight = FontWeight.Bold), index, index + 1)
                     index++
                 }
-                ch == '^' || ch == '    transform: ValueTransform,
+                ch == '^' || ch.code == 36 -> {
+                    addStyle(SpanStyle(color = anchorColor, fontWeight = FontWeight.Bold), index, index + 1)
+                    index++
+                }
+                ch == '(' || ch == ')' -> {
+                    addStyle(SpanStyle(color = groupColor, fontWeight = FontWeight.Bold), index, index + 1)
+                    index++
+                }
+                ch == '[' -> {
+                    val close = regex.indexOf(']', index + 1).takeIf { it >= 0 } ?: regex.length - 1
+                    addStyle(SpanStyle(color = classColor), index, (close + 1).coerceAtMost(regex.length))
+                    index = close + 1
+                }
+                else -> index++
+            }
+        }
+    }
+    Text(annotated, style = MaterialTheme.typography.bodyMedium)
+}
+
+private fun regexWarnings(regex: String, sampleValue: String): List<String> = buildList {
+    if (regex.isBlank()) {
+        add("Leere Erkennung findet keine Variable.")
+        return@buildList
+    }
+    if (runCatching { Regex(regex) }.isFailure) return@buildList
+    val broad = regex in setOf("(.+)", "(.+?)", "(.*)", "(.*?)", ".+", ".*") ||
+        (".*" in regex && regex.count(Char::isLetterOrDigit) < 3)
+    if (broad) {
+        add("Die Erkennung ist sehr breit und kann leicht falschen Text erfassen. Ergänze möglichst festen Text davor oder danach.")
+    }
+    val literalCount = regex.count { it.isLetterOrDigit() }
+    if (literalCount > 35 && regex.startsWith("^") && regex.endsWith("$")) {
+        add("Die Erkennung wirkt sehr restriktiv und könnte nur für genau dieses Beispiel funktionieren. Prüfe, welche Teile wirklich konstant sind.")
+    }
+    if ("(" !in regex || ")" !in regex) {
+        add("Es ist keine Capture Group sichtbar. ShareParser übernimmt standardmäßig Gruppe 1 als Variableninhalt.")
+    }
+    if (sampleValue.isNotBlank() && Regex.escape(sampleValue) in regex && sampleValue.length > 8) {
+        add("Der aktuelle Beispielwert steckt wörtlich im Filter. Für wechselnde Werte besser einen allgemeineren Baustein verwenden.")
+    }
+}
+
+@Composable
+private fun TransformEditor(
+    transform: ValueTransform,
     advanced: Boolean,
     onChange: (ValueTransform) -> Unit,
     onDelete: () -> Unit
@@ -1821,18 +1866,40 @@ private fun RegexColorPreview(regex: String) {
             }
             when (transform) {
                 ValueTransform.Trim -> Text("Entfernt Leerzeichen am Anfang und Ende.", style = MaterialTheme.typography.bodySmall)
-                is ValueTransform.Prefix -> OutlinedTextField(transform.value, { onChange(transform.copy(value = it)) }, label = { Text("Text davor") }, modifier = Modifier.fillMaxWidth())
-                is ValueTransform.Suffix -> OutlinedTextField(transform.value, { onChange(transform.copy(value = it)) }, label = { Text("Text danach") }, modifier = Modifier.fillMaxWidth())
-                is ValueTransform.ChangeCase -> Text(if (transform.mode == CaseMode.LOWER) "In Kleinschreibung umwandeln" else "In Großschreibung umwandeln")
+                is ValueTransform.Prefix -> OutlinedTextField(
+                    transform.value,
+                    { onChange(transform.copy(value = it)) },
+                    label = { Text("Text davor") },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                is ValueTransform.Suffix -> OutlinedTextField(
+                    transform.value,
+                    { onChange(transform.copy(value = it)) },
+                    label = { Text("Text danach") },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                is ValueTransform.ChangeCase -> Text(
+                    if (transform.mode == CaseMode.LOWER) "In Kleinschreibung umwandeln" else "In Großschreibung umwandeln"
+                )
                 is ValueTransform.RegexReplace -> {
                     OutlinedTextField(
                         transform.regex,
                         { onChange(transform.copy(regex = it)) },
                         label = { Text(if (transform.literal) "Text, der entfernt/ersetzt wird" else "Regulärer Ausdruck") },
-                        supportingText = { Text(if (transform.literal) "Sonderzeichen wie ( ) [ ] . * werden wörtlich behandelt." else "Erweiterte Regex-Syntax ist aktiv.") },
+                        supportingText = {
+                            Text(
+                                if (transform.literal) "Sonderzeichen wie ( ) [ ] . * werden wörtlich behandelt."
+                                else "Erweiterte Regex-Syntax ist aktiv."
+                            )
+                        },
                         modifier = Modifier.fillMaxWidth()
                     )
-                    OutlinedTextField(transform.replacement, { onChange(transform.copy(replacement = it)) }, label = { Text("Ersetzen durch, leer = entfernen") }, modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(
+                        transform.replacement,
+                        { onChange(transform.copy(replacement = it)) },
+                        label = { Text("Ersetzen durch, leer = entfernen") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
                     if (advanced) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Checkbox(transform.literal, { onChange(transform.copy(literal = it)) })
