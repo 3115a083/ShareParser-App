@@ -699,6 +699,9 @@ internal fun ProfileEditorScreen(
         item {
             Text("Kombiniere feste Textteile, teilende App und Variablen. Ab dem zweiten Merkmal kannst du UND oder ODER wählen.")
         }
+        item {
+            Text("Filter-Bausteine", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+        }
 
         item {
             val sourceApps = remember(sample?.sourcePackage, sample?.sourceApp) {
@@ -957,6 +960,9 @@ internal fun ProfileEditorScreen(
             }
         }
         if (sample != null) {
+            item {
+                Text("Vorschläge aus aktuellem Beispiel", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+            }
             if (sample.fileName.isNotBlank()) {
                 item {
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -1314,11 +1320,11 @@ internal fun ProfileEditorScreen(
                 item {
                     OutlinedButton(
                         onClick = { clipboard.setText(AnnotatedString(repository.export(buildProfile()))) },
-                        modifier = Modifier.width(180.dp)
+                        modifier = Modifier.width(188.dp).height(52.dp)
                     ) {
                         Icon(Icons.Outlined.ContentCopy, null)
                         Spacer(Modifier.width(6.dp))
-                        Text("JSON kopieren", maxLines = 1)
+                        Text("JSON kopieren", maxLines = 1, softWrap = false)
                     }
                 }
                 item {
@@ -1338,11 +1344,11 @@ internal fun ProfileEditorScreen(
                                 )
                             }.onFailure { validationMessage = "Teilen fehlgeschlagen: ${it.message}" }
                         },
-                        modifier = Modifier.width(180.dp)
+                        modifier = Modifier.width(188.dp).height(52.dp)
                     ) {
                         Icon(Icons.Outlined.Share, null)
                         Spacer(Modifier.width(6.dp))
-                        Text("Teilen", maxLines = 1)
+                        Text("Teilen", maxLines = 1, softWrap = false)
                     }
                 }
                 item {
@@ -1351,11 +1357,11 @@ internal fun ProfileEditorScreen(
                             pendingExport = repository.export(buildProfile())
                             exportLauncher.launch("${safeFileName(name.ifBlank { "shareparser-profile" })}.json")
                         },
-                        modifier = Modifier.width(180.dp)
+                        modifier = Modifier.width(188.dp).height(52.dp)
                     ) {
                         Icon(Icons.Outlined.Download, null)
                         Spacer(Modifier.width(6.dp))
-                        Text("Speichern", maxLines = 1)
+                        Text("Speichern", maxLines = 1, softWrap = false)
                     }
                 }
             }
@@ -1744,6 +1750,11 @@ private fun RegexAssistant(
                 item { AssistChip(onClick = { onChange(regex + "[A-Za-z0-9]+") }, label = { Text("Buchstaben + Ziffern") }) }
                 item { AssistChip(onClick = { onChange(regex + "\\s*") }, label = { Text("optionaler Abstand") }) }
                 item { AssistChip(onClick = { onChange(regex + "[^,;\\n]+") }, label = { Text("bis Komma/Semikolon") }) }
+                item { AssistChip(onClick = { onChange(regex + "[^\\r\\n]+") }, label = { Text("alles außer Zeilenumbruch") }) }
+                item { AssistChip(onClick = { onChange(regex + "[^0-9]+") }, label = { Text("alles außer Ziffern") }) }
+                item { AssistChip(onClick = { onChange(regex + "[^A-Za-z]+") }, label = { Text("alles außer lat. Buchstaben") }) }
+                item { AssistChip(onClick = { onChange(regex + "[A-Za-z]") }, label = { Text("1 lat. Buchstabe") }) }
+                item { AssistChip(onClick = { onChange(regex + "\\d") }, label = { Text("1 Ziffer") }) }
                 item { AssistChip(onClick = { onChange(regex + "\\d{5}") }, label = { Text("PLZ") }) }
                 item { AssistChip(onClick = { onChange(regex + "[\\p{L} .'-]+") }, label = { Text("Ort / Wörter") }) }
                 item { AssistChip(onClick = { onChange(regex + "[\\p{L} .'-]+\\s+\\d+[A-Za-z]?") }, label = { Text("Adresse + Hausnummer") }) }
@@ -1854,6 +1865,12 @@ private fun regexWarnings(regex: String, sampleValue: String): List<String> = bu
     }
     if (sampleValue.isNotBlank() && Regex.escape(sampleValue) in regex && sampleValue.length > 8) {
         add("Der aktuelle Beispielwert steckt wörtlich im Filter. Für wechselnde Werte besser einen allgemeineren Baustein verwenden.")
+    }
+    if (".*" in regex && ".+?" !in regex && regex.count { it == '*' } >= 2) {
+        add("Mehrere gierige Platzhalter können zu unerwartet großen Treffern führen. Verwende feste Anker oder möglichst kurze Treffer wie .+?.")
+    }
+    if (regex.contains("[^") && !regex.contains("\\n") && !regex.contains("\\r")) {
+        add("Eine Ausschlussklasse ohne Zeilengrenze kann über unerwartet viel Text laufen. Prüfe, ob Zeilenumbrüche ausgeschlossen werden sollten.")
     }
 }
 
