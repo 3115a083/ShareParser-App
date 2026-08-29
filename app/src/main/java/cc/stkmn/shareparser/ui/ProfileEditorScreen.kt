@@ -531,24 +531,141 @@ internal fun ProfileEditorScreen(
             }
         }
 
-        if (extractors.isNotEmpty()) {
-            item { Text("Erkannte Variablen als Merkmal", style = MaterialTheme.typography.labelLarge) }
+        if (extractors.any { it.key.isNotBlank() }) {
             item {
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    items(extractors, key = { it.id }) { rule ->
-                        val active = matchers.any { it.variableKey == rule.key }
-                        FilterChip(
-                            selected = active,
-                            onClick = {
-                                if (active) matchers.removeAll { it.variableKey == rule.key }
-                                else if (rule.key.isNotBlank()) matchers += MatcherRule(
-                                    regex = ".+",
-                                    friendlyText = "Variable '${rule.key}' erkannt",
-                                    variableKey = rule.key
+                Card(Modifier.fillMaxWidth()) {
+                    Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.fillMaxWidth().clickable { variableMatcherExpanded = !variableMatcherExpanded }
+                        ) {
+                            Column(Modifier.weight(1f)) {
+                                Text("Variablen als Profilmerkmal", fontWeight = FontWeight.SemiBold)
+                                Text(
+                                    "Eingeklappt. Wähle bei Bedarf eine oder mehrere Variablen und lege fest, was geprüft werden soll.",
+                                    style = MaterialTheme.typography.bodySmall
                                 )
-                            },
-                            label = { Text(variableLabel(rule.key)) }
-                        )
+                            }
+                            Icon(
+                                if (variableMatcherExpanded) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore,
+                                null
+                            )
+                        }
+                        if (variableMatcherExpanded) {
+                            Text("Variablen auswählen", fontWeight = FontWeight.SemiBold)
+                            LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                items(extractors.filter { it.key.isNotBlank() }, key = { it.id }) { rule ->
+                                    val selected = rule.key in selectedMatcherVariables
+                                    FilterChip(
+                                        selected = selected,
+                                        onClick = {
+                                            if (selected) selectedMatcherVariables.remove(rule.key)
+                                            else selectedMatcherVariables.add(rule.key)
+                                        },
+                                        label = { Text(variableLabel(rule.key)) }
+                                    )
+                                }
+                            }
+
+                            Text("Prüfung", fontWeight = FontWeight.SemiBold)
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                RadioButton(variableMatcherMode == MatcherValueMode.EMPTY, { variableMatcherMode = MatcherValueMode.EMPTY })
+                                Text("Ist leer")
+                            }
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                RadioButton(variableMatcherMode == MatcherValueMode.NOT_EMPTY, { variableMatcherMode = MatcherValueMode.NOT_EMPTY })
+                                Text("Ist nicht leer")
+                            }
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                RadioButton(variableMatcherMode == MatcherValueMode.REGEX, { variableMatcherMode = MatcherValueMode.REGEX })
+                                Text("Inhalt prüfen")
+                            }
+
+                            if (variableMatcherMode == MatcherValueMode.REGEX) {
+                                Text(
+                                    "Du musst keinen Regex schreiben. Wähle zuerst die Art der Prüfung und gib anschließend nur den Vergleichswert ein.",
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                                LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    item { FilterChip(matcherPatternKind == "contains", { matcherPatternKind = "contains" }, label = { Text("Enthält") }) }
+                                    item { FilterChip(matcherPatternKind == "starts", { matcherPatternKind = "starts" }, label = { Text("Beginnt mit") }) }
+                                    item { FilterChip(matcherPatternKind == "ends", { matcherPatternKind = "ends" }, label = { Text("Endet mit") }) }
+                                    item { FilterChip(matcherPatternKind == "exact", { matcherPatternKind = "exact" }, label = { Text("Exakt") }) }
+                                    item { FilterChip(matcherPatternKind == "digits", { matcherPatternKind = "digits" }, label = { Text("Nur Ziffern") }) }
+                                    item { FilterChip(matcherPatternKind == "digit_count", { matcherPatternKind = "digit_count" }, label = { Text("Anzahl Ziffern") }) }
+                                    item { FilterChip(matcherPatternKind == "custom", { matcherPatternKind = "custom" }, label = { Text("Eigener Regex") }) }
+                                }
+                                if (matcherPatternKind != "digits") {
+                                    OutlinedTextField(
+                                        value = matcherPatternValue,
+                                        onValueChange = { matcherPatternValue = it },
+                                        label = {
+                                            Text(
+                                                if (matcherPatternKind == "digit_count") "Anzahl der Ziffern"
+                                                else if (matcherPatternKind == "custom") "Regex"
+                                                else "Vergleichswert"
+                                            )
+                                        },
+                                        supportingText = {
+                                            Text(
+                                                when (matcherPatternKind) {
+                                                    "contains" -> "Beispiel: ABC findet jeden Inhalt, der ABC enthält."
+                                                    "starts" -> "Der Inhalt muss mit diesem Text beginnen."
+                                                    "ends" -> "Der Inhalt muss mit diesem Text enden."
+                                                    "exact" -> "Der komplette Inhalt muss exakt übereinstimmen."
+                                                    "digit_count" -> "Beispiel: 5 für eine fünfstellige PLZ."
+                                                    "custom" -> "Für Sonderfälle. Regex wird vor dem Speichern geprüft."
+                                                    else -> ""
+                                                }
+                                            )
+                                        },
+                                        modifier = Modifier.fillMaxWidth(),
+                                        singleLine = matcherPatternKind != "custom"
+                                    )
+                                }
+                            }
+
+                            Button(
+                                onClick = {
+                                    val regex = when (matcherPatternKind) {
+                                        "contains" -> Regex.escape(matcherPatternValue)
+                                        "starts" -> "^" + Regex.escape(matcherPatternValue)
+                                        "ends" -> Regex.escape(matcherPatternValue) + "$"
+                                        "exact" -> "^" + Regex.escape(matcherPatternValue) + "$"
+                                        "digits" -> "^\\d+$"
+                                        "digit_count" -> matcherPatternValue.toIntOrNull()?.takeIf { it in 1..50 }?.let { "^\\d{" + it + "}$" }.orEmpty()
+                                        "custom" -> matcherPatternValue
+                                        else -> ""
+                                    }
+                                    val validRegex = variableMatcherMode != MatcherValueMode.REGEX ||
+                                        (regex.isNotBlank() && runCatching { Regex(regex) }.isSuccess)
+                                    if (selectedMatcherVariables.isNotEmpty() && validRegex) {
+                                        selectedMatcherVariables.toList().forEach { key ->
+                                            val oldJoin = matchers.firstOrNull { it.variableKey == key }?.join ?: MatcherJoin.AND
+                                            matchers.removeAll { it.variableKey == key }
+                                            val text = when (variableMatcherMode) {
+                                                MatcherValueMode.EMPTY -> key + " ist leer"
+                                                MatcherValueMode.NOT_EMPTY -> key + " ist nicht leer"
+                                                MatcherValueMode.REGEX -> key + " erfüllt die Inhaltsprüfung"
+                                            }
+                                            matchers += MatcherRule(
+                                                regex = if (variableMatcherMode == MatcherValueMode.REGEX) regex else "",
+                                                ignoreCase = true,
+                                                friendlyText = text,
+                                                variableKey = key,
+                                                join = oldJoin,
+                                                valueMode = variableMatcherMode
+                                            )
+                                        }
+                                        selectedMatcherVariables.clear()
+                                    } else if (!validRegex) {
+                                        validationMessage = "Die gewählte Inhaltsprüfung ist noch unvollständig oder der Regex ist ungültig."
+                                    }
+                                },
+                                enabled = selectedMatcherVariables.isNotEmpty(),
+                                modifier = Modifier.fillMaxWidth()
+                            ) { Text("Prüfung übernehmen") }
+                        }
                     }
                 }
             }
@@ -556,44 +673,31 @@ internal fun ProfileEditorScreen(
 
         if (matchers.isNotEmpty()) {
             item { Text("Aktive Merkmale", style = MaterialTheme.typography.labelLarge) }
-            itemsIndexed(matchers, key = { index, matcher -> "${matcher.variableKey}-${matcher.regex}-$index" }) { _, matcher ->
+            itemsIndexed(matchers, key = { index, matcher -> matcher.variableKey + "-" + matcher.regex + "-" + matcher.valueMode + "-" + index }) { index, matcher ->
                 Card(Modifier.fillMaxWidth()) {
                     Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                        if (index > 0) {
+                            OutlinedButton(
+                                onClick = {
+                                    val currentIndex = matchers.indexOf(matcher)
+                                    if (currentIndex >= 0) {
+                                        matchers[currentIndex] = matcher.copy(
+                                            join = if (matcher.join == MatcherJoin.AND) MatcherJoin.OR else MatcherJoin.AND
+                                        )
+                                    }
+                                }
+                            ) { Text(if (matcher.join == MatcherJoin.AND) "UND" else "ODER") }
+                            Spacer(Modifier.width(8.dp))
+                        }
                         Text(matcher.friendlyText.ifBlank { matcher.regex }, modifier = Modifier.weight(1f))
-                        IconButton(onClick = { matchers.remove(matcher) }) { Icon(Icons.Outlined.Delete, "Merkmal entfernen") }
+                        IconButton(onClick = { matchers.remove(matcher) }) {
+                            Icon(Icons.Outlined.Delete, "Merkmal entfernen")
+                        }
                     }
                 }
             }
         } else {
             item { Text("Noch kein Merkmal. Ohne Merkmale dient dieses Profil nur als Fallback.", style = MaterialTheme.typography.bodySmall) }
-        }
-        if (extractors.any { it.key.isNotBlank() }) {
-            item {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("Variablen als Profilmerkmal", fontWeight = FontWeight.SemiBold)
-                    Text(
-                        "Filter werden nach der Variablen-Extraktion geprüft. Beispiele: „Nicht leer“ akzeptiert jeden Inhalt, „5 Ziffern“ eignet sich z. B. für eine PLZ. Für andere Formate kannst du im erweiterten Modus einen Regex wie ^[A-Z]{2}-\\d{6}$ verwenden.",
-                        style = MaterialTheme.typography.bodySmall
-                    )
-                    extractors.filter { it.key.isNotBlank() }.forEach { rule ->
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Text(variableLabel(rule.key), modifier = Modifier.weight(1f))
-                            OutlinedButton(onClick = {
-                                val regex = ".+"
-                                if (matchers.none { it.variableKey == rule.key && it.regex == regex }) {
-                                    matchers += MatcherRule(regex = regex, ignoreCase = false, friendlyText = "${rule.key} ist nicht leer", variableKey = rule.key)
-                                }
-                            }) { Text("Nicht leer") }
-                            OutlinedButton(onClick = {
-                                val regex = "^\\d{5}$"
-                                if (matchers.none { it.variableKey == rule.key && it.regex == regex }) {
-                                    matchers += MatcherRule(regex = regex, ignoreCase = false, friendlyText = "${rule.key}: genau 5 Ziffern", variableKey = rule.key)
-                                }
-                            }) { Text("5 Ziffern") }
-                        }
-                    }
-                }
-            }
         }
         item {
             Row(verticalAlignment = Alignment.CenterVertically) {
