@@ -340,9 +340,27 @@ class ActionExecutor(context: Context, private val settings: AppSettings = AppSe
             return ExecutionResult()
         }
 
-        val renderedName = TemplateEngine.render(action.fileNameTemplate, values)
+        val renderedName = renderFileTemplate(
+            template = action.fileNameTemplate,
+            values = values,
+            policy = action.emptyValuePolicy,
+            fallback = action.fallbackFileName.ifBlank { "ShareParser.txt" },
+            field = "share.fileName",
+            label = "Dateiname"
+        )
         val fileName = resolveFileName(action, renderedName)
-        val renderedPath = if (action.relativePathTemplate.isBlank()) "" else TemplateEngine.render(action.relativePathTemplate, values)
+        val renderedPath = if (action.relativePathTemplate.isBlank()) {
+            ""
+        } else {
+            renderFileTemplate(
+                template = action.relativePathTemplate,
+                values = values,
+                policy = action.emptyValuePolicy,
+                fallback = action.fallbackPath,
+                field = "share.relativePath",
+                label = "Unterordner"
+            )
+        }
         val relativePath = resolveRelativePath(action, renderedPath)
         return when (action.fileMode) {
             TextFileMode.SHARE -> {
@@ -486,6 +504,29 @@ class ActionExecutor(context: Context, private val settings: AppSettings = AppSe
             "share.file",
             "${e::class.java.name}: ${e.message ?: e.toString()}"
         )
+    }
+
+    private fun renderFileTemplate(
+        template: String,
+        values: Map<String, String>,
+        policy: EmptyValuePolicy,
+        fallback: String,
+        field: String,
+        label: String
+    ): String {
+        val emptyVariables = TemplateEngine.variables(template).filter { values[it].isNullOrBlank() }
+        if (template.isBlank() || emptyVariables.isNotEmpty()) {
+            return when (policy) {
+                EmptyValuePolicy.FALLBACK -> fallback
+                EmptyValuePolicy.ERROR -> throw ProcessingException(
+                    "$label ist leer oder enthält eine leere Variable.",
+                    field,
+                    if (emptyVariables.isEmpty()) "Template was blank"
+                    else "Blank variables: ${emptyVariables.joinToString()}"
+                )
+            }
+        }
+        return TemplateEngine.render(template, values)
     }
 
     private val unsafeFileChars = Regex("[\\u0000-\\u001F<>:\"/\\\\|?*]+")
