@@ -170,6 +170,7 @@ internal fun ProfileEditorScreen(
     var lastObserved by remember(existing?.id) { mutableStateOf(initialProfile) }
     var restoringHistory by remember(existing?.id) { mutableStateOf(false) }
     var showExitDialog by remember(existing?.id) { mutableStateOf(false) }
+    var showDeleteDialog by remember(existing?.id) { mutableStateOf(false) }
 
     var advanced by remember { mutableStateOf(false) }
     var advancedJson by remember { mutableStateOf("") }
@@ -421,6 +422,24 @@ internal fun ProfileEditorScreen(
             if (buildProfile() == initialProfile) onDiscarded() else showExitDialog = true
             onExitRequestHandled()
         }
+    }
+
+    if (showDeleteDialog && existing != null) {
+        AlertDialog(
+            onDismissRequest = { showDeleteDialog = false },
+            title = { Text("Profil löschen?") },
+            text = { Text("Das Profil '${existing.name}' wird dauerhaft gelöscht.") },
+            confirmButton = {
+                Button(onClick = {
+                    repository.delete(existing.id)
+                    showDeleteDialog = false
+                    onDeleted()
+                }) { Text("Löschen") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteDialog = false }) { Text("Abbrechen") }
+            }
+        )
     }
 
     if (showExitDialog) {
@@ -1189,50 +1208,56 @@ internal fun ProfileEditorScreen(
             ) { Text("Profil speichern") }
         }
         item {
-            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                item {
-                    AssistChip(
-                        onClick = { clipboard.setText(AnnotatedString(repository.export(buildProfile()))) },
-                        label = { Text("JSON kopieren") },
-                        leadingIcon = { Icon(Icons.Outlined.ContentCopy, null) }
-                    )
+            Row(
+                modifier = Modifier.fillMaxWidth().widthIn(max = 560.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                OutlinedButton(
+                    onClick = { clipboard.setText(AnnotatedString(repository.export(buildProfile()))) },
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Icon(Icons.Outlined.ContentCopy, null)
+                    Spacer(Modifier.width(4.dp))
+                    Text("JSON kopieren")
                 }
-                item {
-                    AssistChip(
-                        onClick = {
-                            val json = repository.export(buildProfile())
-                            runCatching {
-                                context.startActivity(
-                                    Intent.createChooser(
-                                        Intent(Intent.ACTION_SEND).apply {
-                                            type = "application/json"
-                                            putExtra(Intent.EXTRA_TEXT, json)
-                                            putExtra(Intent.EXTRA_SUBJECT, "ShareParser Profil: ${name.ifBlank { "Profil" }}")
-                                        },
-                                        "Profil teilen"
-                                    )
+                OutlinedButton(
+                    onClick = {
+                        val json = repository.export(buildProfile())
+                        runCatching {
+                            context.startActivity(
+                                Intent.createChooser(
+                                    Intent(Intent.ACTION_SEND).apply {
+                                        type = "application/json"
+                                        putExtra(Intent.EXTRA_TEXT, json)
+                                        putExtra(Intent.EXTRA_SUBJECT, "ShareParser Profil: ${name.ifBlank { "Profil" }}")
+                                    },
+                                    "Profil teilen"
                                 )
-                            }.onFailure { validationMessage = "Teilen fehlgeschlagen: ${it.message}" }
-                        },
-                        label = { Text("Teilen") },
-                        leadingIcon = { Icon(Icons.Outlined.Share, null) }
-                    )
+                            )
+                        }.onFailure { validationMessage = "Teilen fehlgeschlagen: ${it.message}" }
+                    },
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Icon(Icons.Outlined.Share, null)
+                    Spacer(Modifier.width(4.dp))
+                    Text("Teilen")
                 }
-                item {
-                    AssistChip(
-                        onClick = {
-                            pendingExport = repository.export(buildProfile())
-                            exportLauncher.launch("${safeFileName(name.ifBlank { "shareparser-profile" })}.json")
-                        },
-                        label = { Text("Speichern") },
-                        leadingIcon = { Icon(Icons.Outlined.Download, null) }
-                    )
+                OutlinedButton(
+                    onClick = {
+                        pendingExport = repository.export(buildProfile())
+                        exportLauncher.launch("${safeFileName(name.ifBlank { "shareparser-profile" })}.json")
+                    },
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Icon(Icons.Outlined.Download, null)
+                    Spacer(Modifier.width(4.dp))
+                    Text("Speichern")
                 }
             }
         }
         if (existing != null) {
             item {
-                TextButton(onClick = { repository.delete(existing.id); onDeleted() }, modifier = Modifier.fillMaxWidth()) {
+                TextButton(onClick = { showDeleteDialog = true }, modifier = Modifier.fillMaxWidth()) {
                     Icon(Icons.Outlined.Delete, null)
                     Text("Profil löschen")
                 }
