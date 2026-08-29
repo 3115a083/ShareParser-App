@@ -1831,7 +1831,7 @@ private fun RegexColorPreview(regex: String) {
             }
         }
     }
-    Text(annotated, style = MaterialTheme.typography.bodyMedium)
+    androidx.compose.material3.Text(annotated, style = MaterialTheme.typography.bodyMedium)
 }
 
 private fun regexWarnings(regex: String, sampleValue: String): List<String> = buildList {
