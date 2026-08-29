@@ -71,6 +71,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.TextFieldValue
@@ -1557,6 +1559,7 @@ private fun ExtractorCard(
     var transformMenu by remember { mutableStateOf(false) }
     var sourceMenu by remember { mutableStateOf(false) }
     var splitDialog by remember { mutableStateOf(false) }
+    var regexHelp by remember(rule.id) { mutableStateOf(false) }
     val preview = remember(rule, sample, parseDirection, previewRules) {
         sample?.let {
             val safePreviewRules = previewRules.map { previewRule ->
@@ -1584,48 +1587,57 @@ private fun ExtractorCard(
     Card(border.fillMaxWidth()) {
         Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    Text(rule.key.ifBlank { "Unbenannte Variable" }, fontWeight = FontWeight.SemiBold)
-                    if (preview != null) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(
-                                "Beispielwert: $preview",
-                                style = MaterialTheme.typography.bodySmall,
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .clickable { clipboard.setText(AnnotatedString(preview)) }
-                            )
-                            IconButton(onClick = { clipboard.setText(AnnotatedString(preview)) }) {
-                                Icon(Icons.Outlined.ContentCopy, "Beispielwert kopieren")
-                            }
-                        }
-                    } else if (sample != null) {
-                        Text("Im Beispiel nicht erkannt", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
-                    }
-                }
+                OutlinedTextField(
+                    value = rule.key,
+                    onValueChange = { onChange(rule.copy(key = GuidedRuleFactory.sanitizeKey(it))) },
+                    label = { Text("Variablenname") },
+                    placeholder = { Text("z. B. ort, plz, buchungsnummer") },
+                    modifier = Modifier.weight(1f),
+                    singleLine = true
+                )
                 IconButton(onClick = onDelete) { Icon(Icons.Outlined.Delete, "Variable entfernen") }
             }
+            if (preview != null) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        "Beispielwert: $preview",
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.weight(1f).clickable { clipboard.setText(AnnotatedString(preview)) }
+                    )
+                    IconButton(onClick = { clipboard.setText(AnnotatedString(preview)) }) {
+                        Icon(Icons.Outlined.ContentCopy, "Beispielwert kopieren")
+                    }
+                }
+            } else if (sample != null) {
+                Text("Im Beispiel nicht erkannt", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+            }
             OutlinedTextField(
-                value = rule.key,
-                onValueChange = { onChange(rule.copy(key = GuidedRuleFactory.sanitizeKey(it))) },
-                label = { Text("Variablenname") },
+                value = rule.regex,
+                onValueChange = { onChange(rule.copy(regex = it)) },
+                label = { Text("Erkennungslogik") },
+                supportingText = { Text("Der Inhalt der Capture Group ${rule.group} wird als Variable übernommen.") },
+                isError = runCatching { Regex(rule.regex) }.isFailure,
                 modifier = Modifier.fillMaxWidth(),
-                singleLine = true
+                minLines = 2
             )
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Checkbox(rule.required, { onChange(rule.copy(required = it)) })
                 Text("Pflichtfeld")
                 Spacer(Modifier.weight(1f))
-                if (rule.key.isNotBlank()) {
-                    TextButton(onClick = { splitDialog = true }) {
-                        Icon(Icons.Outlined.Splitscreen, null)
-                        Text("Aufteilen")
-                    }
+                TextButton(onClick = { regexHelp = !regexHelp }) {
+                    Text(if (regexHelp) "Erkennungshilfe schließen" else "Erkennungshilfe")
                 }
                 TextButton(onClick = { details = !details }) {
-                    Text(if (details) "Details ausblenden" else "Bausteine")
+                    Text(if (details) "Details ausblenden" else "Umwandlungen")
                     Icon(Icons.Outlined.ExpandMore, null)
                 }
+            }
+            if (regexHelp) {
+                RegexAssistant(
+                    regex = rule.regex,
+                    sampleValue = preview.orEmpty(),
+                    onChange = { onChange(rule.copy(regex = it)) }
+                )
             }
             if (details || advanced) {
                 OutlinedButton(onClick = { sourceMenu = true }) {
@@ -1668,7 +1680,18 @@ private fun ExtractorCard(
                         onDelete = { onChange(rule.copy(transforms = rule.transforms.toMutableList().apply { removeAt(index) })) }
                     )
                 }
-                TextButton(onClick = { transformMenu = true }) { Icon(Icons.Outlined.Add, null); Text("Umwandlung hinzufügen") }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    TextButton(onClick = { transformMenu = true }) {
+                        Icon(Icons.Outlined.Add, null)
+                        Text("Umwandlung hinzufügen")
+                    }
+                    if (rule.key.isNotBlank()) {
+                        TextButton(onClick = { splitDialog = true }) {
+                            Icon(Icons.Outlined.Splitscreen, null)
+                            Text("Variable aufteilen")
+                        }
+                    }
+                }
                 DropdownMenu(expanded = transformMenu, onDismissRequest = { transformMenu = false }) {
                     DropdownMenuItem(text = { Text("Leerzeichen am Rand entfernen") }, onClick = { onChange(rule.copy(transforms = rule.transforms + ValueTransform.Trim)); transformMenu = false })
                     DropdownMenuItem(text = { Text("Textteil entfernen oder ersetzen") }, onClick = { onChange(rule.copy(transforms = rule.transforms + ValueTransform.RegexReplace("", "", literal = true))); transformMenu = false })
@@ -1679,8 +1702,12 @@ private fun ExtractorCard(
                 }
             }
             if (advanced) {
-                OutlinedTextField(rule.regex, { onChange(rule.copy(regex = it)) }, label = { Text("Regex, erweitert") }, modifier = Modifier.fillMaxWidth(), minLines = 2)
-                OutlinedTextField(rule.group.toString(), { text -> text.toIntOrNull()?.let { onChange(rule.copy(group = it)) } }, label = { Text("Capture Group") }, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(
+                    rule.group.toString(),
+                    { text -> text.toIntOrNull()?.let { onChange(rule.copy(group = it)) } },
+                    label = { Text("Capture Group") },
+                    modifier = Modifier.fillMaxWidth()
+                )
             }
         }
     }
