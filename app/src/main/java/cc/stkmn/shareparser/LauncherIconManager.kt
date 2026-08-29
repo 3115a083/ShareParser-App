@@ -24,8 +24,7 @@ object LauncherIconManager {
         setStateIfNeeded(
             pm,
             component(appContext, selectedAlias),
-            if (normalized == LauncherIcon.LOGO_1) PackageManager.COMPONENT_ENABLED_STATE_DEFAULT
-            else PackageManager.COMPONENT_ENABLED_STATE_ENABLED
+            PackageManager.COMPONENT_ENABLED_STATE_ENABLED
         )
 
         aliases.forEach { (icon, alias) ->
@@ -58,7 +57,11 @@ object LauncherIconManager {
 
     private fun setStateIfNeeded(pm: PackageManager, component: ComponentName, desiredState: Int) {
         if (pm.getComponentEnabledSetting(component) == desiredState) return
-        pm.setComponentEnabledSetting(component, desiredState, PackageManager.DONT_KILL_APP)
+        pm.setComponentEnabledSetting(
+            component,
+            desiredState,
+            PackageManager.DONT_KILL_APP or PackageManager.SYNCHRONOUS
+        )
     }
 
     private fun component(context: Context, alias: String) =
