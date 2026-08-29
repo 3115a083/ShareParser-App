@@ -28,15 +28,7 @@ internal fun rememberVariableHighlighting(
         MaterialTheme.colorScheme.tertiaryContainer,
         MaterialTheme.colorScheme.surfaceVariant
     )
-    // Only rules that directly read this source can be mapped back to positions in the
-    // displayed text. Derived-variable rules previously ran against the original text
-    // as well and could accidentally highlight very large ranges.
-    val relevant = extractors.filter {
-        it.source == source &&
-            it.sourceVariableKey.isBlank() &&
-            it.key.isNotBlank() &&
-            it.regex.isNotBlank()
-    }
+    val relevant = extractors.filter { it.source == source && it.key.isNotBlank() }
     val highlights = relevant.map { rule ->
         VariableHighlight(rule.key, palette[(rule.id.hashCode() and Int.MAX_VALUE) % palette.size])
     }
@@ -44,24 +36,28 @@ internal fun rememberVariableHighlighting(
 
     val transformation = VisualTransformation { text ->
         val builder = AnnotatedString.Builder(text)
+        val occupied = mutableListOf<IntRange>()
         relevant.forEach { rule ->
             val color = byKey[rule.key]?.color ?: return@forEach
-            runCatching { Regex(rule.regex, setOf(RegexOption.MULTILINE)).findAll(text.text).take(250).toList() }
-                .getOrDefault(emptyList())
-                .forEach { match ->
-                    val group = if (rule.group in match.groupValues.indices) match.groups[rule.group] else null
-                    val start = group?.range?.first ?: return@forEach
-                    val endExclusive = (group.range.last + 1).coerceAtMost(text.length)
-                    // Empty capture groups use an empty range. Never style them. This also
-                    // protects AnnotatedString from malformed/oversized regex group ranges.
-                    if (group.value.isNotEmpty() && start in 0 until text.length && endExclusive > start) {
-                        builder.addStyle(
-                            SpanStyle(background = color, fontWeight = FontWeight.SemiBold),
-                            start,
-                            endExclusive
-                        )
-                    }
-                }
+            val matches = runCatching {
+                Regex(rule.regex, setOf(RegexOption.MULTILINE))
+                    .findAll(text.text)
+                    .take(200)
+                    .toList()
+            }.getOrDefault(emptyList())
+
+            matches.forEach { match ->
+                val group = match.groups.getOrNull(rule.group) ?: return@forEach
+                val range = group.range
+                if (range.first < 0 || range.last < range.first || range.last >= text.length) return@forEach
+                if (occupied.any { it.first <= range.last && range.first <= it.last }) return@forEach
+                occupied += range
+                builder.addStyle(
+                    SpanStyle(background = color, fontWeight = FontWeight.SemiBold),
+                    range.first,
+                    range.last + 1
+                )
+            }
         }
         TransformedText(builder.toAnnotatedString(), OffsetMapping.Identity)
     }
