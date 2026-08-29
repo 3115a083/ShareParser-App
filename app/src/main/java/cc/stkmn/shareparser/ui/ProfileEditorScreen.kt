@@ -1159,14 +1159,20 @@ private fun VariableDialog(
 private fun SplitVariableDialog(
     sourceKey: String,
     preview: String,
-    onConfirm: (String, String, String) -> Unit,
+    onConfirm: (List<String>, String) -> Unit,
     onDismiss: () -> Unit
 ) {
     val sourceLower = sourceKey.lowercase()
-    val firstSuggested = if (sourceLower.contains("plz") && sourceLower.contains("ort")) "PLZ" else "${sourceKey}_1"
-    val secondSuggested = if (sourceLower.contains("plz") && sourceLower.contains("ort")) "Ort" else "${sourceKey}_2"
-    var firstKey by remember(sourceKey) { mutableStateOf(GuidedRuleFactory.sanitizeKey(firstSuggested)) }
-    var secondKey by remember(sourceKey) { mutableStateOf(GuidedRuleFactory.sanitizeKey(secondSuggested)) }
+    val initialKeys = if (sourceLower.contains("plz") && sourceLower.contains("ort")) {
+        listOf("PLZ", "Ort")
+    } else {
+        listOf("${sourceKey}_1", "${sourceKey}_2")
+    }
+    val keys = remember(sourceKey) {
+        mutableStateListOf<String>().apply {
+            addAll(initialKeys.map(GuidedRuleFactory::sanitizeKey))
+        }
+    }
     var separator by remember(sourceKey) { mutableStateOf(" ") }
 
     AlertDialog(
@@ -1175,32 +1181,45 @@ private fun SplitVariableDialog(
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 if (preview.isNotBlank()) Text("Beispiel: $preview", style = MaterialTheme.typography.bodySmall)
-                Text("Ein leeres Trennzeichen oder ein Leerzeichen teilt nach dem ersten Wort. Für andere Werte kannst du z. B. „,“, „-“ oder „/“ verwenden.")
+                Text("Lege ein Trennzeichen fest und füge so viele Untervariablen hinzu wie benötigt. Bei leerem Trennzeichen wird nach Leerraum getrennt.")
                 OutlinedTextField(
                     value = separator,
                     onValueChange = { separator = it },
                     label = { Text("Trennzeichen") },
-                    placeholder = { Text("Leerzeichen") },
+                    placeholder = { Text("Leerraum") },
                     singleLine = true
                 )
-                OutlinedTextField(
-                    value = firstKey,
-                    onValueChange = { firstKey = GuidedRuleFactory.sanitizeKey(it) },
-                    label = { Text("Erste neue Variable") },
-                    singleLine = true
-                )
-                OutlinedTextField(
-                    value = secondKey,
-                    onValueChange = { secondKey = GuidedRuleFactory.sanitizeKey(it) },
-                    label = { Text("Zweite neue Variable") },
-                    singleLine = true
-                )
+                keys.forEachIndexed { index, key ->
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        OutlinedTextField(
+                            value = key,
+                            onValueChange = { keys[index] = GuidedRuleFactory.sanitizeKey(it) },
+                            label = { Text("Untervariable ${index + 1}") },
+                            modifier = Modifier.weight(1f),
+                            singleLine = true
+                        )
+                        if (keys.size > 2) {
+                            IconButton(onClick = { keys.removeAt(index) }) {
+                                Icon(Icons.Outlined.Delete, "Untervariable entfernen")
+                            }
+                        }
+                    }
+                }
+                OutlinedButton(
+                    onClick = { keys += GuidedRuleFactory.sanitizeKey("${sourceKey}_${keys.size + 1}") },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(Icons.Outlined.Add, null)
+                    Text("Untervariable hinzufügen")
+                }
             }
         },
         confirmButton = {
             Button(
-                onClick = { onConfirm(firstKey, secondKey, separator); onDismiss() },
-                enabled = firstKey.isNotBlank() && secondKey.isNotBlank() && firstKey != secondKey
+                onClick = { onConfirm(keys.toList(), separator); onDismiss() },
+                enabled = keys.size >= 2 &&
+                    keys.all { it.isNotBlank() } &&
+                    keys.distinct().size == keys.size
             ) { Text("Aufteilen") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Abbrechen") } }
@@ -1274,7 +1293,7 @@ private fun ExtractorCard(
     highlighted: Boolean,
     advanced: Boolean,
     onChange: (ExtractorRule) -> Unit,
-    onSplit: (String, String, String) -> Unit,
+    onSplit: (List<String>, String) -> Unit,
     onDelete: () -> Unit
 ) {
     val clipboard = LocalClipboardManager.current
