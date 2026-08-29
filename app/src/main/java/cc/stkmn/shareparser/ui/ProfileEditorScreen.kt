@@ -850,7 +850,6 @@ internal fun ProfileEditorScreen(
                         DropdownMenuItem(text = { Text("URL öffnen") }, onClick = { actions += defaultUrlAction(); addActionMenu = false })
                         DropdownMenuItem(text = { Text("Text oder Textdatei") }, onClick = { actions += defaultShareAction(); addActionMenu = false })
                         DropdownMenuItem(text = { Text("Webhook") }, onClick = { actions += defaultWebhookAction(); addActionMenu = false })
-                        DropdownMenuItem(text = { Text("Webhook") }, onClick = { actions += defaultWebhookAction(); addActionMenu = false })
                     }
                 }
             }
@@ -1317,28 +1316,52 @@ private fun ActionEditorCard(
     onDelete: () -> Unit
 ) {
     var iconMenu by remember { mutableStateOf(false) }
+    var expanded by remember(action.id) { mutableStateOf(highlighted) }
     val border = if (highlighted) Modifier.border(2.dp, MaterialTheme.colorScheme.error, RoundedCornerShape(12.dp)) else Modifier
     Card(border.fillMaxWidth()) {
         Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth().clickable { expanded = !expanded }
+            ) {
                 Icon(actionIcon(action.icon), null)
                 Spacer(Modifier.width(8.dp))
                 Text(action.friendlyName, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                IconButton(onClick = { expanded = !expanded }) {
+                    Icon(if (expanded) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore, null)
+                }
                 IconButton(onClick = onDelete) { Icon(Icons.Outlined.Delete, "Aktion entfernen") }
             }
-            OutlinedTextField(action.friendlyName, { onChange(withFriendlyName(action, it)) }, label = { Text("Anzeigename") }, modifier = Modifier.fillMaxWidth())
-            OutlinedButton(onClick = { iconMenu = true }) { Icon(actionIcon(action.icon), null); Text("Icon auswählen") }
-            DropdownMenu(expanded = iconMenu, onDismissRequest = { iconMenu = false }) {
-                actionIcons.forEach { choice ->
-                    DropdownMenuItem(leadingIcon = { Icon(choice.vector, null) }, text = { Text(choice.label) }, onClick = { onChange(withIcon(action, choice.id)); iconMenu = false })
+            if (expanded) {
+                OutlinedTextField(
+                    action.friendlyName,
+                    { onChange(withFriendlyName(action, it)) },
+                    label = { Text("Anzeigename") },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedButton(onClick = { iconMenu = true }) {
+                    Icon(actionIcon(action.icon), "Icon auswählen")
                 }
-            }
-            when (action) {
-                is ProcessingAction.Calendar -> CalendarActionFields(action, variables, onChange)
-                is ProcessingAction.Url -> UrlActionFields(action, variables, onChange)
-                is ProcessingAction.Share -> ShareActionFields(action, variables, onChange)
-                is ProcessingAction.Webhook -> WebhookActionFields(action, variables, onChange)
-                is ProcessingAction.Webhook -> WebhookActionFields(action, variables, onChange)
+                DropdownMenu(expanded = iconMenu, onDismissRequest = { iconMenu = false }) {
+                    actionIcons.chunked(6).forEach { choices ->
+                        Row(Modifier.padding(horizontal = 6.dp, vertical = 2.dp)) {
+                            choices.forEach { choice ->
+                                IconButton(onClick = {
+                                    onChange(withIcon(action, choice.id))
+                                    iconMenu = false
+                                }) {
+                                    Icon(choice.vector, choice.label)
+                                }
+                            }
+                        }
+                    }
+                }
+                when (action) {
+                    is ProcessingAction.Calendar -> CalendarActionFields(action, variables, onChange)
+                    is ProcessingAction.Url -> UrlActionFields(action, variables, onChange)
+                    is ProcessingAction.Share -> ShareActionFields(action, variables, onChange)
+                    is ProcessingAction.Webhook -> WebhookActionFields(action, variables, onChange)
+                }
             }
         }
     }
