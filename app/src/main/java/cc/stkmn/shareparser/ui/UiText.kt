@@ -287,6 +287,7 @@ private val exactEnglish = mapOf(
     "Web-Link" to "Web link",
     "E-Mail-Link" to "Email link",
     "Telefon-Link" to "Phone link",
+    "Telefonnummer" to "Phone number",
     "E-Mail-Adresse" to "Email address"
 )
 
@@ -350,7 +351,11 @@ internal fun Text(
     maxLines: Int = Int.MAX_VALUE,
     minLines: Int = 1,
     onTextLayout: (TextLayoutResult) -> Unit = {},
-    style: TextStyle = LocalTextStyle.current
+    style: TextStyle = LocalTextStyle.current,
+    "Dieses Profil hat noch keine auswählbare Aktion." to "This profile has no selectable action yet.",
+    "Die Reihenfolge bestimmt die Auswahlreihenfolge. Das Overlay zeigt maximal 4, die Benachrichtigung maximal 3 Aktionen. Weitere Aktionen bleiben in der App verfügbar." to "The order here defines selector order. The overlay shows up to 4 actions and notifications up to 3. Additional actions remain available in the app.",
+    "Aktion nach oben" to "Move action up",
+    "Aktion nach unten" to "Move action down"
 ) {
     MaterialText(
         text = localized(text),
