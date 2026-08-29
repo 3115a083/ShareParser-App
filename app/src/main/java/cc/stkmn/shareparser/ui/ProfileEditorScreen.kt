@@ -1447,6 +1447,35 @@ private fun WebhookActionFields(action: ProcessingAction.Webhook, variables: Lis
 }
 
 @Composable
+private fun WebhookActionFields(
+    action: ProcessingAction.Webhook,
+    variables: List<String>,
+    onChange: (ProcessingAction) -> Unit
+) {
+    TemplateField("Webhook-URL", action.urlTemplate, variables, placeholder = "https://example.com/webhook", minLines = 2) {
+        onChange(action.copy(urlTemplate = it))
+    }
+    OutlinedTextField(action.method, { onChange(action.copy(method = it.uppercase())) }, label = { Text("HTTP-Methode, POST/PUT/PATCH") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+    OutlinedTextField(action.contentType, { onChange(action.copy(contentType = it)) }, label = { Text("Content-Type") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+    TemplateField("Body", action.bodyTemplate, variables, minLines = 4) { onChange(action.copy(bodyTemplate = it)) }
+    Text("Ausführung", fontWeight = FontWeight.SemiBold)
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        RadioButton(action.fireMode == WebhookFireMode.SELECTABLE, { onChange(action.copy(fireMode = WebhookFireMode.SELECTABLE)) })
+        Column {
+            Text("Nur bei Auswahl dieser Aktion")
+            Text("Der Webhook erscheint wie andere Aktionen in der Auswahl.", style = MaterialTheme.typography.bodySmall)
+        }
+    }
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        RadioButton(action.fireMode == WebhookFireMode.ALWAYS, { onChange(action.copy(fireMode = WebhookFireMode.ALWAYS)) })
+        Column {
+            Text("Immer bei passendem Profil")
+            Text("Der Webhook wird zusätzlich im Hintergrund ausgelöst und nicht als Auswahl angezeigt.", style = MaterialTheme.typography.bodySmall)
+        }
+    }
+}
+
+@Composable
 private fun TemplateField(
     label: String,
     value: String,
