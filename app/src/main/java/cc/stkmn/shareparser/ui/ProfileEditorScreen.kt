@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -29,6 +30,9 @@ import androidx.compose.material.icons.outlined.ErrorOutline
 import androidx.compose.material.icons.outlined.ExpandLess
 import androidx.compose.material.icons.outlined.ExpandMore
 import androidx.compose.material.icons.outlined.Undo
+import androidx.compose.material.icons.outlined.Redo
+import androidx.compose.material.icons.outlined.ArrowUpward
+import androidx.compose.material.icons.outlined.ArrowDownward
 import androidx.compose.material.icons.outlined.Fullscreen
 import androidx.compose.material.icons.outlined.FullscreenExit
 import androidx.compose.material.icons.outlined.Share
@@ -58,8 +62,11 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
@@ -69,6 +76,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import cc.stkmn.shareparser.ShareSourceAppCatalog
 import cc.stkmn.shareparser.calendar.CalendarCatalog
 import cc.stkmn.shareparser.data.CalendarTargetMode
 import cc.stkmn.shareparser.data.CaseMode
@@ -92,6 +100,7 @@ import cc.stkmn.shareparser.engine.GuidedRuleFactory
 import cc.stkmn.shareparser.engine.ParserEngine
 import cc.stkmn.shareparser.engine.TemplateEngine
 import java.util.UUID
+import kotlinx.coroutines.launch
 
 private val reservedVariables = setOf(
     "input",
@@ -112,8 +121,12 @@ internal fun ProfileEditorScreen(
     onSaved: () -> Unit,
     onDeleted: () -> Unit,
     exitRequest: Int = 0,
+    undoRequest: Int = 0,
+    redoRequest: Int = 0,
     onDirtyChanged: (Boolean) -> Unit = {},
+    onHistoryChanged: (Boolean, Boolean) -> Unit = { _, _ -> },
     onExitRequestHandled: () -> Unit = {},
+    onHistoryRequestHandled: () -> Unit = {},
     onDiscarded: () -> Unit = {}
 ) {
     val context = LocalContext.current
@@ -148,8 +161,9 @@ internal fun ProfileEditorScreen(
         )
     }
     val undoStack = remember(existing?.id) { mutableStateListOf<Profile>() }
+    val redoStack = remember(existing?.id) { mutableStateListOf<Profile>() }
     var lastObserved by remember(existing?.id) { mutableStateOf(initialProfile) }
-    var restoringUndo by remember(existing?.id) { mutableStateOf(false) }
+    var restoringHistory by remember(existing?.id) { mutableStateOf(false) }
     var showExitDialog by remember(existing?.id) { mutableStateOf(false) }
 
     var advanced by remember { mutableStateOf(false) }
@@ -191,7 +205,7 @@ internal fun ProfileEditorScreen(
     )
 
     fun restoreProfile(profile: Profile) {
-        restoringUndo = true
+        restoringHistory = true
         name = profile.name
         enabled = profile.enabled
         parseDirection = profile.parseDirection
@@ -273,14 +287,32 @@ internal fun ProfileEditorScreen(
     val currentDraft = buildProfile()
     LaunchedEffect(currentDraft) {
         onDirtyChanged(currentDraft != initialProfile)
-        if (restoringUndo) {
-            restoringUndo = false
+        if (restoringHistory) {
+            restoringHistory = false
             lastObserved = currentDraft
         } else if (currentDraft != lastObserved) {
             undoStack += lastObserved
             while (undoStack.size > 60) undoStack.removeAt(0)
+            redoStack.clear()
             lastObserved = currentDraft
         }
+        onHistoryChanged(undoStack.isNotEmpty(), redoStack.isNotEmpty())
+    }
+
+    LaunchedEffect(undoRequest, redoRequest) {
+        when {
+            undoRequest > 0 && undoStack.isNotEmpty() -> {
+                redoStack += buildProfile()
+                restoreProfile(undoStack.removeAt(undoStack.lastIndex))
+                onHistoryChanged(undoStack.isNotEmpty(), redoStack.isNotEmpty())
+            }
+            redoRequest > 0 && redoStack.isNotEmpty() -> {
+                undoStack += buildProfile()
+                restoreProfile(redoStack.removeAt(redoStack.lastIndex))
+                onHistoryChanged(undoStack.isNotEmpty(), redoStack.isNotEmpty())
+            }
+        }
+        if (undoRequest > 0 || redoRequest > 0) onHistoryRequestHandled()
     }
 
     LaunchedEffect(exitRequest) {
