@@ -235,7 +235,7 @@ private val exactEnglish = mapOf(
     "Verwerfen" to "Discard",
     "Letzte Änderung rückgängig" to "Undo last change",
     "Variablen als Profilmerkmal" to "Variables as profile criteria",
-    "Eingeklappt. Wähle bei Bedarf eine oder mehrere Variablen und lege fest, was geprüft werden soll." to "Collapsed. Select one or more variables when needed and define what should be checked.",
+    "Wähle bei Bedarf eine oder mehrere Variablen und lege fest, was geprüft werden soll." to "Select one or more variables when needed and define what should be checked.",
     "Variablen auswählen" to "Select variables",
     "Prüfung" to "Check",
     "Ist leer" to "Is empty",
