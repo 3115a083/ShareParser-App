@@ -260,6 +260,28 @@ internal fun ProfileEditorScreen(
         return "${base}_${number}"
     }
 
+    fun renameVariableReferences(oldKey: String, newKey: String, sourceIndex: Int) {
+        if (oldKey.isBlank() || oldKey == newKey) return
+        for (i in matchers.indices) {
+            if (matchers[i].variableKey == oldKey) {
+                val matcher = matchers[i]
+                matchers[i] = matcher.copy(
+                    variableKey = newKey,
+                    friendlyText = when (matcher.valueMode) {
+                        MatcherValueMode.EMPTY -> newKey + " ist leer"
+                        MatcherValueMode.NOT_EMPTY -> newKey + " ist nicht leer"
+                        MatcherValueMode.REGEX -> newKey + " erfüllt die Inhaltsprüfung"
+                    }
+                )
+            }
+        }
+        for (i in (sourceIndex + 1) until extractors.size) {
+            if (extractors[i].sourceVariableKey == oldKey) {
+                extractors[i] = extractors[i].copy(sourceVariableKey = newKey)
+            }
+        }
+    }
+
     fun applyExtractor(proposed: ExtractorRule, index: Int? = null) {
         val conflictIndex = extractors.indexOfFirst { it.key == proposed.key }
             .takeIf { it >= 0 && it != index }
@@ -267,35 +289,55 @@ internal fun ProfileEditorScreen(
             variableConflict = VariableConflict(proposed, index)
             return
         }
-        if (index == null) extractors += proposed
-        else if (index in extractors.indices) extractors[index] = proposed
+        if (index == null) {
+            extractors += proposed
+        } else if (index in extractors.indices) {
+            val oldKey = extractors[index].key
+            extractors[index] = proposed
+            renameVariableReferences(oldKey, proposed.key, index)
+        }
     }
 
     fun overwriteConflict(conflict: VariableConflict) {
         val target = extractors.indexOfFirst { it.key == conflict.proposed.key }
         val source = conflict.index
+        val oldKey = source?.takeIf { it in extractors.indices }?.let { extractors[it].key }.orEmpty()
+        var finalIndex = source ?: target
         when {
-            target < 0 && source == null -> extractors += conflict.proposed
+            target < 0 && source == null -> {
+                extractors += conflict.proposed
+                finalIndex = extractors.lastIndex
+            }
             target < 0 && source != null && source in extractors.indices -> extractors[source] = conflict.proposed
             source == null -> extractors[target] = conflict.proposed
             source == target -> extractors[source] = conflict.proposed
             source < target -> {
                 extractors[source] = conflict.proposed
                 extractors.removeAt(target)
+                finalIndex = source
             }
             else -> {
                 extractors.removeAt(target)
                 val adjusted = source - 1
-                if (adjusted in extractors.indices) extractors[adjusted] = conflict.proposed
+                if (adjusted in extractors.indices) {
+                    extractors[adjusted] = conflict.proposed
+                    finalIndex = adjusted
+                }
             }
         }
+        if (source != null) renameVariableReferences(oldKey, conflict.proposed.key, finalIndex.coerceAtLeast(0))
         variableConflict = null
     }
 
     fun incrementConflict(conflict: VariableConflict) {
         val changed = conflict.proposed.copy(key = uniqueVariableKey(conflict.proposed.key, conflict.index))
-        if (conflict.index == null) extractors += changed
-        else if (conflict.index in extractors.indices) extractors[conflict.index] = changed
+        if (conflict.index == null) {
+            extractors += changed
+        } else if (conflict.index in extractors.indices) {
+            val oldKey = extractors[conflict.index].key
+            extractors[conflict.index] = changed
+            renameVariableReferences(oldKey, changed.key, conflict.index)
+        }
         variableConflict = null
     }
 
