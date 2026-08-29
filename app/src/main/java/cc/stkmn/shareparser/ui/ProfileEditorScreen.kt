@@ -1364,6 +1364,34 @@ private fun ShareActionFields(action: ProcessingAction.Share, variables: List<St
                 singleLine = true
             )
         }
+        Text("Fehlerbehandlung für Dateiname", fontWeight = FontWeight.SemiBold)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            RadioButton(action.fileNameInvalidPolicy == InvalidValuePolicy.FALLBACK, { onChange(action.copy(fileNameInvalidPolicy = InvalidValuePolicy.FALLBACK)) })
+            Text("Fallback verwenden")
+        }
+        if (action.fileNameInvalidPolicy == InvalidValuePolicy.FALLBACK) {
+            TemplateField("Fallback-Dateiname", action.fileNameFallback, variables, placeholder = "ShareParser.txt") {
+                onChange(action.copy(fileNameFallback = it))
+            }
+        }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            RadioButton(action.fileNameInvalidPolicy == InvalidValuePolicy.ERROR, { onChange(action.copy(fileNameInvalidPolicy = InvalidValuePolicy.ERROR)) })
+            Text("Fehler melden und Aktion abbrechen")
+        }
+        Text("Fehlerbehandlung für Unterordner", fontWeight = FontWeight.SemiBold)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            RadioButton(action.pathInvalidPolicy == InvalidValuePolicy.FALLBACK, { onChange(action.copy(pathInvalidPolicy = InvalidValuePolicy.FALLBACK)) })
+            Text("Fallback verwenden")
+        }
+        if (action.pathInvalidPolicy == InvalidValuePolicy.FALLBACK) {
+            TemplateField("Fallback-Unterordner, optional", action.pathFallback, variables, placeholder = "leer = Basisordner") {
+                onChange(action.copy(pathFallback = it))
+            }
+        }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            RadioButton(action.pathInvalidPolicy == InvalidValuePolicy.ERROR, { onChange(action.copy(pathInvalidPolicy = InvalidValuePolicy.ERROR)) })
+            Text("Fehler melden und Aktion abbrechen")
+        }
         Text("Datei verwenden", fontWeight = FontWeight.SemiBold)
         Row(verticalAlignment = Alignment.CenterVertically) {
             RadioButton(action.fileMode == TextFileMode.SHARE, { onChange(action.copy(fileMode = TextFileMode.SHARE)) })
