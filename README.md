@@ -33,9 +33,9 @@ When multiple profiles match, ShareParser asks which one to use. If exactly one 
 
 Opening a profile for editing activates editing mode. While that editor is open, newly shared emails, messages or text files are loaded directly into the profile as a fresh example. This is useful for refining a rule against several real examples without recreating the profile.
 
-Editor changes remain local until **Save profile** is used. Undo and redo are available directly in the editor top bar. If the user leaves the editor with unsaved changes, ShareParser asks whether to apply them, discard them or continue editing. Deleting a profile requires confirmation.\n\nThe editor has a section navigation row for profile recognition, variables from the example, variables and processing actions. The example section is shown only when an example is available. Processing-action cards are collapsed by default so large profiles remain manageable.
+Editor changes remain local until **Save profile** is used. Undo and redo are available directly in the editor top bar. If the user leaves the editor with unsaved changes, ShareParser asks whether to apply them, discard them or continue editing. Deleting a profile requires confirmation.
 
-The editor also shows a section navigation bar for profile recognition, example variables, variables and processing actions. The example-variable section is only shown when an example is available. Undo and redo controls are available in the editor title bar.
+The editor has a section navigation row for profile recognition, variables from the example, variables and processing actions. The example section is shown only when an example is available. Processing-action cards are collapsed by default so large profiles remain manageable.
 
 ## Visual extraction without Regex
 
@@ -112,9 +112,11 @@ PLZ = 59000
 Ort = Lünen
 ```
 
-Splitting is modular. A source variable can be divided into any number of subvariables using a chosen separator or whitespace.\n\nVariable names must be unique within a profile. If a newly assigned name already exists, the editor offers to overwrite the existing variable, save the new variable with an incremented suffix, or discard the change. Profile validation also blocks saving remaining duplicate names.\n\nDerived variables can themselves be used in profile criteria, templates and later transformations. The split editor can create any number of child variables from one value by choosing a separator and adding child names.
+Splitting is modular. A source variable can be divided into any number of subvariables using a chosen separator or whitespace.
 
 Variable names must be unique inside a profile. If a new or renamed variable conflicts with an existing name, the editor offers to overwrite the existing variable, save the new variable with an incremented suffix, or discard the change. Duplicate names are also rejected by profile validation before saving.
+
+Derived variables can themselves be used in profile criteria, templates and later transformations.
 
 ## Templates
 
