@@ -277,7 +277,7 @@ Save as `{{datum}}-{{Ort}}.md`.
 
 ## Profile sharing
 
-Profiles use a versioned JSON format. They can be copied, exported, shared and imported on another device. Unknown future fields are ignored where possible for forward compatibility.
+Profiles use a versioned JSON format. The current profile schema is version 10. Profiles can be copied, exported, shared and imported on another device. Unknown future fields are ignored where possible for forward compatibility.
 
 ## Android support and build
 
