@@ -1116,6 +1116,22 @@ internal fun ProfileEditorScreen(
                 action = action,
                 variables = variables,
                 highlighted = highlightField?.startsWith(actionHighlightPrefix(action)) == true || highlightField == action.id,
+                canMoveUp = index > 0,
+                canMoveDown = index >= 0 && index < actions.lastIndex,
+                onMoveUp = {
+                    if (index > 0) {
+                        val previous = actions[index - 1]
+                        actions[index - 1] = actions[index]
+                        actions[index] = previous
+                    }
+                },
+                onMoveDown = {
+                    if (index >= 0 && index < actions.lastIndex) {
+                        val next = actions[index + 1]
+                        actions[index + 1] = actions[index]
+                        actions[index] = next
+                    }
+                },
                 onChange = { changed -> if (index >= 0) actions[index] = changed },
                 onDelete = { if (index >= 0) actions.removeAt(index) }
             )
@@ -1592,6 +1608,10 @@ private fun ActionEditorCard(
     action: ProcessingAction,
     variables: List<String>,
     highlighted: Boolean,
+    canMoveUp: Boolean,
+    canMoveDown: Boolean,
+    onMoveUp: () -> Unit,
+    onMoveDown: () -> Unit,
     onChange: (ProcessingAction) -> Unit,
     onDelete: () -> Unit
 ) {
@@ -1607,6 +1627,12 @@ private fun ActionEditorCard(
                 Icon(actionIcon(action.icon), null)
                 Spacer(Modifier.width(8.dp))
                 Text(action.friendlyName, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                IconButton(onClick = onMoveUp, enabled = canMoveUp) {
+                    Icon(Icons.Outlined.ArrowUpward, "Nach oben")
+                }
+                IconButton(onClick = onMoveDown, enabled = canMoveDown) {
+                    Icon(Icons.Outlined.ArrowDownward, "Nach unten")
+                }
                 IconButton(onClick = { expanded = !expanded }) {
                     Icon(if (expanded) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore, null)
                 }
