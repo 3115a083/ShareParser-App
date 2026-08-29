@@ -20,8 +20,6 @@ import android.widget.TextView
 import cc.stkmn.shareparser.AppArtwork
 import cc.stkmn.shareparser.AppLocale
 import cc.stkmn.shareparser.MainActivity
-import cc.stkmn.shareparser.data.ShareSelectionMode
-import cc.stkmn.shareparser.MainActivity
 import cc.stkmn.shareparser.data.PendingShareStore
 import cc.stkmn.shareparser.data.ShareSelectionMode
 
