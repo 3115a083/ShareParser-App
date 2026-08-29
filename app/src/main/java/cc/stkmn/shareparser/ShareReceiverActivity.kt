@@ -16,6 +16,7 @@ import cc.stkmn.shareparser.share.SharePayloadFactory
 class ShareReceiverActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        AppLocale.apply(this, ProfileRepository(this).settings().appLanguage)
         handle(intent)
     }
 
