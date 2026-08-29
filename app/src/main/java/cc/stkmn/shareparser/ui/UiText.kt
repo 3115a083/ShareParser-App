@@ -295,6 +295,11 @@ private fun englishFallback(value: String): String {
     var result = value
     val replacements = listOf(
         "Noch kein Merkmal" to "No criterion yet",
+        "Teilende App ist nicht " to "Sharing app is not ",
+        "Teilende App ist " to "Sharing app is ",
+        "Das Profil '" to "The profile '",
+        "' wird dauerhaft gelöscht." to "' will be permanently deleted.",
+        "Untervariable " to "Subvariable ",
         "Unbekannte Variable" to "Unknown variable",
         "Erkannte Variablen" to "Detected variables",
         "Variablen können" to "Variables can",
