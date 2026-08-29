@@ -35,6 +35,8 @@ Opening a profile for editing activates editing mode. While that editor is open,
 
 Editor changes remain local until **Save profile** is used. The editor provides an undo button for recent changes. If the user leaves the editor with unsaved changes, ShareParser asks whether to apply them, discard them or continue editing. Processing-action cards are collapsed by default so large profiles remain manageable.
 
+The editor also shows a section navigation bar for profile recognition, example variables, variables and processing actions. The example-variable section is only shown when an example is available. Undo and redo controls are available in the editor title bar.
+
 ## Visual extraction without Regex
 
 With a shared example, the user can select a value directly in the subject or message body and create a named variable from that selection. ShareParser builds a reusable extraction rule from the surrounding text.
@@ -48,7 +50,9 @@ Buchungsnummer: ICE-612
 Straße Hausnummer  Teststraße 151
 ```
 
-Configured variables are highlighted in the example text with different colors. Example values can be copied for later transformations.
+Configured variables are highlighted in the example text with different colors. Highlighting is constrained to the extracted value so a broad extraction pattern cannot color the entire sample. Example values can be copied for later transformations.
+
+The suggestion engine also recognizes common web links, `mailto:` links, email addresses, telephone links and plain telephone numbers as candidate variables.
 
 ### Built-in variables
 
@@ -68,7 +72,7 @@ The sharing application can be used as an additional profile criterion. SharePar
 
 Profiles can use several criteria at once. From the second criterion onward, each criterion can be connected to the previous result with **AND** or **OR**. This allows profiles to require several facts while still accepting alternative signatures.
 
-Useful criteria include stable text fragments, sharing app/package, file name, MIME type and extracted variables. Variable criteria are kept collapsed in the editor until needed. One or more variables can be selected together and checked for:
+Useful criteria include stable text fragments, the sharing app, file name, MIME type and extracted variables. The sharing-app criterion includes an app picker and can match either "is" or "is not". Variable criteria are kept collapsed in the editor until needed. One or more variables can be selected together and checked for:
 
 - empty
 - not empty
@@ -108,7 +112,9 @@ PLZ = 59000
 Ort = Lünen
 ```
 
-Derived variables can themselves be used in profile criteria, templates and later transformations.
+Derived variables can themselves be used in profile criteria, templates and later transformations. The split editor can create any number of child variables from one value by choosing a separator and adding child names.
+
+Variable names must be unique inside a profile. If a new or renamed variable conflicts with an existing name, the editor offers to overwrite the existing variable, save the new variable with an incremented suffix, or discard the change. Duplicate names are also rejected by profile validation before saving.
 
 ## Templates
 
@@ -201,13 +207,15 @@ ShareParser accepts Android `ACTION_SEND` content for text MIME types and common
 
 ## Action selection
 
-When more than one profile/action is possible, the selector can appear inside ShareParser, as a centered overlay over the sharing app, or as an actionable Android notification. Overlay permission is optional. The notification mode has its own Android channel for sound/vibration settings. Temporary selectors expire automatically.
+When more than one profile/action is possible, the selector can appear inside ShareParser, as a centered overlay over the sharing app, or as an actionable Android notification. Processing actions can be reordered in the profile editor, and that order is used by the selectors.
 
-## App icons
+Each action can be included or excluded from the overlay and notification surfaces. The overlay shows at most four configured actions and offers to open the full list in ShareParser when more are available. Android notifications expose at most three configured action buttons and open the full picker in the app for the remaining choices. Overlay permission is optional. The notification mode has its own Android channel for sound/vibration settings. Temporary selectors expire automatically.
 
-ShareParser includes four selectable launcher icons. **Logo 1 is the default** and is explicitly assigned to the Android Sharesheet receiver. Launcher aliases are switched explicitly and synchronously to improve launcher refresh reliability.
+## App icon
 
-The settings preview uses a robust bitmap decoder for the supplied PNG artwork. The compact ShareParser graphic is rendered without its dark source background and is displayed at a larger size next to the title and in the share overlay.
+ShareParser now uses **Logo 3 exclusively** for the Android launcher and Sharesheet receiver. The previous runtime launcher-icon switcher was removed because launcher caching and alias switching were not reliable enough across tested Android launchers.
+
+The compact ShareParser graphic used inside the app and share overlay is rendered without a dark background and at a larger size than earlier builds.
 
 ## Failure handling
 
