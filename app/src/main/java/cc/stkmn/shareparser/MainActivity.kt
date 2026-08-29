@@ -54,6 +54,7 @@ import cc.stkmn.shareparser.data.ProfileRepository
 import cc.stkmn.shareparser.data.SharedPayload
 import cc.stkmn.shareparser.ui.FailureScreen
 import cc.stkmn.shareparser.ui.HomeScreen
+import cc.stkmn.shareparser.ui.LanguageSettingsScreen
 import cc.stkmn.shareparser.ui.ProfileEditorScreen
 import cc.stkmn.shareparser.ui.RegionalSettingsScreen
 import cc.stkmn.shareparser.ui.SettingsHomeScreen
@@ -102,6 +103,7 @@ class MainActivity : ComponentActivity() {
 private sealed interface Screen {
     data object Home : Screen
     data object Settings : Screen
+    data object LanguageSettings : Screen
     data object RegionalSettings : Screen
     data class Editor(
         val profile: Profile?,
@@ -113,7 +115,7 @@ private sealed interface Screen {
 }
 
 private fun previousScreen(screen: Screen): Screen = when (screen) {
-    Screen.RegionalSettings -> Screen.Settings
+    Screen.RegionalSettings, Screen.LanguageSettings -> Screen.Settings
     Screen.Settings, is Screen.Editor, is Screen.Shared, Screen.Failure -> Screen.Home
     Screen.Home -> Screen.Home
 }
@@ -205,6 +207,7 @@ private fun ShareParserApp(startIntent: Intent?, onIntentConsumed: () -> Unit) {
                                 localized(when (val current = screen) {
                                     Screen.Home -> "ShareParser"
                                     Screen.Settings -> "Einstellungen"
+                                    Screen.LanguageSettings -> "App-Sprache"
                                     Screen.RegionalSettings -> "Datum und Uhrzeit"
                                     is Screen.Editor -> if (current.profile == null) "Profil erstellen" else "Profil bearbeiten"
                                     is Screen.Shared -> "Geteilter Inhalt"
@@ -271,8 +274,10 @@ private fun ShareParserApp(startIntent: Intent?, onIntentConsumed: () -> Unit) {
                     )
                     Screen.Settings -> SettingsHomeScreen(
                         repository = repository,
-                        onRegionalSettings = { screen = Screen.RegionalSettings }
+                        onRegionalSettings = { screen = Screen.RegionalSettings },
+                        onLanguageSettings = { screen = Screen.LanguageSettings }
                     )
+                    Screen.LanguageSettings -> LanguageSettingsScreen(repository = repository)
                     Screen.RegionalSettings -> RegionalSettingsScreen(repository = repository)
                     is Screen.Editor -> ProfileEditorScreen(
                         existing = current.profile,
