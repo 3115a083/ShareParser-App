@@ -21,13 +21,7 @@ import cc.stkmn.shareparser.data.LauncherIcon
 object AppArtwork {
     const val FOREGROUND_ASSET = "branding/ic_launcher_foreground.png"
 
-    fun launcherAsset(icon: LauncherIcon): String = when (LauncherIconManager.normalize(icon)) {
-        LauncherIcon.LOGO_1 -> "branding/app_logo_1.png"
-        LauncherIcon.LOGO_2 -> "branding/app_logo_2.png"
-        LauncherIcon.LOGO_3 -> "branding/app_logo_3.png"
-        LauncherIcon.LOGO_4 -> "branding/app_logo_4.png"
-        LauncherIcon.LOGO_5, LauncherIcon.LOGO_6 -> "branding/app_logo_1.png"
-    }
+    fun launcherAsset(icon: LauncherIcon): String = "branding/app_logo_3.png"
 
     fun loadBitmap(context: Context, assetPath: String): Bitmap? = runCatching {
         val bytes = context.applicationContext.assets.open(assetPath).use { it.readBytes() }
