@@ -188,11 +188,11 @@ sealed class ProcessingAction {
     @Serializable
     @SerialName("calendar")
     data class Calendar(
-        val showInOverlay: Boolean = true,
-        val showInNotification: Boolean = true,
         override val id: String,
         override val friendlyName: String,
         override val icon: String = "event",
+        val showInOverlay: Boolean = true,
+        val showInNotification: Boolean = true,
         val titleTemplate: String = "{{subject}}",
         val descriptionTemplate: String = "{{text}}",
         val locationTemplate: String = "",
@@ -210,11 +210,11 @@ sealed class ProcessingAction {
     @Serializable
     @SerialName("url")
     data class Url(
-        val showInOverlay: Boolean = true,
-        val showInNotification: Boolean = true,
         override val id: String,
         override val friendlyName: String,
         override val icon: String = "link",
+        val showInOverlay: Boolean = true,
+        val showInNotification: Boolean = true,
         val urlTemplate: String = "https://example.com/?q={{input|url}}",
         val openMode: UrlOpenMode = UrlOpenMode.BROWSER
     ) : ProcessingAction()
@@ -222,11 +222,11 @@ sealed class ProcessingAction {
     @Serializable
     @SerialName("share")
     data class Share(
-        val showInOverlay: Boolean = true,
-        val showInNotification: Boolean = true,
         override val id: String,
         override val friendlyName: String,
         override val icon: String = "share",
+        val showInOverlay: Boolean = true,
+        val showInNotification: Boolean = true,
         val textTemplate: String = "{{text}}",
         val subjectTemplate: String = "{{subject}}",
         val mimeType: String = "text/plain",
@@ -243,11 +243,11 @@ sealed class ProcessingAction {
     @Serializable
     @SerialName("webhook")
     data class Webhook(
-        val showInOverlay: Boolean = true,
-        val showInNotification: Boolean = true,
         override val id: String,
         override val friendlyName: String,
         override val icon: String = "send",
+        val showInOverlay: Boolean = true,
+        val showInNotification: Boolean = true,
         val urlTemplate: String = "",
         val bodyTemplate: String = """{"text":"{{text}}","subject":"{{subject}}"}""",
         val contentType: String = "application/json; charset=utf-8",
