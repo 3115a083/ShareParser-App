@@ -798,96 +798,6 @@ internal fun ProfileEditorScreen(
             }
         }
 
-        if (sample != null) {
-            if (sample.fileName.isNotBlank()) {
-                item {
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        val fileActive = matchers.any { it.variableKey == "file_name" && it.regex == Regex.escape(sample.fileName) }
-                        FilterChip(
-                            selected = fileActive,
-                            onClick = {
-                                if (fileActive) matchers.removeAll { it.variableKey == "file_name" && it.regex == Regex.escape(sample.fileName) }
-                                else matchers += MatcherRule(
-                                    regex = Regex.escape(sample.fileName),
-                                    friendlyText = "Dateiname ${sample.fileName}",
-                                    variableKey = "file_name"
-                                )
-                            },
-                            label = { Text("Datei: ${sample.fileName.take(32)}") }
-                        )
-                        val mimeActive = matchers.any { it.variableKey == "mime_type" && it.regex == Regex.escape(sample.mimeType) }
-                        FilterChip(
-                            selected = mimeActive,
-                            onClick = {
-                                if (mimeActive) matchers.removeAll { it.variableKey == "mime_type" && it.regex == Regex.escape(sample.mimeType) }
-                                else matchers += MatcherRule(
-                                    regex = Regex.escape(sample.mimeType),
-                                    friendlyText = "Dateityp ${sample.mimeType}",
-                                    variableKey = "mime_type"
-                                )
-                            },
-                            label = { Text(sample.mimeType) }
-                        )
-                    }
-                }
-            }
-            if (sample.subject.isNotBlank()) {
-                item {
-                    SelectionSourceCard(
-                        title = "Betreff",
-                        fixedText = sample.subject,
-                        value = subjectSelection,
-                        source = InputSource.SUBJECT,
-                        extractors = extractors,
-                        onValueChange = { subjectSelection = it.copy(text = sample.subject) },
-                        onVariable = {
-                            val s = subjectSelection.selection
-                            if (!s.collapsed) {
-                                variableName = "field${extractors.size + 1}"
-                                pendingSelection = SelectionDraft(sample.subject, s.start, s.end, InputSource.SUBJECT)
-                            }
-                        },
-                        onMatcher = { addMatcherSelection(sample.subject, subjectSelection.selection) }
-                    )
-                }
-            }
-            item {
-                SelectionSourceCard(
-                    title = if (sample.fileName.isBlank()) "Nachrichtentext" else "Dateiinhalt",
-                    fixedText = sample.text,
-                    value = bodySelection,
-                    source = InputSource.TEXT,
-                    extractors = extractors,
-                    onValueChange = { bodySelection = it.copy(text = sample.text) },
-                    onVariable = {
-                        val s = bodySelection.selection
-                        if (!s.collapsed) {
-                            variableName = "field${extractors.size + 1}"
-                            pendingSelection = SelectionDraft(sample.text, s.start, s.end, InputSource.TEXT)
-                        }
-                    },
-                    onMatcher = { addMatcherSelection(sample.text, bodySelection.selection) }
-                )
-            }
-            item { Text("Automatische Vorschläge", style = MaterialTheme.typography.labelLarge) }
-            item {
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    items(GuidedRuleFactory.suggestedMatchers(sample)) { suggestion ->
-                        val regex = Regex.escape(suggestion)
-                        val active = matchers.any { it.variableKey.isBlank() && it.regex == regex }
-                        FilterChip(
-                            selected = active,
-                            onClick = {
-                                if (active) matchers.removeAll { it.variableKey.isBlank() && it.regex == regex }
-                                else matchers += GuidedRuleFactory.matcherFromText(suggestion)
-                            },
-                            label = { Text(suggestion.take(36)) }
-                        )
-                    }
-                }
-            }
-        }
-
         if (extractors.any { it.key.isNotBlank() }) {
             item {
                 Card(Modifier.fillMaxWidth()) {
@@ -1046,6 +956,96 @@ internal fun ProfileEditorScreen(
                 }) { Text("Hinzufügen") }
             }
         }
+        if (sample != null) {
+            if (sample.fileName.isNotBlank()) {
+                item {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        val fileActive = matchers.any { it.variableKey == "file_name" && it.regex == Regex.escape(sample.fileName) }
+                        FilterChip(
+                            selected = fileActive,
+                            onClick = {
+                                if (fileActive) matchers.removeAll { it.variableKey == "file_name" && it.regex == Regex.escape(sample.fileName) }
+                                else matchers += MatcherRule(
+                                    regex = Regex.escape(sample.fileName),
+                                    friendlyText = "Dateiname ${sample.fileName}",
+                                    variableKey = "file_name"
+                                )
+                            },
+                            label = { Text("Datei: ${sample.fileName.take(32)}") }
+                        )
+                        val mimeActive = matchers.any { it.variableKey == "mime_type" && it.regex == Regex.escape(sample.mimeType) }
+                        FilterChip(
+                            selected = mimeActive,
+                            onClick = {
+                                if (mimeActive) matchers.removeAll { it.variableKey == "mime_type" && it.regex == Regex.escape(sample.mimeType) }
+                                else matchers += MatcherRule(
+                                    regex = Regex.escape(sample.mimeType),
+                                    friendlyText = "Dateityp ${sample.mimeType}",
+                                    variableKey = "mime_type"
+                                )
+                            },
+                            label = { Text(sample.mimeType) }
+                        )
+                    }
+                }
+            }
+            if (sample.subject.isNotBlank()) {
+                item {
+                    SelectionSourceCard(
+                        title = "Betreff",
+                        fixedText = sample.subject,
+                        value = subjectSelection,
+                        source = InputSource.SUBJECT,
+                        extractors = extractors,
+                        onValueChange = { subjectSelection = it.copy(text = sample.subject) },
+                        onVariable = {
+                            val s = subjectSelection.selection
+                            if (!s.collapsed) {
+                                variableName = "field${extractors.size + 1}"
+                                pendingSelection = SelectionDraft(sample.subject, s.start, s.end, InputSource.SUBJECT)
+                            }
+                        },
+                        onMatcher = { addMatcherSelection(sample.subject, subjectSelection.selection) }
+                    )
+                }
+            }
+            item {
+                SelectionSourceCard(
+                    title = if (sample.fileName.isBlank()) "Nachrichtentext" else "Dateiinhalt",
+                    fixedText = sample.text,
+                    value = bodySelection,
+                    source = InputSource.TEXT,
+                    extractors = extractors,
+                    onValueChange = { bodySelection = it.copy(text = sample.text) },
+                    onVariable = {
+                        val s = bodySelection.selection
+                        if (!s.collapsed) {
+                            variableName = "field${extractors.size + 1}"
+                            pendingSelection = SelectionDraft(sample.text, s.start, s.end, InputSource.TEXT)
+                        }
+                    },
+                    onMatcher = { addMatcherSelection(sample.text, bodySelection.selection) }
+                )
+            }
+            item { Text("Automatische Vorschläge", style = MaterialTheme.typography.labelLarge) }
+            item {
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    items(GuidedRuleFactory.suggestedMatchers(sample)) { suggestion ->
+                        val regex = Regex.escape(suggestion)
+                        val active = matchers.any { it.variableKey.isBlank() && it.regex == regex }
+                        FilterChip(
+                            selected = active,
+                            onClick = {
+                                if (active) matchers.removeAll { it.variableKey.isBlank() && it.regex == regex }
+                                else matchers += GuidedRuleFactory.matcherFromText(suggestion)
+                            },
+                            label = { Text(suggestion.take(36)) }
+                        )
+                    }
+                }
+            }
+        }
+
         item {
             Text("Angewendete Filter", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
         }
