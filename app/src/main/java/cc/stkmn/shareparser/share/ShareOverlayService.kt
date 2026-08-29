@@ -18,6 +18,7 @@ import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 import cc.stkmn.shareparser.R
+import cc.stkmn.shareparser.AppLocale
 import cc.stkmn.shareparser.data.PendingShareStore
 
 class ShareOverlayService : Service() {
@@ -79,7 +80,7 @@ class ShareOverlayService : Service() {
                 setTypeface(typeface, android.graphics.Typeface.BOLD)
             })
             addView(TextView(this@ShareOverlayService).apply {
-                text = "Weiterverarbeitung auswählen"
+                text = AppLocale.text("Weiterverarbeitung auswählen", "Select processing action")
                 textSize = 13f
                 setTextColor(0xFF5F5E62.toInt())
                 setPadding(0, dp(2), 0, 0)
