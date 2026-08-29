@@ -223,7 +223,7 @@ sealed class ProcessingAction {
         val textTemplate: String = "{{text}}",
         val subjectTemplate: String = "{{subject}}",
         val mimeType: String = "text/plain",
-        val fileExtension: String = "txt",
+        val fileExtension: String = "",
         val asFile: Boolean = false,
         val fileMode: TextFileMode = TextFileMode.SHARE,
         val fileNameTemplate: String = "ShareParser.txt",
