@@ -18,10 +18,11 @@ object GuidedRuleFactory {
         "(?i)(?:\\b(?:am|an der|auf der|unter den|zum|zur)\\s+)?[\\p{L}][\\p{L}.'’/-]*(?:straße|strasse|str\\.?|weg|allee|platz|gasse|ring|ufer|chaussee|damm|steig|stieg|pfad|promenade)\\s+\\d{1,5}[a-zA-Z]?(?:\\s*[-/]\\s*\\d{1,5}[a-zA-Z]?)?"
     )
     private val postalCity = Regex("(?<!\\d)\\d{5}\\s+[\\p{L}][\\p{L} .'-]{1,50}(?!\\d)")
-    private val webUrl = Regex("(?i)\\bhttps?://[^\\s<>\"']+")
+    private val webUrl = Regex("(?i)\\b(?:https?://|www\\.)[^\\s<>\"']+")
     private val mailTo = Regex("(?i)\\bmailto:[^\\s<>\"']+")
     private val telLink = Regex("(?i)\\btel:[+0-9()./ -]{5,}")
     private val plainEmail = Regex("(?i)(?<![\\w.+-])[A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z]{2,}(?![\\w.-])")
+    private val plainPhone = Regex("(?<!\\w)(?:\\+?[0-9][0-9 ()/.-]{5,}[0-9])(?!\\w)")
     private val hrefTarget = Regex("(?i)href\\s*=\\s*[\"'](https?://[^\"']+|mailto:[^\"']+|tel:[^\"']+)[\"']")
 
     fun candidates(payload: SharedPayload): List<Candidate> = buildList {
@@ -94,6 +95,12 @@ object GuidedRuleFactory {
                 }
                 plainEmail.findAll(line).forEach { match ->
                     add(Candidate("E-Mail-Adresse", match.value, InputSource.TEXT, line, "email"))
+                }
+                plainPhone.findAll(line).forEach { match ->
+                    val phone = match.value.trim()
+                    if (phone.count(Char::isDigit) >= 6) {
+                        add(Candidate("Telefonnummer", phone, InputSource.TEXT, line, "telefon"))
+                    }
                 }
                 hrefTarget.findAll(line).forEach { match ->
                     val target = match.groups[1]?.value.orEmpty()
