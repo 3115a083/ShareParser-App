@@ -354,7 +354,11 @@ class ActionExecutor(context: Context, private val settings: AppSettings = AppSe
         } else {
             normalizeExtension(action.fileExtension)
         }
-        val fileName = ensureExtension(baseFileName, extension)
+        val fileName = if (action.fileExtension.isBlank()) {
+            ensureExtension(baseFileName, extension)
+        } else {
+            replaceExtension(baseFileName, extension)
+        }
         val fileType = textMimeForExtension(extension)
         val fileWarnings = if (fileType.supported) emptyList() else listOf(
             "Die Dateiendung '.$extension' ist kein bekanntes Textformat. ShareParser speichert den Inhalt trotzdem als Textdatei mit dieser Endung."
@@ -435,6 +439,13 @@ class ActionExecutor(context: Context, private val settings: AppSettings = AppSe
     private fun ensureExtension(fileName: String, extension: String): String {
         val suffix = "." + extension
         return if (fileName.endsWith(suffix, ignoreCase = true)) fileName else fileName.trimEnd('.') + suffix
+    }
+
+    private fun replaceExtension(fileName: String, extension: String): String {
+        val clean = fileName.trimEnd('.')
+        val dot = clean.lastIndexOf('.')
+        val base = if (dot > 0) clean.substring(0, dot) else clean
+        return base + "." + extension
     }
 
     private fun textMimeForExtension(extension: String): TextFileType = when (extension) {
