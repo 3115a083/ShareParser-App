@@ -13,8 +13,8 @@ android {
         applicationId = "cc.stkmn.shareparser"
         minSdk = 26
         targetSdk = 36
-        versionCode = 12
-        versionName = "0.3.6"
+        versionCode = 13
+        versionName = "0.3.7"
     }
 
     compileOptions {
