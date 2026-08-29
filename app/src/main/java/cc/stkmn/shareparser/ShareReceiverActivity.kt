@@ -51,7 +51,9 @@ class ShareReceiverActivity : ComponentActivity() {
         }
 
         if (matches.size == 1 && choices.size == 1) {
-            coordinator.execute(payload, matches.first(), matches.first().actions.first())
+            val choice = choices.first()
+            val action = matches.first().actions.firstOrNull { it.id == choice.actionId }
+            if (action != null) coordinator.execute(payload, matches.first(), action)
             finish()
             return
         }
