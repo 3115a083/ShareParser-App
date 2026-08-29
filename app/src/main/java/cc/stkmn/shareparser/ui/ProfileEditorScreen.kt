@@ -27,6 +27,8 @@ import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Download
 import androidx.compose.material.icons.outlined.ErrorOutline
 import androidx.compose.material.icons.outlined.ExpandMore
+import androidx.compose.material.icons.outlined.OpenInFull
+import androidx.compose.material.icons.outlined.CloseFullscreen
 import androidx.compose.material.icons.outlined.Fullscreen
 import androidx.compose.material.icons.outlined.FullscreenExit
 import androidx.compose.material.icons.outlined.Share
@@ -74,6 +76,7 @@ import cc.stkmn.shareparser.data.EditorModeStore
 import cc.stkmn.shareparser.data.EmptyValuePolicy
 import cc.stkmn.shareparser.data.ExtractorRule
 import cc.stkmn.shareparser.data.InputSource
+import cc.stkmn.shareparser.data.InvalidValuePolicy
 import cc.stkmn.shareparser.data.MatcherRule
 import cc.stkmn.shareparser.data.ParseDirection
 import cc.stkmn.shareparser.data.ProcessingAction
@@ -83,6 +86,7 @@ import cc.stkmn.shareparser.data.SharedPayload
 import cc.stkmn.shareparser.data.TextFileMode
 import cc.stkmn.shareparser.data.UrlOpenMode
 import cc.stkmn.shareparser.data.ValueTransform
+import cc.stkmn.shareparser.data.WebhookFireMode
 import cc.stkmn.shareparser.data.WebhookMode
 import cc.stkmn.shareparser.engine.GuidedRuleFactory
 import cc.stkmn.shareparser.engine.ParserEngine
@@ -136,6 +140,8 @@ internal fun ProfileEditorScreen(
     var pendingExport by remember { mutableStateOf("") }
     var addActionMenu by remember { mutableStateOf(false) }
     var customMatcher by remember { mutableStateOf("") }
+    var matcherVariable by remember { mutableStateOf("") }
+    var matcherPattern by remember { mutableStateOf(".+") }
 
     var subjectSelection by remember(sample?.subject) { mutableStateOf(TextFieldValue(sample?.subject.orEmpty())) }
     var bodySelection by remember(sample?.text) { mutableStateOf(TextFieldValue(sample?.text.orEmpty())) }
@@ -657,6 +663,7 @@ internal fun ProfileEditorScreen(
                         DropdownMenuItem(text = { Text("URL öffnen") }, onClick = { actions += defaultUrlAction(); addActionMenu = false })
                         DropdownMenuItem(text = { Text("Text oder Textdatei") }, onClick = { actions += defaultShareAction(); addActionMenu = false })
                         DropdownMenuItem(text = { Text("Webhook") }, onClick = { actions += defaultWebhookAction(); addActionMenu = false })
+                        DropdownMenuItem(text = { Text("Webhook") }, onClick = { actions += defaultWebhookAction(); addActionMenu = false })
                     }
                 }
             }
@@ -1144,6 +1151,7 @@ private fun ActionEditorCard(
                 is ProcessingAction.Url -> UrlActionFields(action, variables, onChange)
                 is ProcessingAction.Share -> ShareActionFields(action, variables, onChange)
                 is ProcessingAction.Webhook -> WebhookActionFields(action, variables, onChange)
+                is ProcessingAction.Webhook -> WebhookActionFields(action, variables, onChange)
             }
         }
     }
@@ -1472,6 +1480,7 @@ private fun actionTemplates(action: ProcessingAction): List<Pair<String, String>
 private fun defaultCalendarAction() = ProcessingAction.Calendar(UUID.randomUUID().toString(), "Kalender öffnen")
 private fun defaultUrlAction() = ProcessingAction.Url(UUID.randomUUID().toString(), "Link öffnen")
 private fun defaultShareAction() = ProcessingAction.Share(UUID.randomUUID().toString(), "Text weiterleiten")
+private fun defaultWebhookAction() = ProcessingAction.Webhook(UUID.randomUUID().toString(), "Webhook senden")
 private fun defaultWebhookAction() = ProcessingAction.Webhook(UUID.randomUUID().toString(), "Webhook senden")
 
 private fun withFriendlyName(action: ProcessingAction, name: String): ProcessingAction = when (action) {
