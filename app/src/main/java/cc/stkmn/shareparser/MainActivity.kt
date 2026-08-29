@@ -56,6 +56,7 @@ import cc.stkmn.shareparser.ui.HomeScreen
 import cc.stkmn.shareparser.ui.ProfileEditorScreen
 import cc.stkmn.shareparser.ui.RegionalSettingsScreen
 import cc.stkmn.shareparser.ui.SettingsHomeScreen
+import cc.stkmn.shareparser.ui.localized
 import cc.stkmn.shareparser.ui.SharedScreen
 
 class MainActivity : ComponentActivity() {
@@ -187,14 +188,14 @@ private fun ShareParserApp(startIntent: Intent?, onIntentConsumed: () -> Unit) {
                             )
                             Spacer(Modifier.width(10.dp))
                             Text(
-                                when (val current = screen) {
+                                localized(when (val current = screen) {
                                     Screen.Home -> "ShareParser"
                                     Screen.Settings -> "Einstellungen"
                                     Screen.RegionalSettings -> "Datum und Uhrzeit"
                                     is Screen.Editor -> if (current.profile == null) "Profil erstellen" else "Profil bearbeiten"
                                     is Screen.Shared -> "Geteilter Inhalt"
                                     Screen.Failure -> "Fehlerbericht"
-                                }
+                                })
                             )
                         }
                     },
