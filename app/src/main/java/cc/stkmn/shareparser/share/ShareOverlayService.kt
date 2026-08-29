@@ -19,6 +19,7 @@ import android.widget.ScrollView
 import android.widget.TextView
 import cc.stkmn.shareparser.AppArtwork
 import cc.stkmn.shareparser.AppLocale
+import cc.stkmn.shareparser.MainActivity
 import cc.stkmn.shareparser.data.PendingShareStore
 
 class ShareOverlayService : Service() {
@@ -96,7 +97,7 @@ class ShareOverlayService : Service() {
             setPadding(0, dp(12), 0, dp(4))
         })
 
-        choices.take(12).forEach { choice ->
+        choices.take(4).forEach { choice ->
             content.addView(Button(this).apply {
                 text = choice.label(multipleProfiles)
                 isAllCaps = false
@@ -112,6 +113,28 @@ class ShareOverlayService : Service() {
                 topMargin = dp(10)
             })
         }
+        if (choices.size > 4) {
+            content.addView(Button(this).apply {
+                text = AppLocale.text("Alle Möglichkeiten anzeigen", "Show all options")
+                isAllCaps = false
+                textSize = 14f
+                setTextColor(0xFF3168D8.toInt())
+                background = roundedStrokeBackground(0x00FFFFFF, 0xFF3168D8.toInt(), 14f)
+                setOnClickListener {
+                    startActivity(
+                        Intent(this@ShareOverlayService, MainActivity::class.java).apply {
+                            action = MainActivity.ACTION_OPEN_PENDING_SHARE
+                            putExtra(MainActivity.EXTRA_PENDING_SHARE_ID, id)
+                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+                        }
+                    )
+                    dismiss(removePending = false)
+                }
+            }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+                topMargin = dp(10)
+            })
+        }
+
         content.addView(Button(this).apply {
             text = "Abbrechen"
             isAllCaps = false
