@@ -908,9 +908,10 @@ internal fun ProfileEditorScreen(
                         runCatching {
                             val decoded = repository.decodeBundle(advancedJson).copy(id = profileId)
                             validate(decoded)?.let { error(it) }
-                            repository.save(decoded)
-                        }.onSuccess { onSaved() }
-                            .onFailure { validationMessage = "JSON konnte nicht angewendet werden: ${it.message}" }
+                            restoreProfile(decoded)
+                        }.onSuccess {
+                            validationMessage = "JSON übernommen. Speichere das Profil, um die Änderungen anzuwenden."
+                        }.onFailure { validationMessage = "JSON konnte nicht angewendet werden: ${it.message}" }
                     },
                     modifier = Modifier.fillMaxWidth()
                 ) { Text("JSON anwenden") }
