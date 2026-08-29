@@ -69,7 +69,7 @@ class ShareOverlayService : Service() {
         header.addView(ImageView(this).apply {
             setImageResource(R.drawable.ic_launcher_foreground)
             scaleType = ImageView.ScaleType.CENTER_INSIDE
-        }, LinearLayout.LayoutParams(dp(42), dp(42)).apply { marginEnd = dp(12) })
+        }, LinearLayout.LayoutParams(dp(56), dp(56)).apply { marginEnd = dp(12) })
         header.addView(LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             addView(TextView(this@ShareOverlayService).apply {
