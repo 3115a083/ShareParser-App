@@ -29,8 +29,6 @@ import androidx.compose.material.icons.outlined.Download
 import androidx.compose.material.icons.outlined.ErrorOutline
 import androidx.compose.material.icons.outlined.ExpandLess
 import androidx.compose.material.icons.outlined.ExpandMore
-import androidx.compose.material.icons.outlined.Undo
-import androidx.compose.material.icons.outlined.Redo
 import androidx.compose.material.icons.outlined.ArrowUpward
 import androidx.compose.material.icons.outlined.ArrowDownward
 import androidx.compose.material.icons.outlined.Fullscreen
@@ -184,7 +182,9 @@ internal fun ProfileEditorScreen(
     var matcherPatternKind by remember { mutableStateOf("contains") }
     var matcherPatternValue by remember { mutableStateOf("") }
     var sourceAppMenu by remember { mutableStateOf(false) }
-    var sourceAppNegated by remember { mutableStateOf(false) }
+    var sourceAppNegated by remember(existing?.id) {
+        mutableStateOf(existing?.matchers?.firstOrNull { it.variableKey == "source_package" }?.negate ?: false)
+    }
 
     var subjectSelection by remember(sample?.subject) { mutableStateOf(TextFieldValue(sample?.subject.orEmpty())) }
     var bodySelection by remember(sample?.text) { mutableStateOf(TextFieldValue(sample?.text.orEmpty())) }
@@ -564,14 +564,6 @@ internal fun ProfileEditorScreen(
                             style = MaterialTheme.typography.bodySmall
                         )
                     }
-                    IconButton(
-                        onClick = {
-                            if (undoStack.isNotEmpty()) restoreProfile(undoStack.removeAt(undoStack.lastIndex))
-                        },
-                        enabled = undoStack.isNotEmpty()
-                    ) {
-                        Icon(Icons.Outlined.Undo, "Letzte Änderung rückgängig")
-                    }
                 }
             }
         }
@@ -648,10 +640,6 @@ internal fun ProfileEditorScreen(
                 )
             }
             val activeAppMatcher = matchers.firstOrNull { it.variableKey == "source_package" }
-            val activePackage = activeAppMatcher?.regex
-                ?.removePrefix("\\Q")
-                ?.removeSuffix("\\E")
-                .orEmpty()
             Card(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("Teilende App", fontWeight = FontWeight.SemiBold)
