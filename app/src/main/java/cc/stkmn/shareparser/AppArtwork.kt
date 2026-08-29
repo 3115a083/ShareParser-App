@@ -3,6 +3,9 @@ package cc.stkmn.shareparser
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.ImageDecoder
+import android.os.Build
+import java.nio.ByteBuffer
 import androidx.compose.foundation.Image
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.BrokenImage
@@ -27,8 +30,13 @@ object AppArtwork {
     }
 
     fun loadBitmap(context: Context, assetPath: String): Bitmap? = runCatching {
-        context.applicationContext.assets.open(assetPath).use { stream ->
-            BitmapFactory.decodeStream(stream)
+        val bytes = context.applicationContext.assets.open(assetPath).use { it.readBytes() }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            ImageDecoder.decodeBitmap(ImageDecoder.createSource(ByteBuffer.wrap(bytes))) { decoder, _, _ ->
+                decoder.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
+            }
+        } else {
+            BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
         }
     }.getOrNull()
 }
