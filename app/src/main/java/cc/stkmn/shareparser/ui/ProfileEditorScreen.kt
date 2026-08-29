@@ -529,7 +529,11 @@ internal fun ProfileEditorScreen(
     }
 
     val sampleCandidates = remember(sample) {
-        sample?.let { GuidedRuleFactory.candidates(it).filter { candidate -> candidate.source == InputSource.TEXT }.take(30) }.orEmpty()
+        sample?.let {
+            GuidedRuleFactory.candidates(it)
+                .filter { candidate -> candidate.source != InputSource.SUBJECT }
+                .take(40)
+        }.orEmpty()
     }
     val recognitionIndex = 6 + if (highlightField != null) 1 else 0
     val sampleRecognitionCount = if (sample == null) 0 else {
@@ -2175,6 +2179,7 @@ private fun sourceLabel(source: InputSource): String = when (source) {
     InputSource.COMBINED -> "Betreff + Text"
     InputSource.TEXT -> "Nachrichtentext / Dateiinhalt"
     InputSource.SUBJECT -> "Betreff"
+    InputSource.LINKS -> "Formatierte Links"
 }
 
 private fun transformLabel(transform: ValueTransform): String = when (transform) {
