@@ -42,7 +42,6 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import cc.stkmn.shareparser.data.ProfileRepository
 import cc.stkmn.shareparser.data.ShareSelectionMode
-import cc.stkmn.shareparser.BuildConfig
 import cc.stkmn.shareparser.notify.ShareSelectionNotifier
 
 @Composable
@@ -53,6 +52,12 @@ internal fun SettingsHomeScreen(
 ) {
     val context = LocalContext.current
     var settings by remember { mutableStateOf(repository.settings()) }
+    val packageInfo = remember {
+        runCatching { context.packageManager.getPackageInfo(context.packageName, 0) }.getOrNull()
+    }
+    val versionName = packageInfo?.versionName.orEmpty().ifBlank { "?" }
+    val versionCode = if (Build.VERSION.SDK_INT >= 28) packageInfo?.longVersionCode ?: 0L
+        else @Suppress("DEPRECATION") (packageInfo?.versionCode?.toLong() ?: 0L)
     var overlayGranted by remember { mutableStateOf(Settings.canDrawOverlays(context)) }
     var overlayPermissionRequested by remember { mutableStateOf(false) }
 
@@ -246,7 +251,7 @@ internal fun SettingsHomeScreen(
         item {
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Text("Über ShareParser", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                Text("Version ${BuildConfig.VERSION_NAME} (Build ${BuildConfig.VERSION_CODE})", style = MaterialTheme.typography.bodySmall)
+                Text("Version $versionName (Build $versionCode)", style = MaterialTheme.typography.bodySmall)
                 OutlinedButton(
                     onClick = {
                         context.startActivity(
