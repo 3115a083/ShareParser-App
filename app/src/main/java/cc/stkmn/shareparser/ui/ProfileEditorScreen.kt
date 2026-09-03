@@ -2318,7 +2318,15 @@ private fun ShareActionFields(action: ProcessingAction.Share, variables: List<St
 @Composable
 private fun WebhookActionFields(action: ProcessingAction.Webhook, variables: List<String>, onChange: (ProcessingAction) -> Unit) {
     Text("Webhook", fontWeight = FontWeight.SemiBold)
-    TemplateField("URL", action.urlTemplate, variables, placeholder = "https://example.com/webhook", minLines = 2, urlEncodeVariables = true) { onChange(action.copy(urlTemplate = it)) }
+    TemplateField(
+        "URL",
+        action.urlTemplate,
+        variables,
+        placeholder = "https://example.com/webhook",
+        minLines = 2,
+        urlEncodeVariables = true,
+        copyTechnicalValue = true
+    ) { onChange(action.copy(urlTemplate = it)) }
     TemplateField("POST-Inhalt", action.bodyTemplate, variables, placeholder = "{\"text\":\"{{text}}\"}", minLines = 5) { onChange(action.copy(bodyTemplate = it)) }
     OutlinedTextField(action.contentType, { onChange(action.copy(contentType = it)) }, label = { Text("Content-Type") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
     Text("Ausführung", fontWeight = FontWeight.SemiBold)
@@ -2352,8 +2360,10 @@ private fun TemplateField(
     placeholder: String = "Fester Text oder Variable",
     minLines: Int = 1,
     urlEncodeVariables: Boolean = false,
+    copyTechnicalValue: Boolean = false,
     onChange: (String) -> Unit
 ) {
+    val clipboard = LocalClipboardManager.current
     var field by remember { mutableStateOf(TextFieldValue(value, selection = TextRange(value.length))) }
     LaunchedEffect(value) {
         if (value != field.text) {
@@ -2382,6 +2392,16 @@ private fun TemplateField(
                 }
             },
             isError = unknown.isNotEmpty(),
+            trailingIcon = if (copyTechnicalValue) {
+                {
+                    IconButton(
+                        onClick = { clipboard.setText(AnnotatedString(field.text)) },
+                        enabled = field.text.isNotBlank()
+                    ) {
+                        Icon(Icons.Outlined.ContentCopy, "Kopieren")
+                    }
+                }
+            } else null,
             modifier = Modifier.fillMaxWidth(),
             minLines = minLines
         )
