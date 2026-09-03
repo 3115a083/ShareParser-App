@@ -135,6 +135,22 @@ enum class AppLanguage {
 }
 
 @Serializable
+enum class AppearanceMode {
+    SYSTEM,
+    LIGHT,
+    DARK
+}
+
+@Serializable
+enum class ColorPalette {
+    MATERIAL_YOU,
+    OCEAN,
+    FOREST,
+    SLATE,
+    AMBER
+}
+
+@Serializable
 enum class EmptyValuePolicy {
     FALLBACK,
     ERROR
@@ -177,7 +193,9 @@ data class AppSettings(
     val shareSelectionMode: ShareSelectionMode = ShareSelectionMode.APP,
     val launcherIcon: LauncherIcon = LauncherIcon.LOGO_3,
     val defaultSaveTreeUri: String = "",
-    val appLanguage: AppLanguage = AppLanguage.SYSTEM
+    val appLanguage: AppLanguage = AppLanguage.SYSTEM,
+    val appearanceMode: AppearanceMode = AppearanceMode.SYSTEM,
+    val colorPalette: ColorPalette = ColorPalette.MATERIAL_YOU
 )
 
 @Serializable
