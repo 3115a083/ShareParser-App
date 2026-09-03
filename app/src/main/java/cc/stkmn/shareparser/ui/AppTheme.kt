@@ -100,29 +100,29 @@ private fun colorScheme(palette: ColorPalette, dark: Boolean): ColorScheme {
                 onSurfaceVariant = Color(0xFF41484D)
             )
         }
-        ColorPalette.FOREST -> if (dark) {
+        ColorPalette.PLUM -> if (dark) {
             darkColorScheme(
-                primary = Color(0xFF9DD49D),
-                onPrimary = Color(0xFF0A3816),
-                primaryContainer = Color(0xFF24502A),
-                onPrimaryContainer = Color(0xFFB8F0B7),
-                secondary = Color(0xFFB5CCB3),
-                background = Color(0xFF101510),
-                surface = Color(0xFF101510),
-                surfaceVariant = Color(0xFF424940),
-                onSurfaceVariant = Color(0xFFC2C9BF)
+                primary = Color(0xFFE2B6E8),
+                onPrimary = Color(0xFF43204A),
+                primaryContainer = Color(0xFF5B3762),
+                onPrimaryContainer = Color(0xFFFFD7FF),
+                secondary = Color(0xFFD3BFD3),
+                background = Color(0xFF171217),
+                surface = Color(0xFF171217),
+                surfaceVariant = Color(0xFF4B444C),
+                onSurfaceVariant = Color(0xFFCEC3CD)
             )
         } else {
             lightColorScheme(
-                primary = Color(0xFF3C6B40),
+                primary = Color(0xFF76527C),
                 onPrimary = Color.White,
-                primaryContainer = Color(0xFFB8F0B7),
-                onPrimaryContainer = Color(0xFF002107),
-                secondary = Color(0xFF526350),
-                background = Color(0xFFF8FAF6),
-                surface = Color(0xFFF8FAF6),
-                surfaceVariant = Color(0xFFDFE4DC),
-                onSurfaceVariant = Color(0xFF43483F)
+                primaryContainer = Color(0xFFFFD7FF),
+                onPrimaryContainer = Color(0xFF2D0B34),
+                secondary = Color(0xFF685A68),
+                background = Color(0xFFFFF7FC),
+                surface = Color(0xFFFFF7FC),
+                surfaceVariant = Color(0xFFECE0EB),
+                onSurfaceVariant = Color(0xFF4E444F)
             )
         }
         ColorPalette.AMBER -> if (dark) {
