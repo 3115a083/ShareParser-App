@@ -274,8 +274,7 @@ private fun ShareParserApp(startIntent: Intent?, onIntentConsumed: () -> Unit) {
                         onDelete = { profile ->
                             repository.delete(profile.id)
                             profiles = repository.profiles()
-                        },
-                        onSettings = { screen = Screen.Settings }
+                        }
                     )
                     Screen.Settings -> SettingsHomeScreen(
                         repository = repository,
