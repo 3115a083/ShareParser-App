@@ -52,7 +52,8 @@ internal fun SettingsHomeScreen(
     repository: ProfileRepository,
     onRegionalSettings: () -> Unit,
     onLanguageSettings: () -> Unit,
-    onAppearanceSettings: () -> Unit
+    onAppearanceSettings: () -> Unit,
+    onSettingsChanged: (cc.stkmn.shareparser.data.AppSettings) -> Unit = {}
 ) {
     val context = LocalContext.current
     val clipboard = LocalClipboardManager.current
@@ -69,6 +70,7 @@ internal fun SettingsHomeScreen(
     fun saveMode(mode: ShareSelectionMode) {
         settings = settings.copy(shareSelectionMode = mode)
         repository.saveSettings(settings)
+        onSettingsChanged(settings)
     }
 
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
@@ -90,6 +92,7 @@ internal fun SettingsHomeScreen(
             }
             settings = settings.copy(defaultSaveTreeUri = uri.toString())
             repository.saveSettings(settings)
+            onSettingsChanged(settings)
         }
     }
 
@@ -165,6 +168,7 @@ internal fun SettingsHomeScreen(
                         OutlinedButton(onClick = {
                             settings = settings.copy(defaultSaveTreeUri = "")
                             repository.saveSettings(settings)
+                            onSettingsChanged(settings)
                         }) { Text("Entfernen") }
                     }
                 }
