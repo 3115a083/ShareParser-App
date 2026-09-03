@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.ArrowBack
@@ -27,6 +28,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
@@ -194,11 +196,16 @@ private fun ShareParserApp(startIntent: Intent?, onIntentConsumed: () -> Unit) {
                 TopAppBar(
                     title = {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            AppArtworkImage(
-                                assetPath = AppArtwork.FOREGROUND_ASSET,
-                                contentDescription = null,
-                                modifier = Modifier.size(50.dp)
-                            )
+                            Surface(
+                                color = MaterialTheme.colorScheme.surfaceVariant,
+                                shape = RoundedCornerShape(10.dp)
+                            ) {
+                                AppArtworkImage(
+                                    assetPath = AppArtwork.FOREGROUND_ASSET,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(44.dp).padding(5.dp)
+                                )
+                            }
                             Spacer(Modifier.width(10.dp))
                             Text(
                                 localized(when (val current = screen) {
