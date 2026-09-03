@@ -2198,7 +2198,15 @@ private fun CalendarPickerField(
 
 @Composable
 private fun UrlActionFields(action: ProcessingAction.Url, variables: List<String>, onChange: (ProcessingAction) -> Unit) {
-    TemplateField("Link", action.urlTemplate, variables, placeholder = "https://example.com/?id={{id|url}}", minLines = 2, urlEncodeVariables = true) {
+    TemplateField(
+        "Link",
+        action.urlTemplate,
+        variables,
+        placeholder = "https://example.com/?id={{id|url}}",
+        minLines = 2,
+        urlEncodeVariables = true,
+        copyTechnicalValue = true
+    ) {
         onChange(action.copy(urlTemplate = it))
     }
     Row(verticalAlignment = Alignment.CenterVertically) {
