@@ -112,17 +112,10 @@ internal fun HomeScreen(
             )
         }
         item {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedButton(onClick = onImport) {
-                    Icon(Icons.Outlined.FileOpen, null)
-                    Spacer(Modifier.width(6.dp))
-                    Text("Importieren", maxLines = 1)
-                }
-                OutlinedButton(onClick = onSettings) {
-                    Icon(Icons.Outlined.Settings, null)
-                    Spacer(Modifier.width(6.dp))
-                    Text("Einstellungen", maxLines = 1)
-                }
+            OutlinedButton(onClick = onImport) {
+                Icon(Icons.Outlined.FileOpen, null)
+                Spacer(Modifier.width(6.dp))
+                Text("Importieren", maxLines = 1)
             }
         }
         if (importError != null) {
