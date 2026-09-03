@@ -49,6 +49,7 @@ object FailureNotifier {
                 .setAutoCancel(true)
                 .setTimeoutAfter(20_000)
                 .setContentIntent(pending)
+                .addAction(R.drawable.ic_notification, "Öffnen", pending)
                 .build()
 
             NotificationManagerCompat.from(context.applicationContext).notify(report.id.hashCode(), notification)
