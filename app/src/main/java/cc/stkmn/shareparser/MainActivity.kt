@@ -290,8 +290,14 @@ private fun ShareParserApp(startIntent: Intent?, onIntentConsumed: () -> Unit) {
                             repository.saveSettings(changed)
                         }
                     )
-                    Screen.LanguageSettings -> LanguageSettingsScreen(repository = repository)
-                    Screen.RegionalSettings -> RegionalSettingsScreen(repository = repository)
+                    Screen.LanguageSettings -> LanguageSettingsScreen(
+                        repository = repository,
+                        onSettingsChanged = { appSettings = it }
+                    )
+                    Screen.RegionalSettings -> RegionalSettingsScreen(
+                        repository = repository,
+                        onSettingsChanged = { appSettings = it }
+                    )
                     is Screen.Editor -> ProfileEditorScreen(
                         existing = current.profile,
                         sample = current.sample,
