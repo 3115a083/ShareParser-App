@@ -1,5 +1,6 @@
 package cc.stkmn.shareparser.ui
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -10,6 +11,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.RadioButton
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -44,32 +46,42 @@ internal fun RegionalSettingsScreen(repository: ProfileRepository) {
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         item {
-            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text("Regionale Datums- und Zeitformate", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
-                Text("Standard ist die Android-Geräteeinstellung. Die Auswahl legt fest, wie mehrdeutige Datums- und Zeitangaben interpretiert werden.")
-            }
+            SectionHeading(
+                "Datum und Uhrzeit",
+                "Legt fest, wie mehrdeutige Datums- und Zeitangaben interpretiert werden."
+            )
         }
-
         order.forEach { locale ->
             item(key = locale.name) {
                 val info = localeInfo(locale)
-                Card(Modifier.fillMaxWidth()) {
-                    Row(Modifier.padding(16.dp), verticalAlignment = Alignment.Top) {
+                Card(Modifier.fillMaxWidth().clickable { select(locale) }) {
+                    Row(Modifier.padding(14.dp), verticalAlignment = Alignment.Top) {
                         RadioButton(selected = settings.dateTimeLocale == locale, onClick = { select(locale) })
-                        Column(Modifier.padding(start = 8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Column(
+                            Modifier.weight(1f).padding(start = 8.dp, top = 8.dp),
+                            verticalArrangement = Arrangement.spacedBy(3.dp)
+                        ) {
                             Text(info.title, fontWeight = FontWeight.SemiBold)
-                            Text(info.description, style = MaterialTheme.typography.bodySmall)
-                            Text("Beispiele: ${info.examples}", style = MaterialTheme.typography.bodySmall)
+                            Text(
+                                info.description,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Text(
+                                info.examples,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
                         }
                     }
                 }
             }
         }
-
         item {
             Text(
-                "Bei Jahresangaben mit zwei Ziffern interpretiert ShareParser 00 bis 69 als 2000 bis 2069 und 70 bis 99 als 1970 bis 1999. Fehlt das Jahr vollständig, wird das aktuelle Jahr verwendet.",
-                style = MaterialTheme.typography.bodySmall
+                "Zweistellige Jahre: 00–69 → 2000–2069, 70–99 → 1970–1999. Ohne Jahr wird das aktuelle Jahr verwendet.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
     }
@@ -79,28 +91,28 @@ private data class LocaleInfo(val title: String, val description: String, val ex
 
 private fun localeInfo(locale: DateTimeLocale): LocaleInfo = when (locale) {
     DateTimeLocale.SYSTEM -> LocaleInfo(
-        "Geräteeinstellung, Standard",
-        "Leitet Datumsreihenfolge und 12/24-Stunden-Präferenz aus Sprache und Region des Geräts ab.",
-        "abhängig von den Android-Regionseinstellungen"
+        "Geräteeinstellung",
+        "Leitet Reihenfolge und 12/24-Stunden-Format aus Android ab.",
+        "Beispiele folgen der Geräte-Region."
     )
     DateTimeLocale.DE_DE -> LocaleInfo(
         "Deutsch, Deutschland",
-        "Tag vor Monat, 24-Stunden-Zeit sowie deutsche Begriffe wie heute, morgen und Montag.",
-        "14.12.2026, 14/12/26, 14.12., morgen 12-14, 12:30 Uhr"
+        "Tag vor Monat, 24-Stunden-Zeit und deutsche Datumsbegriffe.",
+        "14.12.2026 · morgen 12–14 · 12:30 Uhr"
     )
     DateTimeLocale.EN_US -> LocaleInfo(
         "English, United States",
-        "Monat vor Tag. AM/PM wird unterstützt und bei US-Texten erwartet.",
-        "12/14/2026, 12/14/26, December 14, 2026, tomorrow 2:30 PM, 2 PM to 4 PM"
+        "Month before day, AM/PM supported.",
+        "12/14/2026 · tomorrow 2:30 PM"
     )
     DateTimeLocale.EN_GB -> LocaleInfo(
         "English, United Kingdom",
-        "Tag vor Monat, überwiegend 24-Stunden-Zeit sowie englische Datumsbegriffe.",
-        "14/12/2026, 14 December 2026, tomorrow 14:30, 14:00 to 16:00"
+        "Day before month, mostly 24-hour time.",
+        "14/12/2026 · tomorrow 14:30"
     )
     DateTimeLocale.ISO -> LocaleInfo(
         "ISO / international",
-        "Bevorzugt eindeutige Jahr-Monat-Tag-Angaben und 24-Stunden-Zeit.",
-        "2026-12-14, 2026-12-14 14:30"
+        "Unambiguous year-month-day with 24-hour time.",
+        "2026-12-14 · 2026-12-14 14:30"
     )
 }
