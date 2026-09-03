@@ -1,6 +1,7 @@
 package cc.stkmn.shareparser.ui
 
 import androidx.compose.material3.LocalTextStyle
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text as MaterialText
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
@@ -505,10 +506,18 @@ internal fun Text(
     onTextLayout: (TextLayoutResult) -> Unit = {},
     style: TextStyle = LocalTextStyle.current
 ) {
+    val resolvedColor = if (
+        color == Color.Unspecified &&
+        (style == MaterialTheme.typography.bodySmall || style == MaterialTheme.typography.labelMedium)
+    ) {
+        MaterialTheme.colorScheme.onSurfaceVariant
+    } else {
+        color
+    }
     MaterialText(
         text = localized(text),
         modifier = modifier,
-        color = color,
+        color = resolvedColor,
         fontSize = fontSize,
         fontStyle = fontStyle,
         fontWeight = fontWeight,
