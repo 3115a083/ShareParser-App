@@ -2046,18 +2046,25 @@ private fun ActionEditorCard(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
-                IconButton(onClick = onMoveUp, enabled = canMoveUp) {
-                    Icon(Icons.Outlined.ArrowUpward, "Nach oben")
-                }
-                IconButton(onClick = onMoveDown, enabled = canMoveDown) {
-                    Icon(Icons.Outlined.ArrowDownward, "Nach unten")
-                }
                 IconButton(onClick = { expanded = !expanded }) {
                     Icon(if (expanded) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore, null)
                 }
                 IconButton(onClick = onDelete) { Icon(Icons.Outlined.Delete, "Aktion entfernen") }
             }
             if (expanded) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        "Reihenfolge",
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.weight(1f)
+                    )
+                    IconButton(onClick = onMoveUp, enabled = canMoveUp) {
+                        Icon(Icons.Outlined.ArrowUpward, "Nach oben")
+                    }
+                    IconButton(onClick = onMoveDown, enabled = canMoveDown) {
+                        Icon(Icons.Outlined.ArrowDownward, "Nach unten")
+                    }
+                }
                 OutlinedTextField(
                     action.friendlyName,
                     { onChange(withFriendlyName(action, it)) },
