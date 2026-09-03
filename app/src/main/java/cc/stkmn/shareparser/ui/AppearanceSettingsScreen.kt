@@ -34,14 +34,10 @@ internal fun AppearanceSettingsScreen(
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         item {
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text("Darstellung", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
-                Text(
-                    "Helligkeit und Farbpalette ändern die Farben, nicht den Aufbau der App.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
+            Text(
+                "Helligkeit und Farbpalette ändern die Farben, nicht den Aufbau der App.",
+                style = MaterialTheme.typography.bodySmall
+            )
         }
 
         item {
