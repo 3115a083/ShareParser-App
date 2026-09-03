@@ -14,6 +14,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text as MaterialText
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -54,10 +55,11 @@ internal fun TechnicalValue(
             .padding(start = 12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(
-            value,
+        MaterialText(
+            text = value,
             modifier = Modifier.weight(1f).padding(vertical = 10.dp),
             style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
             fontFamily = FontFamily.Monospace,
             maxLines = maxLines,
             overflow = TextOverflow.Ellipsis
