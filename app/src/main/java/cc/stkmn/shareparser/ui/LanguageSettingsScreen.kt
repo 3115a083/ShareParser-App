@@ -42,9 +42,9 @@ internal fun LanguageSettingsScreen(repository: ProfileRepository, onSettingsCha
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         item {
-            SectionHeading(
-                "App-Sprache",
-                "System verwendet die Android-Sprache. Weitere Übersetzungen können später ergänzt werden."
+            Text(
+                "System verwendet die Android-Sprache. Weitere Übersetzungen können später ergänzt werden.",
+                style = MaterialTheme.typography.bodySmall
             )
         }
         item {
