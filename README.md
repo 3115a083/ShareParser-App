@@ -225,7 +225,7 @@ Each action can be included or excluded from the overlay and notification surfac
 
 ## App icon
 
-ShareParser uses **Logo 3 exclusively** for the Android launcher, package icon and Sharesheet receiver. The manifest references the supplied Logo 3 artwork directly so the package installer and share surfaces do not fall back to Android's generic application icon. The previous runtime launcher-icon switcher was removed because launcher caching and alias switching were not reliable enough across tested Android launchers. Logo 3 is also wired through the canonical Android launcher icon resources used by the application manifest.
+ShareParser uses **Logo 3 exclusively** for the Android launcher, package icon and Sharesheet receiver. The adaptive foreground keeps a generous safe area so the full logo remains visible under circle, squircle and rounded-square launcher masks. The manifest references the supplied Logo 3 artwork directly so the package installer and share surfaces do not fall back to Android's generic application icon. The previous runtime launcher-icon switcher was removed because launcher caching and alias switching were not reliable enough across tested Android launchers. Logo 3 is also wired through the canonical Android launcher icon resources used by the application manifest.
 
 The compact ShareParser graphic used inside the app and share overlay is rendered without a dark background and at a larger size than earlier builds.
 
