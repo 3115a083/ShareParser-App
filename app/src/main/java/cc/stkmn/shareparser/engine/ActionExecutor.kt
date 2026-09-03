@@ -33,7 +33,7 @@ import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 
-class ActionExecutor(context: Context, private val settings: AppSettings = AppSettings()) {
+class ActionExecutor(context: Context, private val settings: AppSettings = AppSettings(), private val backgroundMode: Boolean = false) {
     private val appContext = context.applicationContext
 
     data class ExecutionResult(val warnings: List<String> = emptyList())
@@ -483,8 +483,8 @@ class ActionExecutor(context: Context, private val settings: AppSettings = AppSe
         val connection = try {
             (URL(renderedUrl).openConnection() as HttpURLConnection).apply {
                 requestMethod = "POST"
-                connectTimeout = 10_000
-                readTimeout = 10_000
+                connectTimeout = if (backgroundMode) 20_000 else 10_000
+                readTimeout = if (backgroundMode) 25_000 else 10_000
                 doOutput = true
                 setRequestProperty("Content-Type", action.contentType.ifBlank { "application/json; charset=utf-8" })
                 setRequestProperty("Accept", "*/*")
