@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -28,7 +29,6 @@ import androidx.compose.material.icons.outlined.ExpandMore
 import androidx.compose.material.icons.outlined.FileOpen
 import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material.icons.outlined.Tune
-import androidx.compose.material.icons.outlined.VariableAdd
 import androidx.compose.material.icons.outlined.PlayArrow
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.AlertDialog
@@ -166,7 +166,7 @@ internal fun HomeScreen(
                             AssistChip(
                                 onClick = { onEdit(profile) },
                                 label = { Text("${profile.extractors.size}") },
-                                leadingIcon = { Icon(Icons.Outlined.VariableAdd, null) }
+                                leadingIcon = { Icon(Icons.Outlined.Tune, null) }
                             )
                             AssistChip(
                                 onClick = { onEdit(profile) },
