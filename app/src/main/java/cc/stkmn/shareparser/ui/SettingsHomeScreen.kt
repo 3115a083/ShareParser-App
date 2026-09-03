@@ -19,15 +19,14 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material.icons.outlined.Language
-import androidx.compose.material.icons.outlined.OpenInNew
 import androidx.compose.material.icons.outlined.Notifications
+import androidx.compose.material.icons.outlined.Palette
 import androidx.compose.material.icons.outlined.PictureInPictureAlt
-import androidx.compose.material3.Card
 import androidx.compose.material3.Icon
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.RadioButton
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -35,11 +34,15 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
+import cc.stkmn.shareparser.R
 import cc.stkmn.shareparser.data.ProfileRepository
 import cc.stkmn.shareparser.data.ShareSelectionMode
 import cc.stkmn.shareparser.notify.ShareSelectionNotifier
@@ -48,9 +51,11 @@ import cc.stkmn.shareparser.notify.ShareSelectionNotifier
 internal fun SettingsHomeScreen(
     repository: ProfileRepository,
     onRegionalSettings: () -> Unit,
-    onLanguageSettings: () -> Unit
+    onLanguageSettings: () -> Unit,
+    onAppearanceSettings: () -> Unit
 ) {
     val context = LocalContext.current
+    val clipboard = LocalClipboardManager.current
     var settings by remember { mutableStateOf(repository.settings()) }
     val packageInfo = remember {
         runCatching { context.packageManager.getPackageInfo(context.packageName, 0) }.getOrNull()
@@ -93,140 +98,132 @@ internal fun SettingsHomeScreen(
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         item {
-            Text("Sprache und Format", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-        }
-        item {
-            Card(
-                Modifier
-                    .fillMaxWidth()
-                    .clickable(onClick = onLanguageSettings)
-            ) {
-                Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Outlined.Language, null)
-                    Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
-                        Text("App-Sprache", fontWeight = FontWeight.SemiBold)
-                        Text("Systemstandard, Deutsch oder English", style = MaterialTheme.typography.bodySmall)
-                    }
-                    Icon(Icons.Outlined.ChevronRight, null)
-                }
-            }
-        }
-
-        item {
-            Text("Format und Erkennung", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-        }
-        item {
-            Card(
-                Modifier
-                    .fillMaxWidth()
-                    .clickable(onClick = onRegionalSettings)
-            ) {
-                Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Outlined.Language, null)
-                    Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
-                        Text("Datum und Uhrzeit", fontWeight = FontWeight.SemiBold)
-                        Text("Regionale Schreibweisen und 12/24-Stunden-Format", style = MaterialTheme.typography.bodySmall)
-                    }
-                    Icon(Icons.Outlined.ChevronRight, null)
-                }
-            }
-        }
-
-        item {
-            Text("Textdateien", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-        }
-        item {
-            Card(Modifier.fillMaxWidth()) {
-                Row(Modifier.padding(16.dp), verticalAlignment = Alignment.Top) {
-                    Icon(Icons.Outlined.Folder, null)
-                    Column(Modifier.weight(1f).padding(start = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text("Voreingestellter Speicherordner", fontWeight = FontWeight.SemiBold)
-                        Text(
-                            if (settings.defaultSaveTreeUri.isBlank())
-                                "Nicht gesetzt. Bei einer Datei-Aktion mit „Speichern“ zeigt Android den Dateidialog an."
-                            else "Aktiv: ${folderLabel(settings.defaultSaveTreeUri)}. Profile können darunter einen variablen Unterordner angeben.",
-                            style = MaterialTheme.typography.bodySmall
-                        )
-                        OutlinedButton(onClick = { saveFolderLauncher.launch(settings.defaultSaveTreeUri.takeIf { it.isNotBlank() }?.let(Uri::parse)) }) {
-                            Text(if (settings.defaultSaveTreeUri.isBlank()) "Ordner auswählen" else "Ordner ändern")
-                        }
-                        if (settings.defaultSaveTreeUri.isNotBlank()) {
-                            OutlinedButton(onClick = {
-                                settings = settings.copy(defaultSaveTreeUri = "")
-                                repository.saveSettings(settings)
-                            }) { Text("Voreinstellung entfernen") }
-                        }
-                    }
-                }
-            }
-        }
-
-        item {
-            Text("Auswahl beim Teilen", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-        }
-        item {
-            Text("Wenn genau ein Profil mit genau einer Aktion passt, führt ShareParser sie direkt aus. Diese Einstellung gilt nur, wenn mehrere Möglichkeiten zur Auswahl stehen.")
-        }
-        item {
-            ChoiceCard(
-                selected = settings.shareSelectionMode == ShareSelectionMode.APP,
-                title = "In ShareParser auswählen",
-                description = "Öffnet ShareParser als eigene App im App-Wechsler.",
-                onClick = { saveMode(ShareSelectionMode.APP) }
+            SectionHeading(
+                "Einstellungen",
+                "Darstellung, Erkennung, Dateiausgabe und Auswahlverhalten."
             )
         }
+
         item {
-            ChoiceCard(
-                selected = settings.shareSelectionMode == ShareSelectionMode.OVERLAY,
-                title = "Overlay über der teilenden App",
-                description = if (overlayGranted) "Overlay-Berechtigung erteilt. Die Auswahl erscheint mittig und schließt sich spätestens nach einer Minute."
-                else "Benötigt die optionale Android-Berechtigung „Über anderen Apps anzeigen“.",
-                icon = { Icon(Icons.Outlined.PictureInPictureAlt, null) },
-                onClick = {
-                    overlayGranted = Settings.canDrawOverlays(context)
-                    if (overlayGranted) {
-                        saveMode(ShareSelectionMode.OVERLAY)
-                    } else {
-                        overlayPermissionRequested = true
-                        runCatching {
-                            context.startActivity(
-                                Intent(
-                                    Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-                                    Uri.parse("package:${context.packageName}")
-                                )
+            SettingsTopicCard("Darstellung") {
+                SettingsLinkRow(
+                    icon = { Icon(Icons.Outlined.Palette, null) },
+                    title = "Design",
+                    description = "System, Hell, Dunkel und Farbpalette",
+                    onClick = onAppearanceSettings
+                )
+                SettingsLinkRow(
+                    icon = { Icon(Icons.Outlined.Language, null) },
+                    title = "App-Sprache",
+                    description = "Systemstandard, Deutsch oder English",
+                    onClick = onLanguageSettings
+                )
+            }
+        }
+
+        item {
+            SettingsTopicCard("Format und Erkennung") {
+                SettingsLinkRow(
+                    icon = { Icon(Icons.Outlined.Language, null) },
+                    title = "Datum und Uhrzeit",
+                    description = "Regionale Schreibweisen und 12/24-Stunden-Format",
+                    onClick = onRegionalSettings
+                )
+            }
+        }
+
+        item {
+            SettingsTopicCard(
+                title = "Textdateien",
+                description = if (settings.defaultSaveTreeUri.isBlank())
+                    "Ohne Voreinstellung öffnet Android beim Speichern den Dateidialog."
+                else "Dateien werden bevorzugt im gewählten Basisordner gespeichert."
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Outlined.Folder, null)
+                    Text(
+                        if (settings.defaultSaveTreeUri.isBlank()) "Kein Basisordner" else folderLabel(settings.defaultSaveTreeUri),
+                        modifier = Modifier.weight(1f).padding(start = 10.dp),
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+                if (settings.defaultSaveTreeUri.isNotBlank()) {
+                    TechnicalValue(
+                        value = settings.defaultSaveTreeUri,
+                        onCopy = { clipboard.setText(AnnotatedString(settings.defaultSaveTreeUri)) }
+                    )
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(
+                        onClick = {
+                            saveFolderLauncher.launch(
+                                settings.defaultSaveTreeUri.takeIf { it.isNotBlank() }?.let(Uri::parse)
                             )
                         }
+                    ) { Text(if (settings.defaultSaveTreeUri.isBlank()) "Ordner wählen" else "Ändern") }
+                    if (settings.defaultSaveTreeUri.isNotBlank()) {
+                        OutlinedButton(onClick = {
+                            settings = settings.copy(defaultSaveTreeUri = "")
+                            repository.saveSettings(settings)
+                        }) { Text("Entfernen") }
                     }
                 }
-            )
-        }
-        item {
-            if (!overlayGranted) {
-                OutlinedButton(
-                    onClick = {
-                        overlayGranted = Settings.canDrawOverlays(context)
-                        if (overlayGranted) saveMode(ShareSelectionMode.OVERLAY)
-                    },
-                    modifier = Modifier.fillMaxWidth()
-                ) { Text("Overlay-Berechtigung erneut prüfen") }
             }
         }
+
         item {
-            ChoiceCard(
-                selected = settings.shareSelectionMode == ShareSelectionMode.NOTIFICATION,
-                title = "Als Benachrichtigung auswählen",
-                description = "Eigener Android-Kanal. Ton, Vibration oder stumm stellst du in den Systemeinstellungen ein. Die Nachricht verschwindet spätestens nach einer Minute.",
-                icon = { Icon(Icons.Outlined.Notifications, null) },
-                onClick = {
-                    saveMode(ShareSelectionMode.NOTIFICATION)
-                    ShareSelectionNotifier.ensureChannel(context)
-                    if (Build.VERSION.SDK_INT >= 33) notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+            SettingsTopicCard(
+                title = "Auswahl beim Teilen",
+                description = "Nur relevant, wenn mehrere Aktionen verfügbar sind."
+            ) {
+                ShareModeRow(
+                    selected = settings.shareSelectionMode == ShareSelectionMode.APP,
+                    icon = null,
+                    title = "In ShareParser",
+                    description = "Volle Liste in der App.",
+                    onClick = { saveMode(ShareSelectionMode.APP) }
+                )
+                ShareModeRow(
+                    selected = settings.shareSelectionMode == ShareSelectionMode.OVERLAY,
+                    icon = { Icon(Icons.Outlined.PictureInPictureAlt, null) },
+                    title = "Overlay",
+                    description = if (overlayGranted) "Berechtigung erteilt. Maximal vier Direktaktionen."
+                    else "Benötigt die Android-Overlay-Berechtigung.",
+                    onClick = {
+                        overlayGranted = Settings.canDrawOverlays(context)
+                        if (overlayGranted) {
+                            saveMode(ShareSelectionMode.OVERLAY)
+                        } else {
+                            overlayPermissionRequested = true
+                            runCatching {
+                                context.startActivity(
+                                    Intent(
+                                        Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                                        Uri.parse("package:${context.packageName}")
+                                    )
+                                )
+                            }
+                        }
+                    }
+                )
+                ShareModeRow(
+                    selected = settings.shareSelectionMode == ShareSelectionMode.NOTIFICATION,
+                    icon = { Icon(Icons.Outlined.Notifications, null) },
+                    title = "Benachrichtigung",
+                    description = "Maximal drei Direktaktionen. Weitere öffnen die App.",
+                    onClick = {
+                        saveMode(ShareSelectionMode.NOTIFICATION)
+                        ShareSelectionNotifier.ensureChannel(context)
+                        if (Build.VERSION.SDK_INT >= 33) notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+                    }
+                )
+                if (!overlayGranted) {
+                    OutlinedButton(onClick = {
+                        overlayGranted = Settings.canDrawOverlays(context)
+                        if (overlayGranted) saveMode(ShareSelectionMode.OVERLAY)
+                    }) { Text("Overlay-Berechtigung prüfen") }
                 }
-            )
-        }
-        item {
-            OutlinedButton(
-                onClick = {
+                OutlinedButton(onClick = {
                     ShareSelectionNotifier.ensureChannel(context)
                     runCatching {
                         context.startActivity(
@@ -242,16 +239,20 @@ internal fun SettingsHomeScreen(
                             }
                         )
                     }
-                },
-                modifier = Modifier.fillMaxWidth()
-            ) { Text("Benachrichtigungskanal konfigurieren") }
+                }) { Text("Benachrichtigungskanal") }
+            }
         }
 
-        item { HorizontalDivider() }
         item {
-            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text("Über ShareParser", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                Text("Version $versionName (Build $versionCode)", style = MaterialTheme.typography.bodySmall)
+            SettingsTopicCard(
+                title = "Über ShareParser",
+                description = "Vibecoded für den eigenen Bedarf und mit der Community geteilt."
+            ) {
+                Text(
+                    "Version ${versionName} · Build ${versionCode}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
                 OutlinedButton(
                     onClick = {
                         context.startActivity(
@@ -262,14 +263,66 @@ internal fun SettingsHomeScreen(
                         )
                     }
                 ) {
-                    Icon(Icons.Outlined.OpenInNew, null)
-                    Text("GitHub")
+                    Icon(painterResource(R.drawable.ic_github_mark), null)
+                    Text("GitHub", modifier = Modifier.padding(start = 8.dp))
                 }
-                Text(
-                    "Dieses Projekt ist vibecoded. Es wurde vor allem für den eigenen Bedarf erstellt und mit der Community geteilt, falls es auch anderen hilfreich ist.",
-                    style = MaterialTheme.typography.bodySmall
+                TechnicalValue(
+                    value = "https://github.com/3115a083/ShareParser-App",
+                    onCopy = { clipboard.setText(AnnotatedString("https://github.com/3115a083/ShareParser-App")) },
+                    maxLines = 1
                 )
             }
+        }
+    }
+}
+
+@Composable
+private fun SettingsLinkRow(
+    icon: @Composable () -> Unit,
+    title: String,
+    description: String,
+    onClick: () -> Unit
+) {
+    Row(
+        Modifier.fillMaxWidth().clickable(onClick = onClick).padding(vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        icon()
+        Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
+            Text(title, fontWeight = FontWeight.SemiBold)
+            Text(
+                description,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        Icon(Icons.Outlined.ChevronRight, null)
+    }
+}
+
+@Composable
+private fun ShareModeRow(
+    selected: Boolean,
+    icon: (@Composable () -> Unit)?,
+    title: String,
+    description: String,
+    onClick: () -> Unit
+) {
+    Row(
+        Modifier.fillMaxWidth().clickable(onClick = onClick).padding(vertical = 4.dp),
+        verticalAlignment = Alignment.Top
+    ) {
+        RadioButton(selected = selected, onClick = onClick)
+        if (icon != null) {
+            Column(Modifier.padding(top = 12.dp, end = 8.dp)) { icon() }
+        }
+        Column(Modifier.weight(1f).padding(top = 10.dp)) {
+            Text(title, fontWeight = FontWeight.SemiBold)
+            Text(
+                description,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
     }
 }
@@ -277,25 +330,3 @@ internal fun SettingsHomeScreen(
 private fun folderLabel(uri: String): String = runCatching {
     Uri.parse(uri).lastPathSegment?.substringAfterLast(':')?.ifBlank { "Ausgewählter Ordner" }
 }.getOrNull().orEmpty().ifBlank { "Ausgewählter Ordner" }
-
-@Composable
-private fun ChoiceCard(
-    selected: Boolean,
-    title: String,
-    description: String,
-    icon: @Composable (() -> Unit)? = null,
-    onClick: () -> Unit
-) {
-    Card(Modifier.fillMaxWidth().clickable(onClick = onClick)) {
-        Row(Modifier.padding(14.dp), verticalAlignment = Alignment.Top) {
-            RadioButton(selected = selected, onClick = onClick)
-            if (icon != null) {
-                Column(Modifier.padding(top = 10.dp, end = 8.dp)) { icon() }
-            }
-            Column(Modifier.weight(1f).padding(top = 10.dp)) {
-                Text(title, fontWeight = FontWeight.SemiBold)
-                Text(description, style = MaterialTheme.typography.bodySmall)
-            }
-        }
-    }
-}
