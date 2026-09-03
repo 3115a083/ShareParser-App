@@ -35,7 +35,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.vectorResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -262,7 +263,7 @@ internal fun SettingsHomeScreen(
                         )
                     }
                 ) {
-                    Icon(painterResource(R.drawable.ic_github_mark), null)
+                    Icon(ImageVector.vectorResource(R.drawable.ic_github_mark), null)
                     Text("GitHub", modifier = Modifier.padding(start = 8.dp))
                 }
                 TechnicalValue(
