@@ -90,7 +90,27 @@ class ShareCoordinator(context: Context) {
             profile.actions
                 .filterIsInstance<ProcessingAction.Webhook>()
                 .filter { it.mode == WebhookMode.ALWAYS }
-                .forEach { execute(payload, profile, it) }
+                .forEach { action ->
+                    Thread {
+                        var succeeded = false
+                        repeat(3) { attempt ->
+                            if (!succeeded) {
+                                succeeded = executeInternal(
+                                    payload = payload,
+                                    profile = profile,
+                                    action = action,
+                                    notifyFailure = attempt == 2
+                                )
+                                if (!succeeded && attempt < 2) {
+                                    Thread.sleep(if (attempt == 0) 2_000L else 5_000L)
+                                }
+                            }
+                        }
+                    }.apply {
+                        name = "ShareParser-background-webhook"
+                        start()
+                    }
+                }
         }
     }
 
@@ -107,7 +127,12 @@ class ShareCoordinator(context: Context) {
         return executeInternal(payload, profile, action)
     }
 
-    private fun executeInternal(payload: SharedPayload, profile: Profile, action: ProcessingAction): Boolean {
+    private fun executeInternal(
+        payload: SharedPayload,
+        profile: Profile,
+        action: ProcessingAction,
+        notifyFailure: Boolean = true
+    ): Boolean {
         return try {
             val extracted = parser.extract(payload, profile)
             val result = ActionExecutor(appContext, repository.settings()).execute(action, extracted)
@@ -126,8 +151,10 @@ class ShareCoordinator(context: Context) {
                 inputPreview = payload.combined.take(2000),
                 createdAtEpochMs = System.currentTimeMillis()
             )
-            runCatching { repository.saveFailure(report) }
-            FailureNotifier.show(appContext, report)
+            if (notifyFailure) {
+                runCatching { repository.saveFailure(report) }
+                FailureNotifier.show(appContext, report)
+            }
             false
         }
     }
