@@ -3,6 +3,7 @@ package cc.stkmn.shareparser.ui
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -90,7 +91,7 @@ internal fun AppearanceSettingsScreen(
 internal fun SettingsTopicCard(
     title: String,
     description: String? = null,
-    content: @Composable Column.() -> Unit
+    content: @Composable ColumnScope.() -> Unit
 ) {
     Card(Modifier.fillMaxWidth()) {
         Column(
