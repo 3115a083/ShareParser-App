@@ -1263,6 +1263,7 @@ internal fun ProfileEditorScreen(
             val index = actions.indexOfFirst { it.id == action.id }
             ActionEditorCard(
                 action = action,
+                position = index + 1,
                 variables = variables,
                 highlighted = highlightField?.startsWith(actionHighlightPrefix(action)) == true || highlightField == action.id,
                 canMoveUp = index > 0,
@@ -2005,6 +2006,7 @@ private fun TransformEditor(
 @Composable
 private fun ActionEditorCard(
     action: ProcessingAction,
+    position: Int,
     variables: List<String>,
     highlighted: Boolean,
     canMoveUp: Boolean,
@@ -2023,6 +2025,18 @@ private fun ActionEditorCard(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.fillMaxWidth().clickable { expanded = !expanded }
             ) {
+                Surface(
+                    color = MaterialTheme.colorScheme.surfaceVariant,
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Text(
+                        position.toString(),
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+                Spacer(Modifier.width(8.dp))
                 Icon(actionIcon(action.icon), null)
                 Spacer(Modifier.width(8.dp))
                 Text(
