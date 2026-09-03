@@ -27,6 +27,9 @@ import androidx.compose.material.icons.outlined.FileOpen
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material.icons.outlined.Tune
+import androidx.compose.material.icons.outlined.VariableAdd
+import androidx.compose.material.icons.outlined.PlayArrow
+import androidx.compose.material3.AssistChip
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -86,7 +89,7 @@ internal fun HomeScreen(
         AlertDialog(
             onDismissRequest = { deleteCandidate = null },
             title = { Text("Profil löschen?") },
-            text = { Text("„${profile.name}“ wird dauerhaft aus ShareParser entfernt.") },
+            text = { Text("„${profile.name}“ wird dauerhaft entfernt. Diese Aktion kann nicht rückgängig gemacht werden.") },
             confirmButton = {
                 TextButton(onClick = {
                     onDelete(profile)
@@ -103,42 +106,45 @@ internal fun HomeScreen(
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         item {
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    Text("Profile", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
-                    Text("Bestimme, wie geteilte Texte erkannt und weiterverarbeitet werden.")
-                }
-            }
+            SectionHeading(
+                "Profile",
+                "Erkennung und Weiterverarbeitung geteilter Inhalte."
+            )
         }
         item {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedButton(onClick = onImport) {
                     Icon(Icons.Outlined.FileOpen, null)
                     Spacer(Modifier.width(6.dp))
-                    Text("Importieren")
+                    Text("Importieren", maxLines = 1)
                 }
                 OutlinedButton(onClick = onSettings) {
                     Icon(Icons.Outlined.Settings, null)
                     Spacer(Modifier.width(6.dp))
-                    Text("Einstellungen")
+                    Text("Einstellungen", maxLines = 1)
                 }
             }
         }
-        importError?.let { message ->
-            item { Text(message, color = MaterialTheme.colorScheme.error) }
+        if (importError != null) {
+            item {
+                ErrorNotice(
+                    title = "Import fehlgeschlagen",
+                    description = "Die Profildatei konnte nicht gelesen werden. Prüfe, ob sie aus ShareParser exportiert wurde.",
+                    action = { TextButton(onClick = onImport) { Text("Erneut versuchen") } }
+                )
+            }
         }
 
         if (profiles.isEmpty()) {
             item {
                 Card(Modifier.fillMaxWidth()) {
-                    Column(
-                        Modifier.padding(24.dp),
-                        verticalArrangement = Arrangement.spacedBy(12.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Icon(Icons.Outlined.Share, null, modifier = Modifier.size(52.dp))
-                        Text("Noch kein Profil", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
-                        Text("Erstelle ein Profil direkt hier oder teile eine Beispiel-Mail mit ShareParser. Aus dem Beispiel kannst du Felder ohne Regex auswählen.")
+                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("Noch kein Profil", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                        Text(
+                            "Erstelle ein Profil oder teile zuerst einen Beispieltext mit ShareParser.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                         Button(onClick = onCreate) {
                             Icon(Icons.Outlined.Add, null)
                             Spacer(Modifier.width(6.dp))
@@ -149,12 +155,16 @@ internal fun HomeScreen(
             }
         } else {
             items(profiles, key = { it.id }) { profile ->
-                Card(Modifier.fillMaxWidth()) {
-                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Card(Modifier.fillMaxWidth().clickable { onEdit(profile) }) {
+                    Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Column(Modifier.weight(1f)) {
                                 Text(profile.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                                Text("${profile.extractors.size} Variablen · ${profile.actions.size} Aktionen", style = MaterialTheme.typography.bodySmall)
+                                Text(
+                                    if (profile.enabled) "Aktiv" else "Deaktiviert",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
                             }
                             Switch(
                                 checked = profile.enabled,
@@ -162,6 +172,18 @@ internal fun HomeScreen(
                             )
                         }
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            AssistChip(
+                                onClick = { onEdit(profile) },
+                                label = { Text("${profile.extractors.size}") },
+                                leadingIcon = { Icon(Icons.Outlined.VariableAdd, null) }
+                            )
+                            AssistChip(
+                                onClick = { onEdit(profile) },
+                                label = { Text("${profile.actions.size}") },
+                                leadingIcon = { Icon(Icons.Outlined.PlayArrow, null) }
+                            )
+                        }
+                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                             TextButton(onClick = { onEdit(profile) }) {
                                 Icon(Icons.Outlined.Edit, null)
                                 Spacer(Modifier.width(4.dp))
@@ -407,7 +429,11 @@ internal fun SharedScreen(
                     Card(Modifier.fillMaxWidth()) {
                         Column(Modifier.padding(16.dp)) {
                             Text("Extraktion nicht vollständig", fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.error)
-                            Text(error?.userMessage ?: result.exceptionOrNull()?.message.orEmpty())
+                            Text(
+                                error?.userMessage ?: "Die Variablen konnten mit diesem Profil nicht vollständig erkannt werden. Öffne das Profil und prüfe die markierten Regeln.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
                         }
                     }
                 }
