@@ -75,7 +75,7 @@ internal fun AppearanceSettingsScreen(
                         title = when (palette) {
                             ColorPalette.MATERIAL_YOU -> "Material You"
                             ColorPalette.OCEAN -> "Ozean"
-                            ColorPalette.FOREST -> "Wald"
+                            ColorPalette.PLUM -> "Pflaume"
                             ColorPalette.SLATE -> "Schiefer"
                             ColorPalette.AMBER -> "Bernstein"
                         },
