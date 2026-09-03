@@ -57,8 +57,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
-import cc.stkmn.shareparser.data.AppSettings
-import cc.stkmn.shareparser.data.DateTimeLocale
 import cc.stkmn.shareparser.data.FailureReport
 import cc.stkmn.shareparser.data.ProcessingAction
 import cc.stkmn.shareparser.data.Profile
@@ -200,62 +198,6 @@ internal fun HomeScreen(
             }
         }
         item { Spacer(Modifier.height(72.dp)) }
-    }
-}
-
-@Composable
-internal fun SettingsScreen(repository: ProfileRepository) {
-    var settings by remember { mutableStateOf(repository.settings()) }
-
-    fun select(locale: DateTimeLocale) {
-        settings = AppSettings(dateTimeLocale = locale)
-        repository.saveSettings(settings)
-    }
-
-    LazyColumn(
-        contentPadding = PaddingValues(16.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp)
-    ) {
-        item {
-            Text("Datum und Uhrzeit", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
-        }
-        item {
-            Text("Diese Einstellung steuert, wie freie Datums- und Zeitangaben für Kalenderaktionen interpretiert werden.")
-        }
-        item {
-            Card(Modifier.fillMaxWidth()) {
-                Column(Modifier.padding(16.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        RadioButton(
-                            selected = settings.dateTimeLocale == DateTimeLocale.DE_DE,
-                            onClick = { select(DateTimeLocale.DE_DE) }
-                        )
-                        Column {
-                            Text("Deutsch (Deutschland)", fontWeight = FontWeight.SemiBold)
-                            Text("Empfohlen für deutsche E-Mails und Nachrichten.", style = MaterialTheme.typography.bodySmall)
-                        }
-                    }
-                    Text(
-                        "Beispiele: 14.12.2026, 14/12/26, 14.12., morgen, nächsten Montag, 12-14, 12 Uhr bis 14 Uhr, 12:00 Uhr bis 14:00 Uhr.",
-                        modifier = Modifier.padding(start = 48.dp)
-                    )
-                }
-            }
-        }
-        item {
-            Card(Modifier.fillMaxWidth()) {
-                Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                    RadioButton(
-                        selected = settings.dateTimeLocale == DateTimeLocale.SYSTEM,
-                        onClick = { select(DateTimeLocale.SYSTEM) }
-                    )
-                    Column {
-                        Text("Geräteeinstellung", fontWeight = FontWeight.SemiBold)
-                        Text("Verwendet die Gerätesprache für Textvergleiche. Die flexiblen deutschen Zahlenformate bleiben weiterhin verfügbar.", style = MaterialTheme.typography.bodySmall)
-                    }
-                }
-            }
-        }
     }
 }
 
