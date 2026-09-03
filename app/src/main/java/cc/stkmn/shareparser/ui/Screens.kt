@@ -480,34 +480,47 @@ internal fun FailureScreen(
     onEdit: (Profile, String?) -> Unit
 ) {
     if (report == null) {
-        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("Kein Fehlerbericht vorhanden.") }
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Text("Kein Fehlerbericht vorhanden.")
+        }
         return
     }
-    LazyColumn(contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        item { Text(report.message, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold) }
-        report.profileName?.let { item { Text("Profil: $it") } }
-        report.failingField?.let { field ->
-            item {
-                Card(Modifier.fillMaxWidth()) {
-                    Column(Modifier.padding(16.dp)) {
-                        Text("Betroffener Bereich", fontWeight = FontWeight.SemiBold)
-                        Text(field)
+    LazyColumn(
+        contentPadding = PaddingValues(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        item {
+            ErrorNotice(
+                title = report.message,
+                description = if (report.failingField.isNullOrBlank())
+                    "Die Verarbeitung wurde beendet. Öffne das betroffene Profil und prüfe die zuletzt geänderten Regeln."
+                else "Betroffener Bereich: ${report.failingField}. Öffne das Profil, um die markierte Stelle zu prüfen.",
+                action = if (profile != null) {
+                    {
+                        TextButton(onClick = { onEdit(profile, report.failingField) }) {
+                            Icon(Icons.Outlined.Edit, null)
+                            Spacer(Modifier.width(6.dp))
+                            Text("Profil öffnen")
+                        }
                     }
-                }
+                } else null
+            )
+        }
+        report.profileName?.let { name ->
+            item {
+                Text(
+                    "Profil: ${name}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
         }
-        item { Text("Technische Details", fontWeight = FontWeight.SemiBold) }
-        item { SelectionContainer { Text(report.technicalDetails) } }
-        item { Text("Eingabe", fontWeight = FontWeight.SemiBold) }
-        item { SelectionContainer { Text(report.inputPreview) } }
-        if (profile != null) {
-            item {
-                Button(onClick = { onEdit(profile, report.failingField) }, modifier = Modifier.fillMaxWidth()) {
-                    Icon(Icons.Outlined.Edit, null)
-                    Spacer(Modifier.width(8.dp))
-                    Text("Profil an Fehlerstelle bearbeiten")
-                }
-            }
+        item {
+            Text(
+                "Technische Details werden im internen Fehlerbericht gespeichert und nicht als Roh-Exception angezeigt.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
     }
 }
