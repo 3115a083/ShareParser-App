@@ -655,7 +655,7 @@ internal fun ProfileEditorScreen(
             }
         }
 
-        item { SectionTitle("Profil") }
+        item { EditorSectionHeader("Profil") }
         item {
             OutlinedTextField(
                 value = name,
@@ -701,7 +701,11 @@ internal fun ProfileEditorScreen(
             )
         }
         item {
-            Text("Kombiniere feste Textteile, teilende App und Variablen. Ab dem zweiten Merkmal kannst du UND oder ODER wählen.")
+            Text(
+                "Kombiniere feste Textteile, teilende App und Variablen. Ab dem zweiten Merkmal kannst du UND oder ODER wählen.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
         item {
             Text("Filter-Bausteine", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
