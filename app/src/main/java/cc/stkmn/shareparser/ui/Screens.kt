@@ -23,6 +23,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material.icons.outlined.ExpandLess
+import androidx.compose.material.icons.outlined.ExpandMore
 import androidx.compose.material.icons.outlined.FileOpen
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.Share
@@ -215,6 +217,7 @@ internal fun SharedScreen(
     val matches = remember(payload, profiles) { parser.matchingProfiles(payload, profiles) }
     var selected by remember(payload, profiles) { mutableStateOf<Profile?>(matches.singleOrNull()) }
     var showActionPicker by remember { mutableStateOf(false) }
+    var sharedTextExpanded by remember(payload) { mutableStateOf(false) }
     var pendingCalendarExecution by remember { mutableStateOf<Pair<Profile, ProcessingAction.Calendar>?>(null) }
 
     val extraction = remember(payload, selected) {
@@ -299,15 +302,39 @@ internal fun SharedScreen(
     LazyColumn(contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item {
             Card(Modifier.fillMaxWidth()) {
-                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("Geteilte Informationen", fontWeight = FontWeight.SemiBold)
-                    if (payload.subject.isNotBlank()) {
-                        Text("Betreff", style = MaterialTheme.typography.labelMedium)
-                        SelectionContainer { Text(payload.subject) }
+                Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("Geteilte Informationen", fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                        IconButton(onClick = { sharedTextExpanded = !sharedTextExpanded }) {
+                            Icon(
+                                if (sharedTextExpanded) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore,
+                                if (sharedTextExpanded) "Weniger anzeigen" else "Mehr anzeigen"
+                            )
+                        }
                     }
-                    Text("Text", style = MaterialTheme.typography.labelMedium)
-                    SelectionContainer { Text(payload.text, maxLines = 18) }
-                    Text("Typ: ${payload.mimeType}", style = MaterialTheme.typography.bodySmall)
+                    if (payload.subject.isNotBlank()) {
+                        Text(
+                            "Betreff",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        SelectionContainer {
+                            Text(payload.subject, maxLines = if (sharedTextExpanded) Int.MAX_VALUE else 2)
+                        }
+                    }
+                    Text(
+                        "Text",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    SelectionContainer {
+                        Text(payload.text, maxLines = if (sharedTextExpanded) Int.MAX_VALUE else 8)
+                    }
+                    Text(
+                        "Typ: ${payload.mimeType}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
             }
         }
@@ -317,7 +344,11 @@ internal fun SharedScreen(
                 Card(Modifier.fillMaxWidth()) {
                     Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         Text("Kein Profil passt", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                        Text("Erstelle aus diesem Beispiel ein Profil. Du kannst anschließend einzelne Zeilen als Variablen markieren, ShareParser erzeugt die Regeln automatisch.")
+                        Text(
+                            "Erstelle aus diesem Beispiel ein Profil. Variablen und Erkennungsregeln lassen sich anschließend direkt aus dem Text ableiten.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                         Button(onClick = onCreateFromSample, modifier = Modifier.fillMaxWidth()) {
                             Icon(Icons.Outlined.Add, null)
                             Spacer(Modifier.width(8.dp))
