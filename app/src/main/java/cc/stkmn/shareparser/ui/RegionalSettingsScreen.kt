@@ -46,9 +46,9 @@ internal fun RegionalSettingsScreen(repository: ProfileRepository, onSettingsCha
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         item {
-            SectionHeading(
-                "Datum und Uhrzeit",
-                "Legt fest, wie mehrdeutige Datums- und Zeitangaben interpretiert werden."
+            Text(
+                "Legt fest, wie mehrdeutige Datums- und Zeitangaben interpretiert werden.",
+                style = MaterialTheme.typography.bodySmall
             )
         }
         order.forEach { locale ->
