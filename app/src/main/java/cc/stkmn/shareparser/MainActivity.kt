@@ -2,14 +2,12 @@ package cc.stkmn.shareparser
 
 import android.content.Intent
 import android.net.Uri
-import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -23,7 +21,6 @@ import androidx.compose.material.icons.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.Undo
 import androidx.compose.material.icons.outlined.Redo
-import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
@@ -32,10 +29,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.darkColorScheme
-import androidx.compose.material3.dynamicDarkColorScheme
-import androidx.compose.material3.dynamicLightColorScheme
-import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -52,6 +45,7 @@ import cc.stkmn.shareparser.data.PendingShareStore
 import cc.stkmn.shareparser.data.Profile
 import cc.stkmn.shareparser.data.ProfileRepository
 import cc.stkmn.shareparser.data.SharedPayload
+import cc.stkmn.shareparser.ui.AppearanceSettingsScreen
 import cc.stkmn.shareparser.ui.FailureScreen
 import cc.stkmn.shareparser.ui.HomeScreen
 import cc.stkmn.shareparser.ui.LanguageSettingsScreen
@@ -60,6 +54,7 @@ import cc.stkmn.shareparser.ui.RegionalSettingsScreen
 import cc.stkmn.shareparser.ui.SettingsHomeScreen
 import cc.stkmn.shareparser.ui.localized
 import cc.stkmn.shareparser.ui.SharedScreen
+import cc.stkmn.shareparser.ui.ShareParserTheme
 
 class MainActivity : ComponentActivity() {
     private val latestIntent = mutableStateOf<Intent?>(null)
@@ -103,6 +98,7 @@ class MainActivity : ComponentActivity() {
 private sealed interface Screen {
     data object Home : Screen
     data object Settings : Screen
+    data object AppearanceSettings : Screen
     data object LanguageSettings : Screen
     data object RegionalSettings : Screen
     data class Editor(
@@ -115,7 +111,7 @@ private sealed interface Screen {
 }
 
 private fun previousScreen(screen: Screen): Screen = when (screen) {
-    Screen.RegionalSettings, Screen.LanguageSettings -> Screen.Settings
+    Screen.RegionalSettings, Screen.LanguageSettings, Screen.AppearanceSettings -> Screen.Settings
     Screen.Settings, is Screen.Editor, is Screen.Shared, Screen.Failure -> Screen.Home
     Screen.Home -> Screen.Home
 }
@@ -125,6 +121,7 @@ private fun previousScreen(screen: Screen): Screen = when (screen) {
 private fun ShareParserApp(startIntent: Intent?, onIntentConsumed: () -> Unit) {
     val context = LocalContext.current
     val repository = remember { ProfileRepository(context) }
+    var appSettings by remember { mutableStateOf(repository.settings()) }
     val editorMode = remember { EditorModeStore(context) }
     val pendingShareStore = remember { PendingShareStore(context) }
     var profiles by remember { mutableStateOf(repository.profiles()) }
@@ -191,7 +188,7 @@ private fun ShareParserApp(startIntent: Intent?, onIntentConsumed: () -> Unit) {
         requestBack()
     }
 
-    MaterialTheme(colorScheme = dynamicOrDefaultScheme()) {
+    ShareParserTheme(settings = appSettings) {
         Scaffold(
             topBar = {
                 TopAppBar(
@@ -207,6 +204,7 @@ private fun ShareParserApp(startIntent: Intent?, onIntentConsumed: () -> Unit) {
                                 localized(when (val current = screen) {
                                     Screen.Home -> "ShareParser"
                                     Screen.Settings -> "Einstellungen"
+                                    Screen.AppearanceSettings -> "Darstellung"
                                     Screen.LanguageSettings -> "App-Sprache"
                                     Screen.RegionalSettings -> "Datum und Uhrzeit"
                                     is Screen.Editor -> if (current.profile == null) "Profil erstellen" else "Profil bearbeiten"
@@ -275,7 +273,15 @@ private fun ShareParserApp(startIntent: Intent?, onIntentConsumed: () -> Unit) {
                     Screen.Settings -> SettingsHomeScreen(
                         repository = repository,
                         onRegionalSettings = { screen = Screen.RegionalSettings },
-                        onLanguageSettings = { screen = Screen.LanguageSettings }
+                        onLanguageSettings = { screen = Screen.LanguageSettings },
+                        onAppearanceSettings = { screen = Screen.AppearanceSettings }
+                    )
+                    Screen.AppearanceSettings -> AppearanceSettingsScreen(
+                        settings = appSettings,
+                        onSettingsChanged = { changed ->
+                            appSettings = changed
+                            repository.saveSettings(changed)
+                        }
                     )
                     Screen.LanguageSettings -> LanguageSettingsScreen(repository = repository)
                     Screen.RegionalSettings -> RegionalSettingsScreen(repository = repository)
@@ -339,10 +345,3 @@ private fun ShareParserApp(startIntent: Intent?, onIntentConsumed: () -> Unit) {
 private fun Intent.isFailureLink(): Boolean =
     data?.scheme == "shareparser" && data?.host == "failure"
 
-@Composable
-private fun dynamicOrDefaultScheme(): ColorScheme {
-    val context = LocalContext.current
-    return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-        if (isSystemInDarkTheme()) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
-    } else if (isSystemInDarkTheme()) darkColorScheme() else lightColorScheme()
-}
