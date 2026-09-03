@@ -423,7 +423,11 @@ private val exactEnglish = mapOf(
     "E-Mail" to "Email",
     "Ersetzen durch, leer = entfernen" to "Replace with, empty = remove",
     "Content-Type" to "Content type",
-    "GitHub" to "GitHub"
+    "GitHub" to "GitHub",
+    "Erstelle aus diesem Beispiel ein Profil. Variablen und Erkennungsregeln lassen sich anschließend direkt aus dem Text ableiten." to "Create a profile from this example. Variables and recognition rules can then be derived directly from the text.",
+    "z. B. FairEmail Termin" to "e.g. FairEmail event",
+    "z. B. ort, plz, buchungsnummer" to "e.g. location, postal_code, booking_number",
+    "z. B. Ort:" to "e.g. Location:"
 )
 
 private fun englishFallback(value: String): String {
@@ -431,6 +435,10 @@ private fun englishFallback(value: String): String {
     var result = value
     val replacements = listOf(
         "Noch kein Merkmal" to "No criterion yet",
+        " wird dauerhaft entfernt. Diese Aktion kann nicht rückgängig gemacht werden." to " will be permanently removed. This action cannot be undone.",
+        " aufteilen" to " split",
+        "Unbekannte Variable: " to "Unknown variable: ",
+        "Erkannte Variablen: " to "Detected variables: ",
         "Teilende App ist nicht " to "Sharing app is not ",
         "Teilende App ist " to "Sharing app is ",
         "Das Profil '" to "The profile '",
