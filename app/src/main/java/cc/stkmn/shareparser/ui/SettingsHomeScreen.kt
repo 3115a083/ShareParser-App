@@ -98,9 +98,9 @@ internal fun SettingsHomeScreen(
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         item {
-            SectionHeading(
-                "Einstellungen",
-                "Darstellung, Erkennung, Dateiausgabe und Auswahlverhalten."
+            Text(
+                "Darstellung, Erkennung, Dateiausgabe und Auswahlverhalten.",
+                style = MaterialTheme.typography.bodySmall
             )
         }
 
