@@ -411,7 +411,18 @@ private val exactEnglish = mapOf(
     "System verwendet die Android-Sprache. Weitere Übersetzungen können später ergänzt werden." to "System uses the Android language. More translations can be added later.",
     "Sprache des Geräts verwenden." to "Use the device language.",
     "Deutsch für alle sichtbaren App-Texte." to "Use German for all visible app text.",
-    "Diese Aktion kann nicht rückgängig gemacht werden." to "This action cannot be undone."
+    "Diese Aktion kann nicht rückgängig gemacht werden." to "This action cannot be undone.",
+    "Profil öffnen" to "Open profile",
+    "Technische Details werden im internen Fehlerbericht gespeichert und nicht als Roh-Exception angezeigt." to "Technical details are stored in the internal failure report and are not shown as raw exceptions.",
+    "JSON kopieren" to "Copy JSON",
+    "Trennzeichen" to "Separator",
+    "Leerzeichen am Rand entfernen" to "Trim surrounding whitespace",
+    "Capture Group" to "Capture group",
+    "PLZ" to "Postal code",
+    "E-Mail" to "Email",
+    "Ersetzen durch, leer = entfernen" to "Replace with, empty = remove",
+    "Content-Type" to "Content type",
+    "GitHub" to "GitHub"
 )
 
 private fun englishFallback(value: String): String {
@@ -424,6 +435,16 @@ private fun englishFallback(value: String): String {
         "Das Profil '" to "The profile '",
         "' wird dauerhaft gelöscht." to "' will be permanently deleted.",
         "Untervariable " to "Subvariable ",
+        "Das Profil '" to "The profile '",
+        "' wird dauerhaft gelöscht." to "' will be permanently deleted.",
+        "Die Variable '" to "The variable '",
+        "' existiert bereits. Wähle, wie ShareParser fortfahren soll." to "' already exists. Choose how ShareParser should continue.",
+        "Beispielwert: " to "Example value: ",
+        "Beispiel: " to "Example: ",
+        "Der Inhalt der Capture Group " to "The content of capture group ",
+        " wird als Variable übernommen." to " is used as the variable.",
+        "Diese Variable wird aus '" to "This variable is derived from '",
+        "' abgeleitet. So kannst du z. B. PLZ und Ort aus einem gemeinsamen Wert erzeugen." to "'. This lets you derive values such as postal code and location from a shared value.",
         "Unbekannte Variable" to "Unknown variable",
         "Erkannte Variablen" to "Detected variables",
         "Variablen können" to "Variables can",
