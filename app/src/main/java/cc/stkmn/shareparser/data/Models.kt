@@ -145,7 +145,7 @@ enum class AppearanceMode {
 enum class ColorPalette {
     MATERIAL_YOU,
     OCEAN,
-    FOREST,
+    PLUM,
     SLATE,
     AMBER
 }
