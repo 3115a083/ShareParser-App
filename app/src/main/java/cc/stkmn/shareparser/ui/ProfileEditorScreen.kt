@@ -721,6 +721,9 @@ internal fun ProfileEditorScreen(
                 )
             }
             val activeAppMatcher = matchers.firstOrNull { it.variableKey == "source_package" }
+            val activePackage = activeAppMatcher?.let { matcher ->
+                sourceApps.firstOrNull { Regex.escape(it.packageName) == matcher.regex }?.packageName
+            }
             Card(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("Teilende App", fontWeight = FontWeight.SemiBold)
@@ -805,6 +808,13 @@ internal fun ProfileEditorScreen(
                                 }
                             )
                         }
+                    }
+                    if (activePackage != null) {
+                        TechnicalValue(
+                            value = activePackage,
+                            onCopy = { clipboard.setText(AnnotatedString(activePackage)) },
+                            maxLines = 1
+                        )
                     }
                     if (activeAppMatcher != null) {
                         TextButton(onClick = { matchers.remove(activeAppMatcher) }) {
