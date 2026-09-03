@@ -26,10 +26,10 @@
         android:allowBackup="false"
         android:fullBackupContent="false"
         android:hasFragileUserData="false"
-        android:icon="@drawable/app_logo_3_foreground"
+        android:icon="@mipmap/ic_launcher"
         android:label="ShareParser"
-        android:logo="@drawable/app_logo_3_foreground"
-        android:roundIcon="@drawable/app_logo_3_foreground"
+        android:logo="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.ShareParser">
 
@@ -68,8 +68,8 @@
             android:exported="true"
             android:excludeFromRecents="true"
             android:noHistory="true"
-            android:icon="@drawable/app_logo_3_foreground"
-            android:logo="@drawable/app_logo_3_foreground"
+            android:icon="@mipmap/ic_launcher"
+            android:logo="@mipmap/ic_launcher"
             android:taskAffinity="cc.stkmn.shareparser.share.receiver"
             android:theme="@android:style/Theme.Translucent.NoTitleBar">
             <intent-filter>
@@ -97,7 +97,7 @@
         <activity
             android:name=".MainActivity"
             android:exported="true"
-            android:icon="@drawable/app_logo_3_foreground"
+            android:icon="@mipmap/ic_launcher"
             android:launchMode="singleTop">
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
