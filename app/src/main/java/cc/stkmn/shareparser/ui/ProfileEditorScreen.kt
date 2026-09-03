@@ -56,6 +56,7 @@ import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.Text as MaterialText
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -778,7 +779,12 @@ internal fun ProfileEditorScreen(
                                 text = {
                                     Column {
                                         Text(app.label)
-                                        Text(app.packageName, style = MaterialTheme.typography.bodySmall)
+                                        MaterialText(
+                                            text = app.packageName,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
                                     }
                                 },
                                 onClick = {
