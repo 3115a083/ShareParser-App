@@ -75,6 +75,7 @@ import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
@@ -631,7 +632,8 @@ internal fun ProfileEditorScreen(
                         Text("Bearbeitungsmodus aktiv", fontWeight = FontWeight.SemiBold)
                         Text(
                             "Neue Nachrichten oder Textdateien, die du jetzt an ShareParser teilst, werden direkt als Beispiel in dieses Profil geladen.",
-                            style = MaterialTheme.typography.bodySmall
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                 }
@@ -686,7 +688,8 @@ internal fun ProfileEditorScreen(
                     if (parseDirection == ParseDirection.BOTTOM_UP)
                         "Nimmt bei mehrfach vorkommenden Feldern den letzten Treffer. Sinnvoll, wenn die ursprüngliche Mail unter einer Antwort oder Weiterleitung steht."
                     else "Nimmt bei mehrfach vorkommenden Feldern den ersten Treffer.",
-                    style = MaterialTheme.typography.bodySmall
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
         }
@@ -2002,7 +2005,13 @@ private fun ActionEditorCard(
             ) {
                 Icon(actionIcon(action.icon), null)
                 Spacer(Modifier.width(8.dp))
-                Text(action.friendlyName, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                Text(
+                    action.friendlyName,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.weight(1f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
                 IconButton(onClick = onMoveUp, enabled = canMoveUp) {
                     Icon(Icons.Outlined.ArrowUpward, "Nach oben")
                 }
