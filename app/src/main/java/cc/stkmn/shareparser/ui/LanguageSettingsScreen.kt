@@ -27,13 +27,14 @@ import cc.stkmn.shareparser.data.AppLanguage
 import cc.stkmn.shareparser.data.ProfileRepository
 
 @Composable
-internal fun LanguageSettingsScreen(repository: ProfileRepository) {
+internal fun LanguageSettingsScreen(repository: ProfileRepository, onSettingsChanged: (cc.stkmn.shareparser.data.AppSettings) -> Unit = {}) {
     val context = LocalContext.current
     var settings by remember { mutableStateOf(repository.settings()) }
 
     fun select(language: AppLanguage) {
         settings = settings.copy(appLanguage = language)
         repository.saveSettings(settings)
+        onSettingsChanged(settings)
         AppLocale.apply(context, language)
     }
 
