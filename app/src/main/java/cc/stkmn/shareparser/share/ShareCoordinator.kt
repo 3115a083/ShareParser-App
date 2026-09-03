@@ -99,7 +99,8 @@ class ShareCoordinator(context: Context) {
                                     payload = payload,
                                     profile = profile,
                                     action = action,
-                                    notifyFailure = attempt == 2
+                                    notifyFailure = attempt == 2,
+                                    backgroundMode = true
                                 )
                                 if (!succeeded && attempt < 2) {
                                     Thread.sleep(if (attempt == 0) 2_000L else 5_000L)
@@ -131,11 +132,12 @@ class ShareCoordinator(context: Context) {
         payload: SharedPayload,
         profile: Profile,
         action: ProcessingAction,
-        notifyFailure: Boolean = true
+        notifyFailure: Boolean = true,
+        backgroundMode: Boolean = false
     ): Boolean {
         return try {
             val extracted = parser.extract(payload, profile)
-            val result = ActionExecutor(appContext, repository.settings()).execute(action, extracted)
+            val result = ActionExecutor(appContext, repository.settings(), backgroundMode).execute(action, extracted)
             WarningNotifier.show(appContext, result.warnings)
             true
         } catch (error: Throwable) {
