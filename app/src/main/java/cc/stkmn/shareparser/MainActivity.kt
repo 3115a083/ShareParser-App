@@ -280,7 +280,8 @@ private fun ShareParserApp(startIntent: Intent?, onIntentConsumed: () -> Unit) {
                         repository = repository,
                         onRegionalSettings = { screen = Screen.RegionalSettings },
                         onLanguageSettings = { screen = Screen.LanguageSettings },
-                        onAppearanceSettings = { screen = Screen.AppearanceSettings }
+                        onAppearanceSettings = { screen = Screen.AppearanceSettings },
+                        onSettingsChanged = { appSettings = it }
                     )
                     Screen.AppearanceSettings -> AppearanceSettingsScreen(
                         settings = appSettings,
