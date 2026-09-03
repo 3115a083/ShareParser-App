@@ -26,7 +26,6 @@ import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.ExpandLess
 import androidx.compose.material.icons.outlined.ExpandMore
 import androidx.compose.material.icons.outlined.FileOpen
-import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material.icons.outlined.VariableAdd
@@ -81,8 +80,7 @@ internal fun HomeScreen(
     onCreate: () -> Unit,
     onImport: () -> Unit,
     onToggle: (Profile, Boolean) -> Unit,
-    onDelete: (Profile) -> Unit,
-    onSettings: () -> Unit
+    onDelete: (Profile) -> Unit
 ) {
     var deleteCandidate by remember { mutableStateOf<Profile?>(null) }
     deleteCandidate?.let { profile ->
