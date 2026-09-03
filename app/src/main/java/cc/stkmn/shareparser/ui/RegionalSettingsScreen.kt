@@ -25,12 +25,13 @@ import cc.stkmn.shareparser.data.DateTimeLocale
 import cc.stkmn.shareparser.data.ProfileRepository
 
 @Composable
-internal fun RegionalSettingsScreen(repository: ProfileRepository) {
+internal fun RegionalSettingsScreen(repository: ProfileRepository, onSettingsChanged: (cc.stkmn.shareparser.data.AppSettings) -> Unit = {}) {
     var settings by remember { mutableStateOf(repository.settings()) }
 
     fun select(locale: DateTimeLocale) {
         settings = settings.copy(dateTimeLocale = locale)
         repository.saveSettings(settings)
+        onSettingsChanged(settings)
     }
 
     val order = listOf(
