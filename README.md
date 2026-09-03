@@ -196,6 +196,8 @@ A profile can send an HTTP POST webhook. URL and body fields support the same va
 
 A webhook can either appear as a normal selectable action or fire automatically whenever its profile matches. Automatic webhooks are excluded from the action picker so they do not create duplicate choices. Empty webhook bodies can use a fallback body or stop with an error.
 
+Automatic background webhooks use longer network timeouts and up to three bounded attempts. Only the final failure creates the user-facing failure notification, which links directly back into ShareParser.
+
 ## Rebuilt text and text files
 
 A text action can generate a new subject and body from variables and fixed text. The result can be shared as normal Android text, generated as a file and shared, opened directly in another app, or saved through Android's file system.
