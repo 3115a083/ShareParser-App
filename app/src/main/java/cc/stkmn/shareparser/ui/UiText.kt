@@ -401,7 +401,7 @@ private val exactEnglish = mapOf(
     "Farbpalette" to "Color palette",
     "Material You verwendet die Gerätefarben. Die übrigen Paletten bleiben auf allen Geräten gleich." to "Material You uses device colors. The other palettes stay consistent across devices.",
     "Ozean" to "Ocean",
-    "Wald" to "Forest",
+    "Pflaume" to "Plum",
     "Schiefer" to "Slate",
     "Bernstein" to "Amber",
     "Legt fest, wie mehrdeutige Datums- und Zeitangaben interpretiert werden." to "Defines how ambiguous date and time values are interpreted.",
