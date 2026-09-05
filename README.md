@@ -67,6 +67,12 @@ The suggestion engine also recognizes common web links, `mailto:` links, email a
 | `{{source_package}}` | package name of the sharing app, when Android provides it |
 | `{{file_name}}` | name of a shared file |
 | `{{mime_type}}` | MIME type of the shared content |
+| `{{target}}` | URI opened through ShareParser via Android ACTION_VIEW |
+| `{{target_type}}` | detected target kind: web, map, phone or email |
+| `{{shared_address}}` | detected address candidate |
+| `{{shared_web}}` | detected web-link candidate |
+| `{{shared_phone}}` | detected telephone candidate |
+| `{{shared_email}}` | detected email candidate |
 
 The sharing application can be used as an additional profile criterion. ShareParser checks Android referrer information, calling activity/package information, common share extras and the authority of a shared content URI. Android does not guarantee that the originating app is disclosed, so this is a matching hint, not a security boundary.
 
@@ -221,21 +227,21 @@ ShareParser accepts Android `ACTION_SEND` content for text MIME types and common
 
 Processing actions can optionally have conditions. A condition can test whether a variable is empty, not empty or matches a text/regular-expression rule. Several tests can be combined with **AND**, **OR** and **NOT**.
 
-A conditioned action is shown only when its condition is true. The editor can also create an **ELSE** branch from an existing conditioned action. The else action is a normal editable action with its own URL, calendar, share or webhook configuration and appears only when the parent condition is false.
+A conditioned action is shown only when its condition is true. The editor can also create an **ELSE** branch from an existing conditioned action. The else action is a normal editable action with its own URL, calendar, share, target-opening or webhook configuration and appears only when the parent condition is false.
 
-Conditions are configured inside each processing action. IF/ELSE branches stay attached to the affected action, support AND/OR and NOT for content checks, and can be distinguished in the editor with an optional short editor-only description.
+Conditions are configured inside each action. They are collapsed by default, show a compact summary on the action card and support AND/OR plus NOT for content checks. Actions can also carry an optional editor-only description and can be duplicated with their current configuration.
 
 ## Action selection
 
-When more than one profile/action is possible, the selector can appear inside ShareParser, as a centered overlay over the sharing app, or as an actionable Android notification. Processing actions can be reordered in the profile editor, and that order is used by the selectors.
+When several profiles match, ShareParser first asks which profile to use and then shows only that profile's actions. This two-stage selection works in ShareParser, the overlay and actionable notifications. Actions can be reordered in the profile editor, and that order is used by the selectors.
 
 Each action can be included or excluded from the overlay and notification surfaces. The overlay shows at most four configured actions and offers to open the full list in ShareParser when more are available. Android notifications expose at most three configured action buttons and open the full picker in the app for the remaining choices. Overlay permission is optional. The notification mode has its own Android channel for sound/vibration settings. Temporary selectors expire automatically.
 
 ## Optional built-in share actions
 
-Settings can enable additional share actions individually. They are disabled by default and appear only when ShareParser detects suitable content. In the in-app picker they are grouped in a compact submenu. Available options include opening a detected address in a maps app, opening a detected web link, phone number or email target, and recreating a shared text file with its detected extension for direct opening in a matching app.
+Settings provide a dedicated additional-share-options page. Built-in options are disabled by default and appear only when ShareParser detects suitable content. Available options include opening a detected address in a maps app, a web link, phone number or email target, opening a shared text file, and configuring a custom web target with templates. Recognized targets are also exposed as built-in profile variables so they can be parsed or transformed before a Target action opens them.
 
-These actions use the same Android selector surfaces as profile actions and do not require creating a profile first.
+ShareParser can also register as an Android ACTION_VIEW target for http/https, geo, tel and mailto links. Incoming targets are exposed as `target` and `target_type`. The Target action safely opens processed values using http/https, geo, tel or mailto schemes.
 
 ## App icon
 
@@ -305,7 +311,7 @@ Save as `{{datum}}-{{Ort}}.md`.
 
 ## Profile sharing
 
-Profiles use a versioned JSON format. The current profile schema is version 12. Profiles can be copied, exported, shared and imported on another device. Unknown future fields are ignored where possible for forward compatibility.
+Profiles use a versioned JSON format. The current profile schema is version 13. Profiles can be copied, exported, shared and imported on another device. Unknown future fields are ignored where possible for forward compatibility.
 
 ## Android support and build
 
