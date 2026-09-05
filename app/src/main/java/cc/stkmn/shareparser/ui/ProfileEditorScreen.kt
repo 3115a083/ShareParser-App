@@ -1708,13 +1708,24 @@ private fun ExtractorCard(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Checkbox(rule.required, { onChange(rule.copy(required = it)) })
                 Text("Pflichtfeld")
-                Spacer(Modifier.weight(1f))
-                TextButton(onClick = { regexHelp = !regexHelp }) {
-                    Text(if (regexHelp) "Erkennungshilfe schließen" else "Erkennungshilfe")
+            }
+            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                item {
+                    OutlinedButton(onClick = { regexHelp = !regexHelp }) {
+                        Icon(
+                            if (regexHelp) Icons.Outlined.ExpandLess else Icons.Outlined.Tune,
+                            null
+                        )
+                        Spacer(Modifier.width(6.dp))
+                        Text(if (regexHelp) "Erkennungshilfe schließen" else "Erkennungshilfe", maxLines = 1)
+                    }
                 }
-                TextButton(onClick = { details = !details }) {
-                    Text(if (details) "Details ausblenden" else "Umwandlungen")
-                    Icon(Icons.Outlined.ExpandMore, null)
+                item {
+                    OutlinedButton(onClick = { details = !details }) {
+                        Icon(if (details) Icons.Outlined.ExpandLess else Icons.Outlined.Transform, null)
+                        Spacer(Modifier.width(6.dp))
+                        Text(if (details) "Umwandlungen schließen" else "Umwandlungen", maxLines = 1)
+                    }
                 }
             }
             if (regexHelp) {
@@ -2112,14 +2123,24 @@ private fun ActionEditorCard(
                         Icon(Icons.Outlined.ArrowDownward, "Nach unten")
                     }
                 }
-                OutlinedTextField(
-                    action.friendlyName,
-                    { onChange(withFriendlyName(action, it)) },
-                    label = { Text("Anzeigename") },
-                    modifier = Modifier.fillMaxWidth()
-                )
-                OutlinedButton(onClick = { iconMenu = true }) {
-                    Icon(actionIcon(action.icon), "Icon auswählen")
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    OutlinedButton(
+                        onClick = { iconMenu = true },
+                        contentPadding = androidx.compose.foundation.layout.PaddingValues(12.dp)
+                    ) {
+                        Icon(actionIcon(action.icon), "Icon auswählen")
+                    }
+                    OutlinedTextField(
+                        action.friendlyName,
+                        { onChange(withFriendlyName(action, it)) },
+                        label = { Text("Anzeigename") },
+                        modifier = Modifier.weight(1f),
+                        singleLine = true
+                    )
                 }
                 DropdownMenu(expanded = iconMenu, onDismissRequest = { iconMenu = false }) {
                     actionIcons.chunked(6).forEach { choices ->
