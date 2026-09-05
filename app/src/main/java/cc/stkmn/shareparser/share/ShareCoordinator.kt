@@ -23,6 +23,7 @@ import java.util.UUID
 class ShareCoordinator(context: Context) {
     companion object {
         const val EXTRA_PROFILE_ID = "__shareparser_extra__"
+        const val SELECT_PROFILE_ACTION_ID = "__select_profile__"
         private const val EXTRA_MAP = "__extra_map__"
         private const val EXTRA_WEB = "__extra_web__"
         private const val EXTRA_PHONE = "__extra_phone__"
@@ -43,36 +44,60 @@ class ShareCoordinator(context: Context) {
         val actionName: String,
         val icon: String
     ) {
-        fun label(showProfile: Boolean): String = if (showProfile) "$profileName · $actionName" else actionName
+        fun label(showProfile: Boolean): String = when {
+            actionId == SELECT_PROFILE_ACTION_ID -> profileName
+            showProfile -> "$profileName · $actionName"
+            else -> actionName
+        }
     }
 
     fun matchingProfiles(payload: SharedPayload): List<Profile> = parser.matchingProfiles(payload, repository.profiles())
+
+    fun profileChoices(payload: SharedPayload): List<Choice> =
+        matchingProfiles(payload).map { profile ->
+            Choice(
+                profileId = profile.id,
+                actionId = SELECT_PROFILE_ACTION_ID,
+                profileName = profile.name,
+                actionName = "Profil auswählen",
+                icon = "tune"
+            )
+        }
+
+    fun choicesForProfile(
+        payload: SharedPayload,
+        profileId: String,
+        mode: ShareSelectionMode = ShareSelectionMode.APP
+    ): List<Choice> {
+        val profile = matchingProfiles(payload).firstOrNull { it.id == profileId } ?: return emptyList()
+        val values = runCatching { parser.extract(payload, profile) }.getOrDefault(emptyMap())
+        return profile.actions
+            .filterNot { it is ProcessingAction.Webhook && it.mode == WebhookMode.ALWAYS }
+            .filter { action -> ActionConditionEvaluator.isAvailable(action, profile.actions, values) }
+            .filter { action ->
+                when (mode) {
+                    ShareSelectionMode.APP -> true
+                    ShareSelectionMode.OVERLAY -> actionShownInOverlay(action)
+                    ShareSelectionMode.NOTIFICATION -> actionShownInNotification(action)
+                }
+            }
+            .map { action ->
+                Choice(
+                    profileId = profile.id,
+                    actionId = action.id,
+                    profileName = profile.name,
+                    actionName = action.friendlyName,
+                    icon = action.icon
+                )
+            }
+    }
 
     fun choices(
         payload: SharedPayload,
         mode: ShareSelectionMode = ShareSelectionMode.APP
     ): List<Choice> {
         val profileChoices = matchingProfiles(payload).flatMap { profile ->
-            val values = runCatching { parser.extract(payload, profile) }.getOrDefault(emptyMap())
-            profile.actions
-                .filterNot { it is ProcessingAction.Webhook && it.mode == WebhookMode.ALWAYS }
-                .filter { action -> ActionConditionEvaluator.isAvailable(action, profile.actions, values) }
-                .filter { action ->
-                    when (mode) {
-                        ShareSelectionMode.APP -> true
-                        ShareSelectionMode.OVERLAY -> actionShownInOverlay(action)
-                        ShareSelectionMode.NOTIFICATION -> actionShownInNotification(action)
-                    }
-                }
-                .map { action ->
-                    Choice(
-                        profileId = profile.id,
-                        actionId = action.id,
-                        profileName = profile.name,
-                        actionName = action.friendlyName,
-                        icon = action.icon
-                    )
-                }
+            choicesForProfile(payload, profile.id, mode)
         }
         return if (mode == ShareSelectionMode.APP) profileChoices + extraChoices(payload) else profileChoices
     }
