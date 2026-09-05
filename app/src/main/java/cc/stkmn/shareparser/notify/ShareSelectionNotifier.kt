@@ -46,6 +46,7 @@ object ShareSelectionNotifier {
 
         return runCatching {
             ensureChannel(context)
+            val profileSelection = choices.all { it.actionId == ShareCoordinator.SELECT_PROFILE_ACTION_ID }
             val multipleProfiles = choices.map { it.profileId }.distinct().size > 1
             val openPicker = Intent(context.applicationContext, MainActivity::class.java).apply {
                 action = MainActivity.ACTION_OPEN_PENDING_SHARE
@@ -61,11 +62,19 @@ object ShareSelectionNotifier {
 
             val builder = NotificationCompat.Builder(context.applicationContext, CHANNEL)
                 .setSmallIcon(R.drawable.ic_notification)
-                .setContentTitle(AppLocale.text("ShareParser: Weiterverarbeitung auswählen", "ShareParser: Select processing action"))
+                .setContentTitle(
+                    if (profileSelection) {
+                        AppLocale.text("ShareParser: Profil auswählen", "ShareParser: Select profile")
+                    } else {
+                        AppLocale.text("ShareParser: Aktion auswählen", "ShareParser: Select action")
+                    }
+                )
                 .setContentText(
                     when {
                         choices.size == 1 -> choices.first().label(multipleProfiles)
-                        choices.size <= 3 -> AppLocale.text("${choices.size} Möglichkeiten verfügbar", "${choices.size} options available")
+                        profileSelection && choices.size <= 3 -> AppLocale.text("${choices.size} Profile verfügbar", "${choices.size} profiles available")
+                        profileSelection -> AppLocale.text("3 Profile direkt wählbar, weitere in ShareParser", "3 profiles available directly, more in ShareParser")
+                        choices.size <= 3 -> AppLocale.text("${choices.size} Aktionen verfügbar", "${choices.size} actions available")
                         else -> AppLocale.text("3 Schnellaktionen, weitere in ShareParser", "3 quick actions, more in ShareParser")
                     }
                 )
