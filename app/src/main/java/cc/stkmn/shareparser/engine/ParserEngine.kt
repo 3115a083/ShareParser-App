@@ -23,7 +23,7 @@ class ParserEngine {
                         val source = if (matcher.variableKey.isBlank()) {
                             payload.combined
                         } else {
-                            triggerValues[matcher.variableKey].orEmpty()
+                            triggerValues[matcher.variableKey.lowercase()].orEmpty()
                         }
                         val matchedValue = when (matcher.valueMode) {
                             MatcherValueMode.EMPTY -> source.isBlank()
@@ -74,7 +74,7 @@ class ParserEngine {
                     technicalDetails = details
                 )
             }
-            if (value != null) values[rule.key] = value
+            if (value != null) values[rule.key.lowercase()] = value
         }
         return values
     }
@@ -88,7 +88,7 @@ class ParserEngine {
             val source = extractionSource(payload, rule, values) ?: return@forEach
             runCatching { extractOne(source, rule, profile.parseDirection) }
                 .getOrNull()
-                ?.let { values[rule.key] = it }
+                ?.let { values[rule.key.lowercase()] = it }
         }
         return values
     }
@@ -100,7 +100,7 @@ class ParserEngine {
     ): String? = if (rule.sourceVariableKey.isBlank()) {
         sourceFor(payload, rule.source)
     } else {
-        values[rule.sourceVariableKey]
+        values[rule.sourceVariableKey.lowercase()]
     }
 
     private fun builtInValues(payload: SharedPayload) = linkedMapOf(
