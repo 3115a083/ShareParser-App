@@ -29,6 +29,7 @@ class ShareOverlayService : Service() {
     private var overlay: View? = null
     private var windowManager: WindowManager? = null
     private var pendingId: String? = null
+    private var selectedProfileId: String? = null
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -39,6 +40,7 @@ class ShareOverlayService : Service() {
             return START_NOT_STICKY
         }
         pendingId = id
+        selectedProfileId = null
         show(id)
         handler.removeCallbacksAndMessages(null)
         handler.postDelayed({ dismiss(removePending = true) }, 60_000L)
@@ -52,7 +54,17 @@ class ShareOverlayService : Service() {
             return
         }
         val coordinator = ShareCoordinator(this)
-        val choices = coordinator.choices(pending.payload, ShareSelectionMode.OVERLAY)
+        val matches = coordinator.matchingProfiles(pending.payload)
+        val profileSelection = selectedProfileId == null && matches.size > 1
+        val choices = when {
+            profileSelection -> coordinator.profileChoices(pending.payload)
+            selectedProfileId != null -> coordinator.choicesForProfile(
+                pending.payload,
+                selectedProfileId.orEmpty(),
+                ShareSelectionMode.OVERLAY
+            )
+            else -> coordinator.choices(pending.payload, ShareSelectionMode.OVERLAY)
+        }
         if (choices.isEmpty()) {
             stopSelf()
             return
@@ -90,7 +102,11 @@ class ShareOverlayService : Service() {
                 setTypeface(typeface, android.graphics.Typeface.BOLD)
             })
             addView(TextView(this@ShareOverlayService).apply {
-                text = AppLocale.text("Weiterverarbeitung auswählen", "Select processing action")
+                text = if (profileSelection) {
+                    AppLocale.text("Profil auswählen", "Select profile")
+                } else {
+                    AppLocale.text("Aktion auswählen", "Select action")
+                }
                 textSize = 13f
                 setTextColor(onSurfaceVariant)
                 setPadding(0, dp(2), 0, 0)
@@ -115,8 +131,13 @@ class ShareOverlayService : Service() {
                 background = roundedBackground(primary, 12f)
                 setPadding(dp(14), dp(10), dp(14), dp(10))
                 setOnClickListener {
-                    coordinator.executePending(id, choice.profileId, choice.actionId)
-                    dismiss(removePending = false)
+                    if (choice.actionId == ShareCoordinator.SELECT_PROFILE_ACTION_ID) {
+                        selectedProfileId = choice.profileId
+                        show(id)
+                    } else {
+                        coordinator.executePending(id, choice.profileId, choice.actionId)
+                        dismiss(removePending = false)
+                    }
                 }
             }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
                 topMargin = dp(10)
@@ -211,6 +232,7 @@ class ShareOverlayService : Service() {
         removeOverlayOnly()
         if (removePending) pendingId?.let { PendingShareStore(this).remove(it) }
         pendingId = null
+        selectedProfileId = null
         stopSelf()
     }
 
