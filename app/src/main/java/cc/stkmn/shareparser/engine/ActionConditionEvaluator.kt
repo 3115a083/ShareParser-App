@@ -11,6 +11,7 @@ object ActionConditionEvaluator {
         is ProcessingAction.Calendar -> action.condition
         is ProcessingAction.Url -> action.condition
         is ProcessingAction.Share -> action.condition
+        is ProcessingAction.Target -> action.condition
         is ProcessingAction.Webhook -> action.condition
     }
 
@@ -18,6 +19,7 @@ object ActionConditionEvaluator {
         is ProcessingAction.Calendar -> action.elseOfActionId
         is ProcessingAction.Url -> action.elseOfActionId
         is ProcessingAction.Share -> action.elseOfActionId
+        is ProcessingAction.Target -> action.elseOfActionId
         is ProcessingAction.Webhook -> action.elseOfActionId
     }
 
@@ -65,6 +67,7 @@ object ActionConditionEvaluator {
         is ProcessingAction.Calendar -> action.copy(condition = value)
         is ProcessingAction.Url -> action.copy(condition = value)
         is ProcessingAction.Share -> action.copy(condition = value)
+        is ProcessingAction.Target -> action.copy(condition = value)
         is ProcessingAction.Webhook -> action.copy(condition = value)
     }
 
@@ -72,6 +75,7 @@ object ActionConditionEvaluator {
         is ProcessingAction.Calendar -> action.copy(elseOfActionId = actionId)
         is ProcessingAction.Url -> action.copy(elseOfActionId = actionId)
         is ProcessingAction.Share -> action.copy(elseOfActionId = actionId)
+        is ProcessingAction.Target -> action.copy(elseOfActionId = actionId)
         is ProcessingAction.Webhook -> action.copy(elseOfActionId = actionId)
     }
 }
