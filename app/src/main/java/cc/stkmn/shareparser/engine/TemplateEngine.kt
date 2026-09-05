@@ -39,12 +39,13 @@ object TemplateEngine {
     ): String {
         val tokens = findTokens(template)
         if (tokens.isEmpty()) return template
+        val normalizedValues = values.entries.associate { it.key.lowercase() to it.value }
 
         val result = StringBuilder(template.length)
         var cursor = 0
         for (token in tokens) {
             result.append(template, cursor, token.start)
-            val value = values[token.key] ?: missing(token.key)
+            val value = normalizedValues[token.key] ?: missing(token.key)
             result.append(applyModifier(value, token.key, token.modifier))
             cursor = token.endExclusive
         }
