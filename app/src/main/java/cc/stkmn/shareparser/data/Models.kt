@@ -6,7 +6,7 @@ import java.util.UUID
 
 @Serializable
 data class ProfileBundle(
-    val schemaVersion: Int = 11,
+    val schemaVersion: Int = 12,
     val profile: Profile
 )
 
