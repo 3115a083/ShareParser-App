@@ -9,6 +9,7 @@ import cc.stkmn.shareparser.data.ProfileRepository
 import cc.stkmn.shareparser.data.SharedPayload
 import cc.stkmn.shareparser.data.ShareSelectionMode
 import cc.stkmn.shareparser.data.WebhookMode
+import cc.stkmn.shareparser.engine.ActionConditionEvaluator
 import cc.stkmn.shareparser.engine.ActionExecutor
 import cc.stkmn.shareparser.engine.ParserEngine
 import cc.stkmn.shareparser.engine.ProcessingException
@@ -37,8 +38,10 @@ class ShareCoordinator(context: Context) {
         payload: SharedPayload,
         mode: ShareSelectionMode = ShareSelectionMode.APP
     ): List<Choice> = matchingProfiles(payload).flatMap { profile ->
+        val values = runCatching { parser.extract(payload, profile) }.getOrDefault(emptyMap())
         profile.actions
             .filterNot { it is ProcessingAction.Webhook && it.mode == WebhookMode.ALWAYS }
+            .filter { action -> ActionConditionEvaluator.isAvailable(action, profile.actions, values) }
             .filter { action ->
                 when (mode) {
                     ShareSelectionMode.APP -> true
@@ -137,6 +140,9 @@ class ShareCoordinator(context: Context) {
     ): Boolean {
         return try {
             val extracted = parser.extract(payload, profile)
+            if (!ActionConditionEvaluator.isAvailable(action, profile.actions, extracted)) {
+                return true
+            }
             val result = ActionExecutor(appContext, repository.settings(), backgroundMode).execute(action, extracted)
             WarningNotifier.show(appContext, result.warnings)
             true
