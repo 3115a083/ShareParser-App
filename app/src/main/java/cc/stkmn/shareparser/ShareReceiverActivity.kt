@@ -48,6 +48,29 @@ class ShareReceiverActivity : ComponentActivity() {
         val allChoices = coordinator.choices(payload, ShareSelectionMode.APP)
         val choices = coordinator.choices(payload, settings.shareSelectionMode)
 
+        if (matches.size > 1) {
+            val pending = pendingStore.put(payload)
+            when (settings.shareSelectionMode) {
+                ShareSelectionMode.APP -> openApp(pending.id)
+                ShareSelectionMode.NOTIFICATION -> {
+                    val profiles = coordinator.profileChoices(payload)
+                    if (!ShareSelectionNotifier.show(this, pending.id, profiles)) openApp(pending.id)
+                }
+                ShareSelectionMode.OVERLAY -> {
+                    if (Settings.canDrawOverlays(this)) {
+                        startService(
+                            Intent(this, ShareOverlayService::class.java)
+                                .putExtra(ShareOverlayService.EXTRA_PENDING_ID, pending.id)
+                        )
+                    } else {
+                        openApp(pending.id)
+                    }
+                }
+            }
+            finish()
+            return
+        }
+
         if (allChoices.isEmpty() && matches.isNotEmpty()) {
             finish()
             return
