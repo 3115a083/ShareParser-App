@@ -53,7 +53,7 @@ class ShareReceiverActivity : ComponentActivity() {
             return
         }
 
-        if (choices.size == 1) {
+        if (choices.size == 1 && !ShareCoordinator.isExtraChoice(choices.first())) {
             val choice = choices.first()
             coordinator.execute(payload, choice.profileId, choice.actionId)
             finish()
