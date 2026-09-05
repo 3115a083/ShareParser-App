@@ -769,9 +769,13 @@ internal fun ProfileEditorScreen(
                 )
             }
             val activeAppMatcher = matchers.firstOrNull { it.variableKey == "source_package" }
-            val activePackage = activeAppMatcher?.let { matcher ->
-                sourceApps.firstOrNull { Regex.escape(it.packageName) == matcher.regex }?.packageName
-            }
+            val selectedSourceApps = activeAppMatcher?.let { matcher ->
+                sourceApps.filter { app ->
+                    runCatching {
+                        Regex(matcher.regex).matches(app.packageName)
+                    }.getOrDefault(false)
+                }
+            }.orEmpty()
             Card(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("Teilende App", fontWeight = FontWeight.SemiBold)
@@ -818,10 +822,10 @@ internal fun ProfileEditorScreen(
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Text(
-                            activeAppMatcher?.friendlyText
-                                ?.substringAfter("Teilende App ")
-                                ?.ifBlank { null }
-                                ?: "App auswählen"
+                            if (selectedSourceApps.isEmpty()) "Apps auswählen"
+                            else selectedSourceApps.joinToString(", ") { it.label },
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis
                         )
                     }
                     DropdownMenu(expanded = sourceAppMenu, onDismissRequest = { sourceAppMenu = false }) {
@@ -840,29 +844,40 @@ internal fun ProfileEditorScreen(
                                 },
                                 onClick = {
                                     val join = activeAppMatcher?.join ?: MatcherJoin.AND
+                                    val current = selectedSourceApps.map { it.packageName }.toMutableSet()
+                                    if (app.packageName in current) current.remove(app.packageName) else current.add(app.packageName)
                                     matchers.removeAll { it.variableKey == "source_package" }
-                                    matchers += MatcherRule(
-                                        regex = Regex.escape(app.packageName),
-                                        ignoreCase = false,
-                                        friendlyText = "Teilende App " +
-                                            (if (sourceAppNegated) "ist nicht " else "ist ") +
-                                            app.label,
-                                        variableKey = "source_package",
-                                        join = join,
-                                        valueMode = MatcherValueMode.REGEX,
-                                        negate = sourceAppNegated
-                                    )
-                                    sourceAppMenu = false
+                                    if (current.isNotEmpty()) {
+                                        val chosen = sourceApps.filter { it.packageName in current }
+                                        val regex = current.joinToString(
+                                            prefix = "^(?:",
+                                            postfix = ")$",
+                                            separator = "|"
+                                        ) { Regex.escape(it) }
+                                        matchers += MatcherRule(
+                                            regex = regex,
+                                            ignoreCase = false,
+                                            friendlyText = "Teilende App " +
+                                                (if (sourceAppNegated) "ist nicht " else "ist ") +
+                                                chosen.joinToString(" oder ") { it.label },
+                                            variableKey = "source_package",
+                                            join = join,
+                                            valueMode = MatcherValueMode.REGEX,
+                                            negate = sourceAppNegated
+                                        )
+                                    }
                                 }
                             )
                         }
                     }
-                    if (activePackage != null) {
-                        TechnicalValue(
-                            value = activePackage,
-                            onCopy = { clipboard.setText(AnnotatedString(activePackage)) },
-                            maxLines = 1
-                        )
+                    if (selectedSourceApps.isNotEmpty()) {
+                        selectedSourceApps.forEach { selectedApp ->
+                            TechnicalValue(
+                                value = selectedApp.packageName,
+                                onCopy = { clipboard.setText(AnnotatedString(selectedApp.packageName)) },
+                                maxLines = 1
+                            )
+                        }
                     }
                     if (activeAppMatcher != null) {
                         TextButton(onClick = { matchers.remove(activeAppMatcher) }) {
