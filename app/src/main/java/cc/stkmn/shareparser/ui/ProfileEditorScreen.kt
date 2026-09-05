@@ -2468,7 +2468,7 @@ private fun ActionConditionEditor(
             }
             if (expanded) {
                 condition.clauses.forEachIndexed { index, clause ->
-                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         if (index > 0) {
                             OutlinedButton(
                                 onClick = {
@@ -2602,7 +2602,26 @@ private fun CalendarActionFields(
     TemplateField("Ort", action.locationTemplate, variables) { onChange(action.copy(locationTemplate = it)) }
     TemplateField("Beginn oder Zeitraum", action.startTemplate, variables, placeholder = "z. B. {{datum}} {{zeit}} oder morgen 12-14") { onChange(action.copy(startTemplate = it, startPattern = "")) }
     TemplateField("Ende, optional", action.endTemplate, variables, placeholder = "Nur nötig, wenn der Beginn keinen Zeitraum enthält") { onChange(action.copy(endTemplate = it, endPattern = "")) }
-    TemplateField("Dauer, optional", action.durationTemplate, variables, placeholder = "z. B. 1,5h, 2h, 90 Minuten, eine Stunde") { onChange(action.copy(durationTemplate = it)) }
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.Top,
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        TemplateField(
+            "Dauer, optional",
+            action.durationTemplate,
+            variables,
+            placeholder = "z. B. 1,5h, 2h, 90 Minuten, eine Stunde",
+            modifier = Modifier.weight(1f)
+        ) { onChange(action.copy(durationTemplate = it)) }
+        Column(
+            modifier = Modifier.padding(top = 8.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Switch(action.allDay, { onChange(action.copy(allDay = it)) })
+            Text("Ganztägig", style = MaterialTheme.typography.bodySmall)
+        }
+    }
     CalendarPickerField(action = action, onChange = { onChange(it) })
 
     Text("Zielkalender-Verhalten", fontWeight = FontWeight.SemiBold)
@@ -2630,10 +2649,6 @@ private fun CalendarActionFields(
         }
     }
 
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Switch(action.allDay, { onChange(action.copy(allDay = it)) })
-        Text("Ganztägig")
-    }
 }
 
 @Composable
@@ -2724,6 +2739,7 @@ private fun ShareActionFields(
     TemplateField("Nachricht", action.textTemplate, variables, minLines = 4) { onChange(action.copy(textTemplate = it)) }
     Row(verticalAlignment = Alignment.CenterVertically) {
         Switch(action.asFile, { onChange(action.copy(asFile = it)) })
+        Spacer(Modifier.width(12.dp))
         Column {
             Text("Als Textdatei ausgeben")
             Text("Erzeugt aus dem transformierten Text eine Datei statt nur normalen Android-Text.", style = MaterialTheme.typography.bodySmall)
@@ -2918,6 +2934,7 @@ private fun TemplateField(
     urlEncodeVariables: Boolean = false,
     copyTechnicalValue: Boolean = false,
     jsonEncodeVariables: Boolean = false,
+    modifier: Modifier = Modifier,
     onChange: (String) -> Unit
 ) {
     val clipboard = LocalClipboardManager.current
@@ -2981,6 +2998,26 @@ private fun TemplateField(
                     label = { Text(variableLabel(variable)) }
                 )
             }
+        }
+    }
+}
+
+@Composable
+private fun PrimaryEditorSectionHeader(
+    text: String,
+    content: @Composable () -> Unit = {}
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        color = MaterialTheme.colorScheme.surfaceVariant,
+        shape = RoundedCornerShape(12.dp)
+    ) {
+        Column(
+            Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Text(text, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+            content()
         }
     }
 }
