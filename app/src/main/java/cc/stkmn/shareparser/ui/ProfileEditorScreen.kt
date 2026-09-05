@@ -1451,6 +1451,7 @@ internal fun ProfileEditorScreen(
                         actions += duplicateAsElse(action)
                     }
                 },
+                onDuplicate = { actions.add(index + 1, duplicateAction(action)) },
                 onDelete = { if (index >= 0) actions.removeAt(index) }
             )
         }
@@ -2197,6 +2198,7 @@ private fun ActionEditorCard(
     onMoveDown: () -> Unit,
     onChange: (ProcessingAction) -> Unit,
     onAddElse: () -> Unit,
+    onDuplicate: () -> Unit,
     onDelete: () -> Unit
 ) {
     var iconMenu by remember { mutableStateOf(false) }
@@ -2251,12 +2253,25 @@ private fun ActionEditorCard(
                 Icon(actionIcon(action.icon), null)
                 Spacer(Modifier.width(8.dp))
                 Column(Modifier.weight(1f)) {
-                    Text(
-                        action.friendlyName,
-                        fontWeight = FontWeight.SemiBold,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            action.friendlyName,
+                            fontWeight = FontWeight.SemiBold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        ActionConditionEvaluator.condition(action)?.let { condition ->
+                            Spacer(Modifier.width(8.dp))
+                            Text(
+                                conditionSummary(condition),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.primary,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1f, fill = false)
+                            )
+                        }
+                    }
                     if (action.editorDescription.isNotBlank()) {
                         Text(
                             action.editorDescription,
@@ -2368,10 +2383,12 @@ private fun ActionEditorCard(
                 Text("Auswahl-Anzeige", fontWeight = FontWeight.SemiBold)
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Switch(actionShowInOverlay(action), { onChange(withOverlayVisibility(action, it)) })
+                    Spacer(Modifier.width(12.dp))
                     Text("Im Overlay anzeigen")
                 }
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Switch(actionShowInNotification(action), { onChange(withNotificationVisibility(action, it)) })
+                    Spacer(Modifier.width(12.dp))
                     Text("In Benachrichtigung anzeigen")
                 }
                 Text(
@@ -2382,7 +2399,17 @@ private fun ActionEditorCard(
                     is ProcessingAction.Calendar -> CalendarActionFields(action, variables, onChange)
                     is ProcessingAction.Url -> UrlActionFields(action, variables, onChange)
                     is ProcessingAction.Share -> ShareActionFields(action, variables, previewValues, onChange)
+                    is ProcessingAction.Target -> TargetActionFields(action, variables, onChange)
                     is ProcessingAction.Webhook -> WebhookActionFields(action, variables, onChange)
+                }
+                HorizontalDivider()
+                OutlinedButton(
+                    onClick = onDuplicate,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(Icons.Outlined.ContentCopy, null)
+                    Spacer(Modifier.width(8.dp))
+                    Text("Aktion duplizieren")
                 }
             }
         }
