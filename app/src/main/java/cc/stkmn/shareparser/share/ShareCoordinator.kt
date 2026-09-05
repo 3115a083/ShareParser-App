@@ -73,7 +73,7 @@ class ShareCoordinator(context: Context) {
                     )
                 }
         }
-        return profileChoices + extraChoices(payload)
+        return if (mode == ShareSelectionMode.APP) profileChoices + extraChoices(payload) else profileChoices
     }
 
     private fun extraChoices(payload: SharedPayload): List<Choice> {
