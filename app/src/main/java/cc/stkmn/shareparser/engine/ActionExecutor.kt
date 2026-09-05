@@ -305,8 +305,10 @@ class ActionExecutor(context: Context, private val settings: AppSettings = AppSe
 
         when (action.openMode) {
             UrlOpenMode.BROWSER -> {
-                val browserIntent = Intent(Intent.ACTION_VIEW, uri).addCategory(Intent.CATEGORY_BROWSABLE)
-                launch(browserIntent, "url", "Link konnte nicht im Browser geöffnet werden")
+                val viewIntent = Intent(Intent.ACTION_VIEW, uri).apply {
+                    if (scheme == "http" || scheme == "https") addCategory(Intent.CATEGORY_BROWSABLE)
+                }
+                launch(viewIntent, "url", "Link konnte nicht geöffnet werden")
             }
             UrlOpenMode.WEBVIEW -> {
                 if (scheme !in setOf("http", "https")) {
