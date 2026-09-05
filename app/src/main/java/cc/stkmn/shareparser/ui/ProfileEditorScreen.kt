@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -37,6 +38,7 @@ import androidx.compose.material.icons.outlined.Fullscreen
 import androidx.compose.material.icons.outlined.FullscreenExit
 import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material.icons.outlined.Splitscreen
+import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.AssistChipDefaults
@@ -1722,7 +1724,7 @@ private fun ExtractorCard(
                 }
                 item {
                     OutlinedButton(onClick = { details = !details }) {
-                        Icon(if (details) Icons.Outlined.ExpandLess else Icons.Outlined.Transform, null)
+                        Icon(if (details) Icons.Outlined.ExpandLess else Icons.Outlined.Tune, null)
                         Spacer(Modifier.width(6.dp))
                         Text(if (details) "Umwandlungen schließen" else "Umwandlungen", maxLines = 1)
                     }
