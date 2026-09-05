@@ -448,7 +448,7 @@ private fun ExtraShareToggle(
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(title, modifier = Modifier.weight(1f))
-        androidx.compose.foundation.layout.Spacer(Modifier.padding(horizontal = 6.dp))
+        androidx.compose.foundation.layout.Spacer(Modifier.width(12.dp))
         Switch(checked = checked, onCheckedChange = onChange)
     }
 }
