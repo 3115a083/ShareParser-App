@@ -103,6 +103,7 @@ import cc.stkmn.shareparser.data.Profile
 import cc.stkmn.shareparser.data.ProfileRepository
 import cc.stkmn.shareparser.data.SharedPayload
 import cc.stkmn.shareparser.data.TextFileMode
+import cc.stkmn.shareparser.data.TargetType
 import cc.stkmn.shareparser.data.UrlOpenMode
 import cc.stkmn.shareparser.data.ValueTransform
 import cc.stkmn.shareparser.data.WebhookMode
@@ -122,7 +123,9 @@ private val reservedVariables = setOf(
     "source_app",
     "source_package",
     "file_name",
-    "mime_type"
+    "mime_type",
+    "target",
+    "target_type"
 )
 
 @OptIn(ExperimentalFoundationApi::class)
@@ -307,7 +310,7 @@ internal fun ProfileEditorScreen(
                 }
             }
         }
-        if (profile.actions.isEmpty()) return "Mindestens eine Weiterverarbeitung hinzufügen."
+        if (profile.actions.isEmpty()) return "Mindestens eine Aktion hinzufügen."
         return null
     }
 
@@ -687,7 +690,7 @@ internal fun ProfileEditorScreen(
                     FilterChip(
                         selected = activeEditorSection == "actions",
                         onClick = { navigationScope.launch { editorListState.animateScrollToItem(actionsIndex) } },
-                        label = { Text("Weiterverarbeitung") }
+                        label = { Text("Aktionen") }
                     )
                 }
             }
@@ -771,8 +774,8 @@ internal fun ProfileEditorScreen(
         }
 
         item {
-            EditorSectionHeader(
-                "Profil automatisch erkennen",
+            PrimaryEditorSectionHeader(
+                "Profil erkennen",
                 Modifier
             )
         }
@@ -1295,15 +1298,9 @@ internal fun ProfileEditorScreen(
         }
 
         item {
-            Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                HorizontalDivider()
+            PrimaryEditorSectionHeader("Variablen") {
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        "Variablen",
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.weight(1f)
-                    )
+                    Spacer(Modifier.weight(1f))
                     TextButton(onClick = {
                         applyExtractor(ExtractorRule(key = "", regex = "(.+)", required = false))
                     }) {
@@ -1382,15 +1379,9 @@ internal fun ProfileEditorScreen(
         }
 
         item {
-            Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                HorizontalDivider()
+            PrimaryEditorSectionHeader("Aktionen") {
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        "Weiterverarbeitung",
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.weight(1f)
-                    )
+                    Spacer(Modifier.weight(1f))
                     Row {
                         Column {
                             TextButton(onClick = { addActionMenu = true }) {
@@ -1401,6 +1392,7 @@ internal fun ProfileEditorScreen(
                                 DropdownMenuItem(text = { Text("Kalendereintrag") }, onClick = { actions += defaultCalendarAction(); addActionMenu = false })
                                 DropdownMenuItem(text = { Text("URL öffnen") }, onClick = { actions += defaultUrlAction(); addActionMenu = false })
                                 DropdownMenuItem(text = { Text("Text oder Textdatei") }, onClick = { actions += defaultShareAction(); addActionMenu = false })
+                                DropdownMenuItem(text = { Text("Ziel öffnen") }, onClick = { actions += defaultTargetAction(); addActionMenu = false })
                                 DropdownMenuItem(text = { Text("Webhook") }, onClick = { actions += defaultWebhookAction(); addActionMenu = false })
                             }
                         }
@@ -1414,7 +1406,7 @@ internal fun ProfileEditorScreen(
                 style = MaterialTheme.typography.bodySmall
             )
         }
-        val variables = listOf("subject", "text", "input", "source_app", "source_package", "file_name", "mime_type") + extractors.map { it.key.lowercase() }.filter { it.isNotBlank() }
+        val variables = listOf("subject", "text", "input", "source_app", "source_package", "file_name", "mime_type", "target", "target_type") + extractors.map { it.key.lowercase() }.filter { it.isNotBlank() }
         val actionPreviewValues = sample?.let { currentSample ->
             runCatching {
                 parser.extract(
