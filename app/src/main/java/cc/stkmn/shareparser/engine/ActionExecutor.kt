@@ -21,6 +21,7 @@ import cc.stkmn.shareparser.data.DateTimeLocale
 import cc.stkmn.shareparser.data.EmptyValuePolicy
 import cc.stkmn.shareparser.data.ProcessingAction
 import cc.stkmn.shareparser.data.TextFileMode
+import cc.stkmn.shareparser.data.TargetType
 import cc.stkmn.shareparser.data.UrlOpenMode
 import java.io.File
 import java.net.HttpURLConnection
@@ -42,7 +43,46 @@ class ActionExecutor(context: Context, private val settings: AppSettings = AppSe
         is ProcessingAction.Calendar -> openCalendar(action, values)
         is ProcessingAction.Url -> openUrl(action, values)
         is ProcessingAction.Share -> shareText(action, values)
+        is ProcessingAction.Target -> openTarget(action, values)
         is ProcessingAction.Webhook -> sendWebhook(action, values)
+    }
+
+    private fun openTarget(action: ProcessingAction.Target, values: Map<String, String>): ExecutionResult {
+        val raw = TemplateEngine.render(action.targetTemplate, values).trim()
+        if (raw.isBlank()) {
+            throw ProcessingException("Das Ziel ist leer.", "target", "Rendered target is blank")
+        }
+        val inferred = when {
+            raw.startsWith("geo:", true) -> TargetType.MAP
+            raw.startsWith("tel:", true) -> TargetType.PHONE
+            raw.startsWith("mailto:", true) -> TargetType.EMAIL
+            raw.startsWith("http://", true) || raw.startsWith("https://", true) || raw.startsWith("www.", true) -> TargetType.WEB
+            else -> TargetType.WEB
+        }
+        val type = if (action.targetType == TargetType.AUTO) inferred else action.targetType
+        val target = when (type) {
+            TargetType.AUTO -> raw
+            TargetType.WEB -> when {
+                raw.startsWith("http://", true) || raw.startsWith("https://", true) -> raw
+                raw.startsWith("www.", true) -> "https://$raw"
+                else -> "https://$raw"
+            }
+            TargetType.MAP -> if (raw.startsWith("geo:", true)) raw else "geo:0,0?q=${Uri.encode(raw)}"
+            TargetType.PHONE -> if (raw.startsWith("tel:", true)) raw else "tel:${raw.filter { it.isDigit() || it == '+' || it == '*' || it == '#' }}"
+            TargetType.EMAIL -> if (raw.startsWith("mailto:", true)) raw else "mailto:$raw"
+        }
+        val uri = runCatching { Uri.parse(target) }.getOrElse {
+            throw ProcessingException("Das Ziel ist ungültig.", "target", it.message ?: it.toString())
+        }
+        val scheme = uri.scheme?.lowercase()
+        if (scheme !in setOf("http", "https", "geo", "tel", "mailto")) {
+            throw ProcessingException("Das Ziel-Schema ist nicht erlaubt.", "target", "Rejected target scheme: $scheme")
+        }
+        val intent = Intent(Intent.ACTION_VIEW, uri).apply {
+            if (scheme == "http" || scheme == "https") addCategory(Intent.CATEGORY_BROWSABLE)
+        }
+        launch(intent, "target", "Ziel konnte nicht geöffnet werden")
+        return ExecutionResult()
     }
 
     private fun openCalendar(action: ProcessingAction.Calendar, values: Map<String, String>): ExecutionResult {
