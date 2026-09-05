@@ -778,10 +778,7 @@ internal fun ProfileEditorScreen(
         }
 
         item {
-            PrimaryEditorSectionHeader(
-                "Profil erkennen",
-                Modifier
-            )
+            PrimaryEditorSectionHeader("Profil erkennen")
         }
         item {
             Text(
@@ -2501,7 +2498,7 @@ private fun ActionConditionEditor(
             }
             if (expanded) {
                 condition.clauses.forEachIndexed { index, clause ->
-                    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         if (index > 0) {
                             OutlinedButton(
                                 onClick = {
