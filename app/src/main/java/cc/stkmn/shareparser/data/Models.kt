@@ -220,7 +220,8 @@ data class AppSettings(
     val extraShareMap: Boolean = false,
     val extraShareWebLink: Boolean = false,
     val extraSharePhone: Boolean = false,
-    val extraShareEmail: Boolean = false
+    val extraShareEmail: Boolean = false,
+    val extraShareFileOpen: Boolean = false
 )
 
 @Serializable
