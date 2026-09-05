@@ -1371,7 +1371,20 @@ internal fun ProfileEditorScreen(
                 style = MaterialTheme.typography.bodySmall
             )
         }
-        val variables = listOf("subject", "text", "input", "source_app", "source_package", "file_name", "mime_type") + extractors.map { it.key }.filter { it.isNotBlank() }
+        val variables = listOf("subject", "text", "input", "source_app", "source_package", "file_name", "mime_type") + extractors.map { it.key.lowercase() }.filter { it.isNotBlank() }
+        val actionPreviewValues = sample?.let { currentSample ->
+            runCatching {
+                parser.extract(
+                    currentSample,
+                    Profile(
+                        id = "preview",
+                        name = "preview",
+                        extractors = extractors.toList(),
+                        parseDirection = parseDirection
+                    )
+                )
+            }.getOrNull()
+        }.orEmpty()
         items(actions, key = { it.id }) { action ->
             val index = actions.indexOfFirst { it.id == action.id }
             ActionEditorCard(
@@ -1379,6 +1392,7 @@ internal fun ProfileEditorScreen(
                 position = index + 1,
                 allActions = actions.toList(),
                 variables = variables,
+                previewValues = actionPreviewValues,
                 highlighted = highlightField?.startsWith(actionHighlightPrefix(action)) == true || highlightField == action.id,
                 canMoveUp = index > 0,
                 canMoveDown = index >= 0 && index < actions.lastIndex,
@@ -2135,6 +2149,7 @@ private fun ActionEditorCard(
     position: Int,
     allActions: List<ProcessingAction>,
     variables: List<String>,
+    previewValues: Map<String, String>,
     highlighted: Boolean,
     canMoveUp: Boolean,
     canMoveDown: Boolean,
@@ -2298,7 +2313,7 @@ private fun ActionEditorCard(
                 when (action) {
                     is ProcessingAction.Calendar -> CalendarActionFields(action, variables, onChange)
                     is ProcessingAction.Url -> UrlActionFields(action, variables, onChange)
-                    is ProcessingAction.Share -> ShareActionFields(action, variables, onChange)
+                    is ProcessingAction.Share -> ShareActionFields(action, variables, previewValues, onChange)
                     is ProcessingAction.Webhook -> WebhookActionFields(action, variables, onChange)
                 }
             }
@@ -2582,7 +2597,12 @@ private fun UrlActionFields(action: ProcessingAction.Url, variables: List<String
 }
 
 @Composable
-private fun ShareActionFields(action: ProcessingAction.Share, variables: List<String>, onChange: (ProcessingAction) -> Unit) {
+private fun ShareActionFields(
+    action: ProcessingAction.Share,
+    variables: List<String>,
+    previewValues: Map<String, String>,
+    onChange: (ProcessingAction) -> Unit
+) {
     TemplateField("Betreff", action.subjectTemplate, variables) { onChange(action.copy(subjectTemplate = it)) }
     TemplateField("Nachricht", action.textTemplate, variables, minLines = 4) { onChange(action.copy(textTemplate = it)) }
     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -2629,6 +2649,19 @@ private fun ShareActionFields(action: ProcessingAction.Share, variables: List<St
             variables,
             placeholder = "z. B. {{datum}}-{{ort}}"
         ) { onChange(action.copy(fileNameTemplate = it)) }
+        if (previewValues.isNotEmpty() && action.fileNameTemplate.isNotBlank()) {
+            val renderedPreview = remember(action.fileNameTemplate, action.fileExtension, previewValues) {
+                val rendered = TemplateEngine.renderLenient(action.fileNameTemplate, previewValues) { "" }
+                previewResolvedFileName(rendered, action.fileExtension.ifBlank {
+                    inferEditorExtension(action.fileNameTemplate, action.mimeType)
+                })
+            }
+            Text(
+                "Vorschau: ${renderedPreview}",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
         TemplateField(
             "Unterordner, optional",
             action.relativePathTemplate,
@@ -2741,7 +2774,7 @@ private fun TemplateField(
             field = TextFieldValue(value, selection = TextRange(pos))
         }
     }
-    val known = variables.toSet()
+    val known = variables.map { it.lowercase() }.toSet()
     val detected = remember(field.text) { TemplateEngine.variables(field.text) }
     val unknown = detected - known
 
@@ -2967,6 +3000,22 @@ private fun isKnownTextExtension(value: String): Boolean =
         "csv", "tsv", "json", "xml", "yaml", "yml", "css", "js", "mjs", "ics",
         "sql", "kt", "java", "py", "sh"
     )
+
+private fun previewResolvedFileName(rendered: String, extension: String): String {
+    val safe = rendered
+        .substringAfterLast('/')
+        .substringAfterLast('\\')
+        .trim()
+        .replace(Regex("[\\u0000-\\u001F<>:\"/\\\\|?*]+"), "_")
+        .replace(Regex("[. ]+$"), "")
+        .take(180)
+        .ifBlank { "shareparser" }
+    val ext = extension.trim().removePrefix(".").lowercase().replace(Regex("[^a-z0-9]+"), "").take(12)
+    if (ext.isBlank()) return safe
+    val dot = safe.lastIndexOf('.')
+    val base = if (dot > 0) safe.substring(0, dot) else safe
+    return "$base.$ext"
+}
 
 private fun safeFileName(name: String): String = name
     .trim()
