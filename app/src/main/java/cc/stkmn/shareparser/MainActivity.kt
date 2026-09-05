@@ -47,6 +47,7 @@ import cc.stkmn.shareparser.data.PendingShareStore
 import cc.stkmn.shareparser.data.Profile
 import cc.stkmn.shareparser.data.ProfileRepository
 import cc.stkmn.shareparser.data.SharedPayload
+import cc.stkmn.shareparser.ui.AdditionalShareSettingsScreen
 import cc.stkmn.shareparser.ui.AppearanceSettingsScreen
 import cc.stkmn.shareparser.ui.FailureScreen
 import cc.stkmn.shareparser.ui.HomeScreen
@@ -101,6 +102,7 @@ private sealed interface Screen {
     data object Home : Screen
     data object Settings : Screen
     data object AppearanceSettings : Screen
+    data object AdditionalShareSettings : Screen
     data object LanguageSettings : Screen
     data object RegionalSettings : Screen
     data class Editor(
@@ -113,7 +115,7 @@ private sealed interface Screen {
 }
 
 private fun previousScreen(screen: Screen): Screen = when (screen) {
-    Screen.RegionalSettings, Screen.LanguageSettings, Screen.AppearanceSettings -> Screen.Settings
+    Screen.RegionalSettings, Screen.LanguageSettings, Screen.AppearanceSettings, Screen.AdditionalShareSettings -> Screen.Settings
     Screen.Settings, is Screen.Editor, is Screen.Shared, Screen.Failure -> Screen.Home
     Screen.Home -> Screen.Home
 }
@@ -212,6 +214,7 @@ private fun ShareParserApp(startIntent: Intent?, onIntentConsumed: () -> Unit) {
                                     Screen.Home -> "ShareParser"
                                     Screen.Settings -> "Einstellungen"
                                     Screen.AppearanceSettings -> "Darstellung"
+                                    Screen.AdditionalShareSettings -> "Zusätzliche Teiloptionen"
                                     Screen.LanguageSettings -> "App-Sprache"
                                     Screen.RegionalSettings -> "Datum und Uhrzeit"
                                     is Screen.Editor -> if (current.profile == null) "Profil erstellen" else "Profil bearbeiten"
@@ -281,6 +284,7 @@ private fun ShareParserApp(startIntent: Intent?, onIntentConsumed: () -> Unit) {
                         onRegionalSettings = { screen = Screen.RegionalSettings },
                         onLanguageSettings = { screen = Screen.LanguageSettings },
                         onAppearanceSettings = { screen = Screen.AppearanceSettings },
+                        onAdditionalShareSettings = { screen = Screen.AdditionalShareSettings },
                         onSettingsChanged = { appSettings = it }
                     )
                     Screen.AppearanceSettings -> AppearanceSettingsScreen(
@@ -289,6 +293,10 @@ private fun ShareParserApp(startIntent: Intent?, onIntentConsumed: () -> Unit) {
                             appSettings = changed
                             repository.saveSettings(changed)
                         }
+                    )
+                    Screen.AdditionalShareSettings -> AdditionalShareSettingsScreen(
+                        repository = repository,
+                        onSettingsChanged = { appSettings = it }
                     )
                     Screen.LanguageSettings -> LanguageSettingsScreen(
                         repository = repository,
