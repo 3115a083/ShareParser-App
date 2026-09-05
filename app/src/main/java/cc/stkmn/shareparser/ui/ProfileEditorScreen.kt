@@ -2836,6 +2836,35 @@ private fun ShareActionFields(
 }
 
 @Composable
+private fun TargetActionFields(
+    action: ProcessingAction.Target,
+    variables: List<String>,
+    onChange: (ProcessingAction) -> Unit
+) {
+    Text("Ziel öffnen", fontWeight = FontWeight.SemiBold)
+    TemplateField(
+        label = "Ziel",
+        value = action.targetTemplate,
+        variables = variables,
+        placeholder = "{{target}} oder eine verarbeitete Variable",
+        minLines = 2,
+        copyTechnicalValue = true
+    ) { onChange(action.copy(targetTemplate = it)) }
+    Text("Format", fontWeight = FontWeight.SemiBold)
+    LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        item { FilterChip(action.targetType == TargetType.AUTO, { onChange(action.copy(targetType = TargetType.AUTO)) }, label = { Text("Automatisch") }) }
+        item { FilterChip(action.targetType == TargetType.WEB, { onChange(action.copy(targetType = TargetType.WEB)) }, label = { Text("Web") }) }
+        item { FilterChip(action.targetType == TargetType.MAP, { onChange(action.copy(targetType = TargetType.MAP)) }, label = { Text("Karte") }) }
+        item { FilterChip(action.targetType == TargetType.PHONE, { onChange(action.copy(targetType = TargetType.PHONE)) }, label = { Text("Telefon") }) }
+        item { FilterChip(action.targetType == TargetType.EMAIL, { onChange(action.copy(targetType = TargetType.EMAIL)) }, label = { Text("E-Mail") }) }
+    }
+    Text(
+        "Automatisch erkennt http/https, geo, tel und mailto. Bei einem festen Format ergänzt ShareParser das passende sichere Schema.",
+        style = MaterialTheme.typography.bodySmall
+    )
+}
+
+@Composable
 private fun WebhookActionFields(action: ProcessingAction.Webhook, variables: List<String>, onChange: (ProcessingAction) -> Unit) {
     Text("Webhook", fontWeight = FontWeight.SemiBold)
     TemplateField(
@@ -2996,10 +3025,19 @@ private fun actionTemplates(action: ProcessingAction): List<Pair<String, String>
         "Dateiname" to action.fileNameTemplate,
         "Unterordner" to action.relativePathTemplate
     )
+    is ProcessingAction.Target -> listOf("Ziel" to action.targetTemplate)
     is ProcessingAction.Webhook -> listOf(
         "Webhook-URL" to action.urlTemplate,
         "Webhook-Inhalt" to action.bodyTemplate
     )
+}
+
+private fun duplicateAction(action: ProcessingAction): ProcessingAction = when (action) {
+    is ProcessingAction.Calendar -> action.copy(id = UUID.randomUUID().toString(), friendlyName = action.friendlyName + " (Kopie)")
+    is ProcessingAction.Url -> action.copy(id = UUID.randomUUID().toString(), friendlyName = action.friendlyName + " (Kopie)")
+    is ProcessingAction.Share -> action.copy(id = UUID.randomUUID().toString(), friendlyName = action.friendlyName + " (Kopie)")
+    is ProcessingAction.Target -> action.copy(id = UUID.randomUUID().toString(), friendlyName = action.friendlyName + " (Kopie)")
+    is ProcessingAction.Webhook -> action.copy(id = UUID.randomUUID().toString(), friendlyName = action.friendlyName + " (Kopie)")
 }
 
 private fun duplicateAsElse(action: ProcessingAction): ProcessingAction = when (action) {
@@ -3021,6 +3059,12 @@ private fun duplicateAsElse(action: ProcessingAction): ProcessingAction = when (
         condition = null,
         elseOfActionId = action.id
     )
+    is ProcessingAction.Target -> action.copy(
+        id = UUID.randomUUID().toString(),
+        friendlyName = action.friendlyName + " (Sonst)",
+        condition = null,
+        elseOfActionId = action.id
+    )
     is ProcessingAction.Webhook -> action.copy(
         id = UUID.randomUUID().toString(),
         friendlyName = action.friendlyName + " (Sonst)",
@@ -3032,12 +3076,14 @@ private fun duplicateAsElse(action: ProcessingAction): ProcessingAction = when (
 private fun defaultCalendarAction() = ProcessingAction.Calendar(UUID.randomUUID().toString(), "Kalender öffnen")
 private fun defaultUrlAction() = ProcessingAction.Url(UUID.randomUUID().toString(), "Link öffnen")
 private fun defaultShareAction() = ProcessingAction.Share(UUID.randomUUID().toString(), "Text weiterleiten", fileExtension = "txt")
+private fun defaultTargetAction() = ProcessingAction.Target(UUID.randomUUID().toString(), "Ziel öffnen")
 private fun defaultWebhookAction() = ProcessingAction.Webhook(UUID.randomUUID().toString(), "Webhook senden")
 
 private fun withFriendlyName(action: ProcessingAction, name: String): ProcessingAction = when (action) {
     is ProcessingAction.Calendar -> action.copy(friendlyName = name)
     is ProcessingAction.Url -> action.copy(friendlyName = name)
     is ProcessingAction.Share -> action.copy(friendlyName = name)
+    is ProcessingAction.Target -> action.copy(friendlyName = name)
     is ProcessingAction.Webhook -> action.copy(friendlyName = name)
 }
 
@@ -3045,6 +3091,7 @@ private fun withIcon(action: ProcessingAction, icon: String): ProcessingAction =
     is ProcessingAction.Calendar -> action.copy(icon = icon)
     is ProcessingAction.Url -> action.copy(icon = icon)
     is ProcessingAction.Share -> action.copy(icon = icon)
+    is ProcessingAction.Target -> action.copy(icon = icon)
     is ProcessingAction.Webhook -> action.copy(icon = icon)
 }
 
@@ -3052,6 +3099,7 @@ private fun withEditorDescription(action: ProcessingAction, description: String)
     is ProcessingAction.Calendar -> action.copy(editorDescription = description)
     is ProcessingAction.Url -> action.copy(editorDescription = description)
     is ProcessingAction.Share -> action.copy(editorDescription = description)
+    is ProcessingAction.Target -> action.copy(editorDescription = description)
     is ProcessingAction.Webhook -> action.copy(editorDescription = description)
 }
 
@@ -3060,6 +3108,7 @@ private fun actionShowInOverlay(action: ProcessingAction): Boolean = when (actio
     is ProcessingAction.Calendar -> action.showInOverlay
     is ProcessingAction.Url -> action.showInOverlay
     is ProcessingAction.Share -> action.showInOverlay
+    is ProcessingAction.Target -> action.showInOverlay
     is ProcessingAction.Webhook -> action.showInOverlay
 }
 
@@ -3067,6 +3116,7 @@ private fun actionShowInNotification(action: ProcessingAction): Boolean = when (
     is ProcessingAction.Calendar -> action.showInNotification
     is ProcessingAction.Url -> action.showInNotification
     is ProcessingAction.Share -> action.showInNotification
+    is ProcessingAction.Target -> action.showInNotification
     is ProcessingAction.Webhook -> action.showInNotification
 }
 
@@ -3074,6 +3124,7 @@ private fun withOverlayVisibility(action: ProcessingAction, visible: Boolean): P
     is ProcessingAction.Calendar -> action.copy(showInOverlay = visible)
     is ProcessingAction.Url -> action.copy(showInOverlay = visible)
     is ProcessingAction.Share -> action.copy(showInOverlay = visible)
+    is ProcessingAction.Target -> action.copy(showInOverlay = visible)
     is ProcessingAction.Webhook -> action.copy(showInOverlay = visible)
 }
 
@@ -3081,6 +3132,7 @@ private fun withNotificationVisibility(action: ProcessingAction, visible: Boolea
     is ProcessingAction.Calendar -> action.copy(showInNotification = visible)
     is ProcessingAction.Url -> action.copy(showInNotification = visible)
     is ProcessingAction.Share -> action.copy(showInNotification = visible)
+    is ProcessingAction.Target -> action.copy(showInNotification = visible)
     is ProcessingAction.Webhook -> action.copy(showInNotification = visible)
 }
 
@@ -3088,6 +3140,7 @@ private fun actionHighlightPrefix(action: ProcessingAction): String = when (acti
     is ProcessingAction.Calendar -> "calendar"
     is ProcessingAction.Url -> "url"
     is ProcessingAction.Share -> "share"
+    is ProcessingAction.Target -> "target"
     is ProcessingAction.Webhook -> "webhook"
 }
 
@@ -3128,6 +3181,8 @@ private fun variableLabel(key: String): String = when (key) {
     "source_package" -> "Paketname der teilenden App"
     "file_name" -> "Dateiname"
     "mime_type" -> "Inhaltstyp"
+    "target" -> "Geöffnetes Ziel"
+    "target_type" -> "Zieltyp"
     else -> key
 }
 
