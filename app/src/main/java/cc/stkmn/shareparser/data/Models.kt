@@ -6,7 +6,7 @@ import java.util.UUID
 
 @Serializable
 data class ProfileBundle(
-    val schemaVersion: Int = 12,
+    val schemaVersion: Int = 13,
     val profile: Profile
 )
 
@@ -168,7 +168,11 @@ enum class ColorPalette {
     OCEAN,
     PLUM,
     SLATE,
-    AMBER
+    AMBER,
+    FOREST,
+    ROSE,
+    TEAL,
+    INDIGO
 }
 
 @Serializable
@@ -197,6 +201,15 @@ enum class TextFileMode {
     SAVE
 }
 
+@Serializable
+enum class TargetType {
+    AUTO,
+    WEB,
+    MAP,
+    PHONE,
+    EMAIL
+}
+
 
 @Serializable
 enum class LauncherIcon {
@@ -221,7 +234,10 @@ data class AppSettings(
     val extraShareWebLink: Boolean = false,
     val extraSharePhone: Boolean = false,
     val extraShareEmail: Boolean = false,
-    val extraShareFileOpen: Boolean = false
+    val extraShareFileOpen: Boolean = false,
+    val extraShareCustomWeb: Boolean = false,
+    val extraShareCustomWebName: String = "",
+    val extraShareCustomWebUrl: String = ""
 )
 
 @Serializable
@@ -296,6 +312,21 @@ sealed class ProcessingAction {
     ) : ProcessingAction()
 
     @Serializable
+    @SerialName("target")
+    data class Target(
+        override val id: String,
+        override val friendlyName: String,
+        override val icon: String = "open_in_new",
+        override val editorDescription: String = "",
+        val condition: ActionCondition? = null,
+        val elseOfActionId: String = "",
+        val showInOverlay: Boolean = true,
+        val showInNotification: Boolean = true,
+        val targetTemplate: String = "{{target}}",
+        val targetType: TargetType = TargetType.AUTO
+    ) : ProcessingAction()
+
+    @Serializable
     @SerialName("webhook")
     data class Webhook(
         override val id: String,
@@ -323,7 +354,9 @@ data class SharedPayload(
     val sourcePackage: String = "",
     val sourceApp: String = "",
     val fileName: String = "",
-    val linkTargets: List<String> = emptyList()
+    val linkTargets: List<String> = emptyList(),
+    val target: String = "",
+    val targetType: String = ""
 ) {
     val combined: String
         get() = buildString {
