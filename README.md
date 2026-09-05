@@ -223,7 +223,7 @@ Processing actions can optionally have conditions. A condition can test whether 
 
 A conditioned action is shown only when its condition is true. The editor can also create an **ELSE** branch from an existing conditioned action. The else action is a normal editable action with its own URL, calendar, share or webhook configuration and appears only when the parent condition is false.
 
-Conditional blocks are visually indented and labeled separately from the actions so profiles with several branches remain readable.
+Conditions are configured inside each processing action. IF/ELSE branches stay attached to the affected action, support AND/OR and NOT for content checks, and can be distinguished in the editor with an optional short editor-only description.
 
 ## Action selection
 
@@ -233,7 +233,7 @@ Each action can be included or excluded from the overlay and notification surfac
 
 ## Optional built-in share actions
 
-Settings can enable additional share actions individually. They are disabled by default and appear only when ShareParser detects suitable content. Available options include opening a detected address in a maps app, opening a detected web link, phone number or email target, and recreating a shared text file with its detected extension for direct opening in a matching app.
+Settings can enable additional share actions individually. They are disabled by default and appear only when ShareParser detects suitable content. In the in-app picker they are grouped in a compact submenu. Available options include opening a detected address in a maps app, opening a detected web link, phone number or email target, and recreating a shared text file with its detected extension for direct opening in a matching app.
 
 These actions use the same Android selector surfaces as profile actions and do not require creating a profile first.
 
@@ -305,7 +305,7 @@ Save as `{{datum}}-{{Ort}}.md`.
 
 ## Profile sharing
 
-Profiles use a versioned JSON format. The current profile schema is version 11. Profiles can be copied, exported, shared and imported on another device. Unknown future fields are ignored where possible for forward compatibility.
+Profiles use a versioned JSON format. The current profile schema is version 12. Profiles can be copied, exported, shared and imported on another device. Unknown future fields are ignored where possible for forward compatibility.
 
 ## Android support and build
 
