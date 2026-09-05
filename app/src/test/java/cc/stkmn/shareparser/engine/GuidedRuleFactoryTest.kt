@@ -42,6 +42,7 @@ class GuidedRuleFactoryTest {
     fun sanitizeKeyAllowsTemporarilyBlankEditorValue() {
         assertEquals("", GuidedRuleFactory.sanitizeKey(""))
         assertEquals("mein_feld", GuidedRuleFactory.sanitizeKey("mein feld"))
+        assertEquals("ort", GuidedRuleFactory.sanitizeKey("Ort"))
     }
 
     @Test
@@ -110,6 +111,21 @@ class GuidedRuleFactoryTest {
             )["booking_link"]
         )
         assertTrue(candidates.any { it.source == InputSource.LINKS && it.value.startsWith("mailto:") })
+    }
+
+
+    @Test
+    fun emailSuggestionDoesNotBakeSampleAddressIntoRegex() {
+        val sample = SharedPayload(text = "Kontakt: max.mustermann@example.com")
+        val candidate = GuidedRuleFactory.candidates(sample).first { it.label == "E-Mail-Adresse" }
+        val rule = GuidedRuleFactory.extractor(candidate, "email")
+        val profile = Profile("mail", "Mail", extractors = listOf(rule))
+
+        assertEquals(
+            "anna@example.org",
+            parser.extract("Kontakt: anna@example.org", profile)["email"]
+        )
+        assertTrue("max.mustermann" !in rule.regex)
     }
 
 }
