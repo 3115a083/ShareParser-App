@@ -103,17 +103,32 @@ class ParserEngine {
         values[rule.sourceVariableKey.lowercase()]
     }
 
-    private fun builtInValues(payload: SharedPayload) = linkedMapOf(
-        "input" to payload.combined,
-        "text" to payload.text,
-        "subject" to payload.subject,
-        "source_app" to payload.sourceApp,
-        "source_package" to payload.sourcePackage,
-        "file_name" to payload.fileName,
-        "mime_type" to payload.mimeType,
-        "target" to payload.target,
-        "target_type" to payload.targetType
-    )
+    private fun builtInValues(payload: SharedPayload): LinkedHashMap<String, String> {
+        val candidates = GuidedRuleFactory.candidates(payload)
+        val sharedAddress = candidates.firstOrNull { it.suggestedKey == "adresse" }?.value.orEmpty()
+        val sharedWeb = candidates.firstOrNull {
+            it.suggestedKey == "link" &&
+                !it.value.startsWith("mailto:", true) &&
+                !it.value.startsWith("tel:", true)
+        }?.value.orEmpty()
+        val sharedPhone = candidates.firstOrNull { it.suggestedKey == "telefon" }?.value.orEmpty()
+        val sharedEmail = candidates.firstOrNull { it.suggestedKey == "email" }?.value.orEmpty()
+        return linkedMapOf(
+            "input" to payload.combined,
+            "text" to payload.text,
+            "subject" to payload.subject,
+            "source_app" to payload.sourceApp,
+            "source_package" to payload.sourcePackage,
+            "file_name" to payload.fileName,
+            "mime_type" to payload.mimeType,
+            "target" to payload.target,
+            "target_type" to payload.targetType,
+            "shared_address" to sharedAddress,
+            "shared_web" to sharedWeb,
+            "shared_phone" to sharedPhone,
+            "shared_email" to sharedEmail
+        )
+    }
 
     private fun sourceFor(payload: SharedPayload, source: InputSource): String = when (source) {
         InputSource.COMBINED -> payload.combined
