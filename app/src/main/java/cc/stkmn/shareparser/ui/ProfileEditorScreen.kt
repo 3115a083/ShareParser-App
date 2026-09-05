@@ -36,6 +36,8 @@ import androidx.compose.material.icons.outlined.ArrowUpward
 import androidx.compose.material.icons.outlined.ArrowDownward
 import androidx.compose.material.icons.outlined.Fullscreen
 import androidx.compose.material.icons.outlined.FullscreenExit
+import androidx.compose.material.icons.outlined.HelpOutline
+import androidx.compose.material.icons.outlined.SwapHoriz
 import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material.icons.outlined.Splitscreen
 import androidx.compose.material.icons.outlined.Tune
@@ -44,7 +46,6 @@ import androidx.compose.material3.AssistChip
 import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
-import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilterChip
@@ -110,7 +111,9 @@ import cc.stkmn.shareparser.engine.GuidedRuleFactory
 import cc.stkmn.shareparser.engine.ParserEngine
 import cc.stkmn.shareparser.engine.TemplateEngine
 import java.util.UUID
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 private val reservedVariables = setOf(
     "input",
@@ -201,7 +204,6 @@ internal fun ProfileEditorScreen(
     var validationMessage by remember { mutableStateOf<String?>(null) }
     var pendingExport by remember { mutableStateOf("") }
     var addActionMenu by remember { mutableStateOf(false) }
-    var addModifierMenu by remember { mutableStateOf(false) }
     var customMatcher by remember { mutableStateOf("") }
     var variableMatcherExpanded by remember { mutableStateOf(false) }
     val selectedMatcherVariables = remember { mutableStateListOf<String>() }
@@ -209,6 +211,8 @@ internal fun ProfileEditorScreen(
     var matcherPatternKind by remember { mutableStateOf("contains") }
     var matcherPatternValue by remember { mutableStateOf("") }
     var sourceAppMenu by remember { mutableStateOf(false) }
+    var sourceAppsLoading by remember { mutableStateOf(false) }
+    var sourceApps by remember(existing?.id) { mutableStateOf(emptyList<cc.stkmn.shareparser.ShareSourceApp>()) }
     var sourceAppNegated by remember(existing?.id) {
         mutableStateOf(existing?.matchers?.firstOrNull { it.variableKey == "source_package" }?.negate ?: false)
     }
@@ -784,13 +788,6 @@ internal fun ProfileEditorScreen(
         }
 
         item {
-            val sourceApps = remember(sample?.sourcePackage, sample?.sourceApp) {
-                ShareSourceAppCatalog.list(
-                    context,
-                    includePackage = sample?.sourcePackage.orEmpty(),
-                    includeLabel = sample?.sourceApp.orEmpty()
-                )
-            }
             val activeAppMatcher = matchers.firstOrNull { it.variableKey == "source_package" }
             val selectedSourceApps = activeAppMatcher?.let { matcher ->
                 sourceApps.filter { app ->
@@ -841,12 +838,33 @@ internal fun ProfileEditorScreen(
                         Text("Ist nicht")
                     }
                     OutlinedButton(
-                        onClick = { sourceAppMenu = true },
+                        onClick = {
+                            sourceAppMenu = true
+                            if (sourceApps.isEmpty() && !sourceAppsLoading) {
+                                sourceAppsLoading = true
+                                navigationScope.launch {
+                                    sourceApps = withContext(Dispatchers.IO) {
+                                        ShareSourceAppCatalog.list(
+                                            context,
+                                            includePackage = sample?.sourcePackage.orEmpty(),
+                                            includeLabel = sample?.sourceApp.orEmpty()
+                                        )
+                                    }
+                                    sourceAppsLoading = false
+                                }
+                            }
+                        },
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Text(
-                            if (selectedSourceApps.isEmpty()) "Apps auswählen"
-                            else selectedSourceApps.joinToString(", ") { it.label },
+                            when {
+                                sourceAppsLoading -> "Apps werden geladen…"
+                                selectedSourceApps.isNotEmpty() -> selectedSourceApps.joinToString(", ") { it.label }
+                                activeAppMatcher != null -> activeAppMatcher.friendlyText
+                                    .removePrefix("Teilende App ist nicht ")
+                                    .removePrefix("Teilende App ist ")
+                                else -> "Apps auswählen"
+                            },
                             maxLines = 2,
                             overflow = TextOverflow.Ellipsis
                         )
@@ -895,11 +913,50 @@ internal fun ProfileEditorScreen(
                     }
                     if (selectedSourceApps.isNotEmpty()) {
                         selectedSourceApps.forEach { selectedApp ->
-                            TechnicalValue(
-                                value = selectedApp.packageName,
-                                onCopy = { clipboard.setText(AnnotatedString(selectedApp.packageName)) },
-                                maxLines = 1
-                            )
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(Modifier.weight(1f)) {
+                                    Text(selectedApp.label, fontWeight = FontWeight.SemiBold)
+                                    MaterialText(
+                                        text = selectedApp.packageName,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                                IconButton(
+                                    onClick = {
+                                        val join = activeAppMatcher?.join ?: MatcherJoin.AND
+                                        val current = selectedSourceApps.map { it.packageName }
+                                            .filterNot { it == selectedApp.packageName }
+                                            .toSet()
+                                        matchers.removeAll { it.variableKey == "source_package" }
+                                        if (current.isNotEmpty()) {
+                                            val chosen = sourceApps.filter { it.packageName in current }
+                                            val regex = current.joinToString(
+                                                prefix = "^(?:",
+                                                postfix = ")$",
+                                                separator = "|"
+                                            ) { Regex.escape(it) }
+                                            matchers += MatcherRule(
+                                                regex = regex,
+                                                ignoreCase = false,
+                                                friendlyText = "Teilende App " +
+                                                    (if (sourceAppNegated) "ist nicht " else "ist ") +
+                                                    chosen.joinToString(" oder ") { it.label },
+                                                variableKey = "source_package",
+                                                join = join,
+                                                valueMode = MatcherValueMode.REGEX,
+                                                negate = sourceAppNegated
+                                            )
+                                        }
+                                    }
+                                ) {
+                                    Icon(Icons.Outlined.Delete, "App aus Auswahl entfernen")
+                                }
+                            }
                         }
                     }
                     if (activeAppMatcher != null) {
@@ -1336,43 +1393,6 @@ internal fun ProfileEditorScreen(
                     )
                     Row {
                         Column {
-                            TextButton(onClick = { addModifierMenu = true }) {
-                                Icon(Icons.Outlined.Add, null)
-                                Text("Bedingung")
-                            }
-                            DropdownMenu(expanded = addModifierMenu, onDismissRequest = { addModifierMenu = false }) {
-                                actions.forEach { target ->
-                                    val condition = ActionConditionEvaluator.condition(target)
-                                    if (condition == null && ActionConditionEvaluator.elseOf(target).isBlank()) {
-                                        DropdownMenuItem(
-                                            text = { Text("Bedingung für ${target.friendlyName}") },
-                                            onClick = {
-                                                val variable = extractors.firstOrNull { it.key.isNotBlank() }?.key ?: "text"
-                                                val index = actions.indexOfFirst { it.id == target.id }
-                                                if (index >= 0) {
-                                                    actions[index] = ActionConditionEvaluator.withCondition(
-                                                        target,
-                                                        ActionCondition(
-                                                            listOf(ActionConditionClause(variableKey = variable))
-                                                        )
-                                                    )
-                                                }
-                                                addModifierMenu = false
-                                            }
-                                        )
-                                    } else if (condition != null && actions.none { ActionConditionEvaluator.elseOf(it) == target.id }) {
-                                        DropdownMenuItem(
-                                            text = { Text("Sonst-Zweig zu ${target.friendlyName}") },
-                                            onClick = {
-                                                actions += duplicateAsElse(target)
-                                                addModifierMenu = false
-                                            }
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                        Column {
                             TextButton(onClick = { addActionMenu = true }) {
                                 Icon(Icons.Outlined.Add, null)
                                 Text("Aktion")
@@ -1434,6 +1454,11 @@ internal fun ProfileEditorScreen(
                     }
                 },
                 onChange = { changed -> if (index >= 0) actions[index] = changed },
+                onAddElse = {
+                    if (actions.none { ActionConditionEvaluator.elseOf(it) == action.id }) {
+                        actions += duplicateAsElse(action)
+                    }
+                },
                 onDelete = { if (index >= 0) actions.removeAt(index) }
             )
         }
@@ -1593,7 +1618,7 @@ private fun VariableDialog(
                     singleLine = true
                 )
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Checkbox(required, onRequiredChange)
+                    Switch(required, onRequiredChange)
                     Text("Pflichtfeld")
                 }
             }
@@ -1810,28 +1835,28 @@ private fun ExtractorCard(
                 modifier = Modifier.fillMaxWidth(),
                 minLines = 2
             )
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Checkbox(rule.required, { onChange(rule.copy(required = it)) })
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Switch(rule.required, { onChange(rule.copy(required = it)) })
+                Spacer(Modifier.width(8.dp))
                 Text("Pflichtfeld")
+                Spacer(Modifier.weight(1f))
+                OutlinedButton(onClick = { regexHelp = !regexHelp }) {
+                    Icon(Icons.Outlined.HelpOutline, null)
+                    Spacer(Modifier.width(6.dp))
+                    Text("Erkennungshilfe", maxLines = 1)
+                }
             }
-            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                item {
-                    OutlinedButton(onClick = { regexHelp = !regexHelp }) {
-                        Icon(
-                            if (regexHelp) Icons.Outlined.ExpandLess else Icons.Outlined.Tune,
-                            null
-                        )
-                        Spacer(Modifier.width(6.dp))
-                        Text(if (regexHelp) "Erkennungshilfe schließen" else "Erkennungshilfe", maxLines = 1)
-                    }
-                }
-                item {
-                    OutlinedButton(onClick = { details = !details }) {
-                        Icon(if (details) Icons.Outlined.ExpandLess else Icons.Outlined.Tune, null)
-                        Spacer(Modifier.width(6.dp))
-                        Text(if (details) "Umwandlungen schließen" else "Umwandlungen", maxLines = 1)
-                    }
-                }
+            OutlinedButton(
+                onClick = { details = !details },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Icon(Icons.Outlined.SwapHoriz, null)
+                Spacer(Modifier.width(6.dp))
+                Text("Umwandlungen", modifier = Modifier.weight(1f))
+                Icon(if (details) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore, null)
             }
             if (regexHelp) {
                 RegexAssistant(
@@ -2156,7 +2181,7 @@ private fun TransformEditor(
                     )
                     if (advanced) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Checkbox(transform.literal, { onChange(transform.copy(literal = it)) })
+                            Switch(transform.literal, { onChange(transform.copy(literal = it)) })
                             Text("Eingabe wörtlich behandeln")
                         }
                     }
@@ -2179,6 +2204,7 @@ private fun ActionEditorCard(
     onMoveUp: () -> Unit,
     onMoveDown: () -> Unit,
     onChange: (ProcessingAction) -> Unit,
+    onAddElse: () -> Unit,
     onDelete: () -> Unit
 ) {
     var iconMenu by remember { mutableStateOf(false) }
@@ -2232,13 +2258,22 @@ private fun ActionEditorCard(
                 }
                 Icon(actionIcon(action.icon), null)
                 Spacer(Modifier.width(8.dp))
-                Text(
-                    action.friendlyName,
-                    fontWeight = FontWeight.SemiBold,
-                    modifier = Modifier.weight(1f),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        action.friendlyName,
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    if (action.editorDescription.isNotBlank()) {
+                        Text(
+                            action.editorDescription,
+                            style = MaterialTheme.typography.bodySmall,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                }
                 IconButton(onClick = { expanded = !expanded }) {
                     Icon(if (expanded) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore, null)
                 }
@@ -2277,6 +2312,14 @@ private fun ActionEditorCard(
                         singleLine = true
                     )
                 }
+                OutlinedTextField(
+                    value = action.editorDescription,
+                    onValueChange = { onChange(withEditorDescription(action, it)) },
+                    label = { Text("Kurze Beschreibung, optional") },
+                    supportingText = { Text("Nur im Profil-Editor sichtbar, um ähnliche Aktionen auseinanderzuhalten.") },
+                    modifier = Modifier.fillMaxWidth(),
+                    maxLines = 2
+                )
                 DropdownMenu(expanded = iconMenu, onDismissRequest = { iconMenu = false }) {
                     actionIcons.chunked(6).forEach { choices ->
                         Row(Modifier.padding(horizontal = 6.dp, vertical = 2.dp)) {
@@ -2319,14 +2362,24 @@ private fun ActionEditorCard(
                         variables = variables,
                         onChange = { changed -> onChange(ActionConditionEvaluator.withCondition(action, changed)) }
                     )
+                    if (
+                        ActionConditionEvaluator.condition(action) != null &&
+                        allActions.none { ActionConditionEvaluator.elseOf(it) == action.id }
+                    ) {
+                        TextButton(onClick = onAddElse) {
+                            Icon(Icons.Outlined.Add, null)
+                            Spacer(Modifier.width(6.dp))
+                            Text("Sonst-Aktion erstellen")
+                        }
+                    }
                 }
                 Text("Auswahl-Anzeige", fontWeight = FontWeight.SemiBold)
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Checkbox(actionShowInOverlay(action), { onChange(withOverlayVisibility(action, it)) })
+                    Switch(actionShowInOverlay(action), { onChange(withOverlayVisibility(action, it)) })
                     Text("Im Overlay anzeigen")
                 }
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Checkbox(actionShowInNotification(action), { onChange(withNotificationVisibility(action, it)) })
+                    Switch(actionShowInNotification(action), { onChange(withNotificationVisibility(action, it)) })
                     Text("In Benachrichtigung anzeigen")
                 }
                 Text(
@@ -2409,7 +2462,7 @@ private fun ActionConditionEditor(
                                 selected = clause.mode == ActionConditionMode.EMPTY,
                                 onClick = {
                                     val changed = condition.clauses.toMutableList()
-                                    changed[index] = clause.copy(mode = ActionConditionMode.EMPTY, regex = "")
+                                    changed[index] = clause.copy(mode = ActionConditionMode.EMPTY, regex = "", negate = false)
                                     onChange(condition.copy(clauses = changed))
                                 },
                                 label = { Text("ist leer") }
@@ -2420,7 +2473,7 @@ private fun ActionConditionEditor(
                                 selected = clause.mode == ActionConditionMode.NOT_EMPTY,
                                 onClick = {
                                     val changed = condition.clauses.toMutableList()
-                                    changed[index] = clause.copy(mode = ActionConditionMode.NOT_EMPTY, regex = "")
+                                    changed[index] = clause.copy(mode = ActionConditionMode.NOT_EMPTY, regex = "", negate = false)
                                     onChange(condition.copy(clauses = changed))
                                 },
                                 label = { Text("ist nicht leer") }
@@ -2439,15 +2492,18 @@ private fun ActionConditionEditor(
                         }
                     }
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Checkbox(
-                            clause.negate,
-                            {
-                                val changed = condition.clauses.toMutableList()
-                                changed[index] = clause.copy(negate = it)
-                                onChange(condition.copy(clauses = changed))
-                            }
-                        )
-                        Text("NICHT")
+                        if (clause.mode == ActionConditionMode.REGEX) {
+                            Switch(
+                                clause.negate,
+                                {
+                                    val changed = condition.clauses.toMutableList()
+                                    changed[index] = clause.copy(negate = it)
+                                    onChange(condition.copy(clauses = changed))
+                                }
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Text("NICHT")
+                        }
                         Spacer(Modifier.weight(1f))
                         if (condition.clauses.size > 1) {
                             IconButton(onClick = {
@@ -2465,7 +2521,7 @@ private fun ActionConditionEditor(
                                 onChange(condition.copy(clauses = changed))
                             },
                             label = { Text("Text oder Regex") },
-                            supportingText = { Text("Beispiel: ^online$ für exakt „online“. NICHT kehrt das Ergebnis um.") },
+                            supportingText = { Text("Beispiel: ^online$ für exakt „online“. Bei Inhaltsprüfungen kann NICHT das Ergebnis umkehren.") },
                             isError = clause.regex.isNotBlank() && runCatching { Regex(clause.regex) }.isFailure,
                             modifier = Modifier.fillMaxWidth(),
                             singleLine = true
@@ -2537,7 +2593,7 @@ private fun CalendarActionFields(
     }
 
     Row(verticalAlignment = Alignment.CenterVertically) {
-        Checkbox(action.allDay, { onChange(action.copy(allDay = it)) })
+        Switch(action.allDay, { onChange(action.copy(allDay = it)) })
         Text("Ganztägig")
     }
 }
@@ -2629,7 +2685,7 @@ private fun ShareActionFields(
     TemplateField("Betreff", action.subjectTemplate, variables) { onChange(action.copy(subjectTemplate = it)) }
     TemplateField("Nachricht", action.textTemplate, variables, minLines = 4) { onChange(action.copy(textTemplate = it)) }
     Row(verticalAlignment = Alignment.CenterVertically) {
-        Checkbox(action.asFile, { onChange(action.copy(asFile = it)) })
+        Switch(action.asFile, { onChange(action.copy(asFile = it)) })
         Column {
             Text("Als Textdatei ausgeben")
             Text("Erzeugt aus dem transformierten Text eine Datei statt nur normalen Android-Text.", style = MaterialTheme.typography.bodySmall)
