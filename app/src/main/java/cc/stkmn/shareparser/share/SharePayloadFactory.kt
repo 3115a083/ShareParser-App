@@ -18,6 +18,32 @@ object SharePayloadFactory {
     )
 
     fun from(activity: Activity, intent: Intent): SharedPayload? {
+        if (intent.action == Intent.ACTION_VIEW) {
+            val uri = intent.data ?: return null
+            val scheme = uri.scheme?.lowercase().orEmpty()
+            val targetType = when (scheme) {
+                "http", "https" -> "web"
+                "geo" -> "map"
+                "tel" -> "phone"
+                "mailto" -> "email"
+                else -> return null
+            }
+            val value = uri.toString()
+            val sourcePackage = resolveSourcePackage(activity, intent, null)
+            val sourceApp = if (sourcePackage.isBlank()) "" else runCatching {
+                val info = activity.packageManager.getApplicationInfo(sourcePackage, 0)
+                activity.packageManager.getApplicationLabel(info).toString()
+            }.getOrDefault(sourcePackage)
+            return SharedPayload(
+                text = value,
+                mimeType = "text/uri-list",
+                sourcePackage = sourcePackage,
+                sourceApp = sourceApp,
+                linkTargets = listOf(value),
+                target = value,
+                targetType = targetType
+            )
+        }
         if (intent.action != Intent.ACTION_SEND) return null
 
         val streamUri = streamUri(intent)
@@ -59,7 +85,9 @@ object SharePayloadFactory {
             sourcePackage = sourcePackage,
             sourceApp = sourceApp,
             fileName = fileName,
-            linkTargets = linkTargets
+            linkTargets = linkTargets,
+            target = "",
+            targetType = ""
         )
     }
 
