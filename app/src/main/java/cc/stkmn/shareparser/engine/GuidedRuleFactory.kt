@@ -304,6 +304,11 @@ object GuidedRuleFactory {
 
     fun sanitizeKey(value: String): String = value
         .trim()
-        .replace(Regex("[^a-zA-Z0-9_.-]+"), "_")
+        .lowercase()
+        .replace("ä", "ae")
+        .replace("ö", "oe")
+        .replace("ü", "ue")
+        .replace("ß", "ss")
+        .replace(Regex("[^a-z0-9_.-]+"), "_")
         .trim('_')
 }
