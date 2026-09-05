@@ -110,7 +110,9 @@ class ParserEngine {
         "source_app" to payload.sourceApp,
         "source_package" to payload.sourcePackage,
         "file_name" to payload.fileName,
-        "mime_type" to payload.mimeType
+        "mime_type" to payload.mimeType,
+        "target" to payload.target,
+        "target_type" to payload.targetType
     )
 
     private fun sourceFor(payload: SharedPayload, source: InputSource): String = when (source) {
