@@ -3010,6 +3010,14 @@ private fun withIcon(action: ProcessingAction, icon: String): ProcessingAction =
     is ProcessingAction.Webhook -> action.copy(icon = icon)
 }
 
+private fun withEditorDescription(action: ProcessingAction, description: String): ProcessingAction = when (action) {
+    is ProcessingAction.Calendar -> action.copy(editorDescription = description)
+    is ProcessingAction.Url -> action.copy(editorDescription = description)
+    is ProcessingAction.Share -> action.copy(editorDescription = description)
+    is ProcessingAction.Webhook -> action.copy(editorDescription = description)
+}
+
+
 private fun actionShowInOverlay(action: ProcessingAction): Boolean = when (action) {
     is ProcessingAction.Calendar -> action.showInOverlay
     is ProcessingAction.Url -> action.showInOverlay
