@@ -2403,6 +2403,7 @@ private fun ActionConditionEditor(
     variables: List<String>,
     onChange: (ActionCondition?) -> Unit
 ) {
+    var expanded by remember(condition != null) { mutableStateOf(false) }
     if (condition == null) {
         OutlinedButton(
             onClick = {
@@ -2426,122 +2427,140 @@ private fun ActionConditionEditor(
         shape = RoundedCornerShape(10.dp)
     ) {
         Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("Wenn", fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
-                TextButton(onClick = { onChange(null) }) { Text("Entfernen") }
-            }
-            condition.clauses.forEachIndexed { index, clause ->
-                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    if (index > 0) {
-                        OutlinedButton(
-                            onClick = {
-                                val changed = condition.clauses.toMutableList()
-                                changed[index] = clause.copy(
-                                    join = if (clause.join == MatcherJoin.AND) MatcherJoin.OR else MatcherJoin.AND
-                                )
-                                onChange(condition.copy(clauses = changed))
-                            }
-                        ) { Text(if (clause.join == MatcherJoin.AND) "UND" else "ODER") }
-                    }
-                    LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        items(variables.distinct()) { variable ->
-                            FilterChip(
-                                selected = clause.variableKey == variable,
-                                onClick = {
-                                    val changed = condition.clauses.toMutableList()
-                                    changed[index] = clause.copy(variableKey = variable.lowercase())
-                                    onChange(condition.copy(clauses = changed))
-                                },
-                                label = { Text(variableLabel(variable)) }
-                            )
-                        }
-                    }
-                    LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        item {
-                            FilterChip(
-                                selected = clause.mode == ActionConditionMode.EMPTY,
-                                onClick = {
-                                    val changed = condition.clauses.toMutableList()
-                                    changed[index] = clause.copy(mode = ActionConditionMode.EMPTY, regex = "", negate = false)
-                                    onChange(condition.copy(clauses = changed))
-                                },
-                                label = { Text("ist leer") }
-                            )
-                        }
-                        item {
-                            FilterChip(
-                                selected = clause.mode == ActionConditionMode.NOT_EMPTY,
-                                onClick = {
-                                    val changed = condition.clauses.toMutableList()
-                                    changed[index] = clause.copy(mode = ActionConditionMode.NOT_EMPTY, regex = "", negate = false)
-                                    onChange(condition.copy(clauses = changed))
-                                },
-                                label = { Text("ist nicht leer") }
-                            )
-                        }
-                        item {
-                            FilterChip(
-                                selected = clause.mode == ActionConditionMode.REGEX,
-                                onClick = {
-                                    val changed = condition.clauses.toMutableList()
-                                    changed[index] = clause.copy(mode = ActionConditionMode.REGEX)
-                                    onChange(condition.copy(clauses = changed))
-                                },
-                                label = { Text("passt zu Inhalt") }
-                            )
-                        }
-                    }
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        if (clause.mode == ActionConditionMode.REGEX) {
-                            Switch(
-                                clause.negate,
-                                {
-                                    val changed = condition.clauses.toMutableList()
-                                    changed[index] = clause.copy(negate = it)
-                                    onChange(condition.copy(clauses = changed))
-                                }
-                            )
-                            Spacer(Modifier.width(8.dp))
-                            Text("NICHT")
-                        }
-                        Spacer(Modifier.weight(1f))
-                        if (condition.clauses.size > 1) {
-                            IconButton(onClick = {
-                                val changed = condition.clauses.toMutableList().apply { removeAt(index) }
-                                onChange(condition.copy(clauses = changed))
-                            }) { Icon(Icons.Outlined.Delete, "Bedingung entfernen") }
-                        }
-                    }
-                    if (clause.mode == ActionConditionMode.REGEX) {
-                        OutlinedTextField(
-                            value = clause.regex,
-                            onValueChange = {
-                                val changed = condition.clauses.toMutableList()
-                                changed[index] = clause.copy(regex = it)
-                                onChange(condition.copy(clauses = changed))
-                            },
-                            label = { Text("Text oder Regex") },
-                            supportingText = { Text("Beispiel: ^online$ für exakt „online“. Bei Inhaltsprüfungen kann NICHT das Ergebnis umkehren.") },
-                            isError = clause.regex.isNotBlank() && runCatching { Regex(clause.regex) }.isFailure,
-                            modifier = Modifier.fillMaxWidth(),
-                            singleLine = true
-                        )
-                    }
+            Row(
+                modifier = Modifier.fillMaxWidth().clickable { expanded = !expanded },
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text("Bedingung", fontWeight = FontWeight.SemiBold)
+                    Text(
+                        conditionSummary(condition),
+                        style = MaterialTheme.typography.bodySmall,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+                IconButton(onClick = { expanded = !expanded }) {
+                    Icon(if (expanded) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore, "Bedingung ein-/ausklappen")
+                }
+                IconButton(onClick = { onChange(null) }) {
+                    Icon(Icons.Outlined.Delete, "Bedingung entfernen")
                 }
             }
-            OutlinedButton(onClick = {
-                onChange(
-                    condition.copy(
-                        clauses = condition.clauses + ActionConditionClause(
-                            variableKey = variables.firstOrNull().orEmpty(),
-                            join = MatcherJoin.AND
+            if (expanded) {
+                condition.clauses.forEachIndexed { index, clause ->
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        if (index > 0) {
+                            OutlinedButton(
+                                onClick = {
+                                    val changed = condition.clauses.toMutableList()
+                                    changed[index] = clause.copy(
+                                        join = if (clause.join == MatcherJoin.AND) MatcherJoin.OR else MatcherJoin.AND
+                                    )
+                                    onChange(condition.copy(clauses = changed))
+                                }
+                            ) { Text(if (clause.join == MatcherJoin.AND) "UND" else "ODER") }
+                        }
+                        LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            items(variables.distinct()) { variable ->
+                                FilterChip(
+                                    selected = clause.variableKey == variable,
+                                    onClick = {
+                                        val changed = condition.clauses.toMutableList()
+                                        changed[index] = clause.copy(variableKey = variable.lowercase())
+                                        onChange(condition.copy(clauses = changed))
+                                    },
+                                    label = { Text(variableLabel(variable)) }
+                                )
+                            }
+                        }
+                        LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            item {
+                                FilterChip(
+                                    selected = clause.mode == ActionConditionMode.EMPTY,
+                                    onClick = {
+                                        val changed = condition.clauses.toMutableList()
+                                        changed[index] = clause.copy(mode = ActionConditionMode.EMPTY, regex = "", negate = false)
+                                        onChange(condition.copy(clauses = changed))
+                                    },
+                                    label = { Text("ist leer") }
+                                )
+                            }
+                            item {
+                                FilterChip(
+                                    selected = clause.mode == ActionConditionMode.NOT_EMPTY,
+                                    onClick = {
+                                        val changed = condition.clauses.toMutableList()
+                                        changed[index] = clause.copy(mode = ActionConditionMode.NOT_EMPTY, regex = "", negate = false)
+                                        onChange(condition.copy(clauses = changed))
+                                    },
+                                    label = { Text("ist nicht leer") }
+                                )
+                            }
+                            item {
+                                FilterChip(
+                                    selected = clause.mode == ActionConditionMode.REGEX,
+                                    onClick = {
+                                        val changed = condition.clauses.toMutableList()
+                                        changed[index] = clause.copy(mode = ActionConditionMode.REGEX)
+                                        onChange(condition.copy(clauses = changed))
+                                    },
+                                    label = { Text("passt zu Inhalt") }
+                                )
+                            }
+                        }
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            if (clause.mode == ActionConditionMode.REGEX) {
+                                Switch(
+                                    clause.negate,
+                                    {
+                                        val changed = condition.clauses.toMutableList()
+                                        changed[index] = clause.copy(negate = it)
+                                        onChange(condition.copy(clauses = changed))
+                                    }
+                                )
+                                Spacer(Modifier.width(12.dp))
+                                Text("NICHT")
+                            }
+                            Spacer(Modifier.weight(1f))
+                            if (condition.clauses.size > 1) {
+                                IconButton(onClick = {
+                                    val changed = condition.clauses.toMutableList().apply { removeAt(index) }
+                                    onChange(condition.copy(clauses = changed))
+                                }) { Icon(Icons.Outlined.Delete, "Bedingung entfernen") }
+                            }
+                        }
+                        if (clause.mode == ActionConditionMode.REGEX) {
+                            OutlinedTextField(
+                                value = clause.regex,
+                                onValueChange = {
+                                    val changed = condition.clauses.toMutableList()
+                                    changed[index] = clause.copy(regex = it)
+                                    onChange(condition.copy(clauses = changed))
+                                },
+                                label = { Text("Text oder Regex") },
+                                supportingText = { Text("Beispiel: ^online$ für exakt „online“. Bei Inhaltsprüfungen kann NICHT das Ergebnis umkehren.") },
+                                isError = clause.regex.isNotBlank() && runCatching { Regex(clause.regex) }.isFailure,
+                                modifier = Modifier.fillMaxWidth(),
+                                singleLine = true
+                            )
+                        }
+                    }
+                }
+                OutlinedButton(onClick = {
+                    onChange(
+                        condition.copy(
+                            clauses = condition.clauses + ActionConditionClause(
+                                variableKey = variables.firstOrNull().orEmpty(),
+                                join = MatcherJoin.AND
+                            )
                         )
                     )
-                )
-            }) {
-                Icon(Icons.Outlined.Add, null)
-                Spacer(Modifier.width(6.dp))
-                Text("Weitere Bedingung")
+                }) {
+                    Icon(Icons.Outlined.Add, null)
+                    Spacer(Modifier.width(6.dp))
+                    Text("Weitere Bedingung")
+                }
             }
         }
     }
@@ -3066,6 +3085,20 @@ private fun transformLabel(transform: ValueTransform): String = when (transform)
     is ValueTransform.Prefix -> "Text davor"
     is ValueTransform.Suffix -> "Text danach"
     is ValueTransform.ChangeCase -> if (transform.mode == CaseMode.LOWER) "Kleinschreibung" else "Großschreibung"
+}
+
+private fun conditionSummary(condition: ActionCondition): String {
+    if (condition.clauses.isEmpty()) return "Immer"
+    return condition.clauses.mapIndexed { index, clause ->
+        val prefix = if (index == 0) "" else if (clause.join == MatcherJoin.AND) " UND " else " ODER "
+        val variable = variableLabel(clause.variableKey)
+        val check = when (clause.mode) {
+            ActionConditionMode.EMPTY -> "ist leer"
+            ActionConditionMode.NOT_EMPTY -> "ist nicht leer"
+            ActionConditionMode.REGEX -> (if (clause.negate) "passt NICHT zu " else "passt zu ") + clause.regex.ifBlank { "…" }
+        }
+        prefix + variable + " " + check
+    }.joinToString("")
 }
 
 private fun variableLabel(key: String): String = when (key) {
