@@ -1029,21 +1029,32 @@ internal fun ProfileEditorScreen(
         }
 
         item {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                OutlinedTextField(
-                    value = customMatcher,
-                    onValueChange = { customMatcher = it },
-                    label = { Text("Fester Text als Merkmal") },
-                    modifier = Modifier.weight(1f),
-                    singleLine = true
-                )
-                Spacer(Modifier.width(8.dp))
-                Button(onClick = {
-                    if (customMatcher.isNotBlank()) {
-                        matchers += GuidedRuleFactory.matcherFromText(customMatcher)
-                        customMatcher = ""
-                    }
-                }) { Text("Hinzufügen") }
+            Card(Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Fester Text", fontWeight = FontWeight.SemiBold)
+                    Text(
+                        "Optional. Verwende einen möglichst stabilen Textteil, der in allen passenden Beispielen vorkommt.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    OutlinedTextField(
+                        value = customMatcher,
+                        onValueChange = { customMatcher = it },
+                        label = { Text("Textmerkmal") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true
+                    )
+                    Button(
+                        onClick = {
+                            if (customMatcher.isNotBlank()) {
+                                matchers += GuidedRuleFactory.matcherFromText(customMatcher)
+                                customMatcher = ""
+                            }
+                        },
+                        enabled = customMatcher.isNotBlank(),
+                        modifier = Modifier.fillMaxWidth()
+                    ) { Text("Merkmal hinzufügen") }
+                }
             }
         }
         if (sample != null) {
