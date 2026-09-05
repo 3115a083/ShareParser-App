@@ -229,6 +229,7 @@ sealed class ProcessingAction {
     abstract val id: String
     abstract val friendlyName: String
     abstract val icon: String
+    abstract val editorDescription: String
 
     @Serializable
     @SerialName("calendar")
@@ -236,6 +237,7 @@ sealed class ProcessingAction {
         override val id: String,
         override val friendlyName: String,
         override val icon: String = "event",
+        override val editorDescription: String = "",
         val condition: ActionCondition? = null,
         val elseOfActionId: String = "",
         val showInOverlay: Boolean = true,
@@ -260,6 +262,7 @@ sealed class ProcessingAction {
         override val id: String,
         override val friendlyName: String,
         override val icon: String = "link",
+        override val editorDescription: String = "",
         val condition: ActionCondition? = null,
         val elseOfActionId: String = "",
         val showInOverlay: Boolean = true,
@@ -274,6 +277,7 @@ sealed class ProcessingAction {
         override val id: String,
         override val friendlyName: String,
         override val icon: String = "share",
+        override val editorDescription: String = "",
         val condition: ActionCondition? = null,
         val elseOfActionId: String = "",
         val showInOverlay: Boolean = true,
@@ -297,6 +301,7 @@ sealed class ProcessingAction {
         override val id: String,
         override val friendlyName: String,
         override val icon: String = "send",
+        override val editorDescription: String = "",
         val condition: ActionCondition? = null,
         val elseOfActionId: String = "",
         val showInOverlay: Boolean = true,
