@@ -82,6 +82,9 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import cc.stkmn.shareparser.ShareSourceAppCatalog
 import cc.stkmn.shareparser.calendar.CalendarCatalog
+import cc.stkmn.shareparser.data.ActionCondition
+import cc.stkmn.shareparser.data.ActionConditionClause
+import cc.stkmn.shareparser.data.ActionConditionMode
 import cc.stkmn.shareparser.data.CalendarTargetMode
 import cc.stkmn.shareparser.data.CaseMode
 import cc.stkmn.shareparser.data.EditorModeStore
@@ -100,6 +103,7 @@ import cc.stkmn.shareparser.data.TextFileMode
 import cc.stkmn.shareparser.data.UrlOpenMode
 import cc.stkmn.shareparser.data.ValueTransform
 import cc.stkmn.shareparser.data.WebhookMode
+import cc.stkmn.shareparser.engine.ActionConditionEvaluator
 import cc.stkmn.shareparser.engine.GuidedRuleFactory
 import cc.stkmn.shareparser.engine.ParserEngine
 import cc.stkmn.shareparser.engine.TemplateEngine
@@ -172,6 +176,7 @@ internal fun ProfileEditorScreen(
     var lastObserved by remember(existing?.id) { mutableStateOf(initialProfile) }
     var restoringHistory by remember(existing?.id) { mutableStateOf(false) }
     var showExitDialog by remember(existing?.id) { mutableStateOf(false) }
+    var exitValidationError by remember(existing?.id) { mutableStateOf<String?>(null) }
     var showDeleteDialog by remember(existing?.id) { mutableStateOf(false) }
 
     var advanced by remember { mutableStateOf(false) }
@@ -179,6 +184,7 @@ internal fun ProfileEditorScreen(
     var validationMessage by remember { mutableStateOf<String?>(null) }
     var pendingExport by remember { mutableStateOf("") }
     var addActionMenu by remember { mutableStateOf(false) }
+    var addModifierMenu by remember { mutableStateOf(false) }
     var customMatcher by remember { mutableStateOf("") }
     var variableMatcherExpanded by remember { mutableStateOf(false) }
     val selectedMatcherVariables = remember { mutableStateListOf<String>() }
@@ -259,8 +265,25 @@ internal fun ProfileEditorScreen(
         }
         profile.actions.forEach { action ->
             actionTemplates(action).forEach { (field, template) ->
-                val unknown = TemplateEngine.variables(template) - available
+                val unknown = TemplateEngine.variables(template) - available.map { it.lowercase() }.toSet()
                 if (unknown.isNotEmpty()) return "$field verwendet unbekannte Variable: ${unknown.joinToString()}"
+            }
+            val condition = ActionConditionEvaluator.condition(action)
+            condition?.clauses?.forEach { clause ->
+                if (clause.variableKey.lowercase() !in available.map { it.lowercase() }.toSet()) {
+                    return "Bedingung für '${action.friendlyName}' verwendet unbekannte Variable '${clause.variableKey}'."
+                }
+                if (clause.mode == ActionConditionMode.REGEX && runCatching { Regex(clause.regex) }.isFailure) {
+                    return "Bedingung für '${action.friendlyName}' enthält einen ungültigen Regex."
+                }
+            }
+            val elseOf = ActionConditionEvaluator.elseOf(action)
+            if (elseOf.isNotBlank()) {
+                val parent = profile.actions.firstOrNull { it.id == elseOf }
+                    ?: return "Sonst-Zweig '${action.friendlyName}' verweist auf eine nicht vorhandene Aktion."
+                if (ActionConditionEvaluator.condition(parent) == null) {
+                    return "Sonst-Zweig '${action.friendlyName}' braucht eine vorherige Aktion mit Bedingung."
+                }
             }
         }
         if (profile.actions.isEmpty()) return "Mindestens eine Weiterverarbeitung hinzufügen."
@@ -462,26 +485,44 @@ internal fun ProfileEditorScreen(
 
     if (showExitDialog) {
         AlertDialog(
-            onDismissRequest = { showExitDialog = false },
+            onDismissRequest = { showExitDialog = false; exitValidationError = null },
             title = { Text("Ungespeicherte Änderungen") },
-            text = { Text("Möchtest du die Änderungen am Profil anwenden oder verwerfen?") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text("Möchtest du die Änderungen am Profil anwenden oder verwerfen?")
+                    exitValidationError?.let { error ->
+                        Text(
+                            error,
+                            color = MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.bodySmall,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Text(
+                            "Korrigiere den Fehler und tippe anschließend erneut auf Anwenden. Das Fenster bleibt geöffnet, bis die Änderungen wirklich gespeichert wurden.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            },
             confirmButton = {
                 Button(onClick = {
                     val profile = buildProfile()
                     val error = validate(profile)
                     if (error == null) {
                         repository.save(profile)
+                        exitValidationError = null
                         showExitDialog = false
                         onSaved()
                     } else {
                         validationMessage = error
-                        showExitDialog = false
+                        exitValidationError = error
                     }
                 }) { Text("Anwenden") }
             },
             dismissButton = {
                 Row {
-                    TextButton(onClick = { showExitDialog = false }) { Text("Abbrechen") }
+                    TextButton(onClick = { showExitDialog = false; exitValidationError = null }) { Text("Abbrechen") }
                     TextButton(onClick = {
                         showExitDialog = false
                         onDiscarded()
