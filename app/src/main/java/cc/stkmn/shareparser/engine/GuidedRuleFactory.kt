@@ -69,6 +69,16 @@ object GuidedRuleFactory {
                 val split = splitLabelAndValue(line)
                 val label = split?.first ?: "Textzeile ${index + 1}"
                 val value = split?.second ?: line
+                add(
+                    Candidate(
+                        label = label,
+                        value = value,
+                        source = InputSource.TEXT,
+                        sourceLine = line,
+                        suggestedKey = suggestedKey(label, index)
+                    )
+                )
+
                 streetAddress.findAll(line).forEach { match ->
                     val address = match.value.trim()
                     if (address.length >= 5 && address != value) {
@@ -131,18 +141,8 @@ object GuidedRuleFactory {
                         }
                         add(Candidate(label, target, InputSource.TEXT, line, key))
                     }
-                }
-                add(
-                    Candidate(
-                        label = label,
-                        value = value,
-                        source = InputSource.TEXT,
-                        sourceLine = line,
-                        suggestedKey = suggestedKey(label, index)
-                    )
-                )
-            }
-    }.distinctBy { Triple(it.source, it.sourceLine, it.value) }
+                }            }
+    }.distinctBy { listOf(it.source, it.sourceLine, it.value, it.label) }
 
     fun extractor(candidate: Candidate, key: String, required: Boolean = false): ExtractorRule {
         val normalizedKey = sanitizeKey(key.ifBlank { candidate.suggestedKey }).ifBlank { candidate.suggestedKey }
