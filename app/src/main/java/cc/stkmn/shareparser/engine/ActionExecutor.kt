@@ -486,7 +486,13 @@ class ActionExecutor(context: Context, private val settings: AppSettings = AppSe
                 connectTimeout = if (backgroundMode) 20_000 else 10_000
                 readTimeout = if (backgroundMode) 25_000 else 10_000
                 doOutput = true
-                setRequestProperty("Content-Type", action.contentType.ifBlank { "application/json; charset=utf-8" })
+                val safeContentType = action.contentType
+                    .replace("\r", "")
+                    .replace("\n", "")
+                    .trim()
+                    .take(120)
+                    .ifBlank { "application/json; charset=utf-8" }
+                setRequestProperty("Content-Type", safeContentType)
                 setRequestProperty("Accept", "*/*")
                 setRequestProperty("User-Agent", "ShareParser")
             }
@@ -602,32 +608,43 @@ class ActionExecutor(context: Context, private val settings: AppSettings = AppSe
 
     private fun resolveFileName(action: ProcessingAction.Share, rendered: String): String {
         val trimmed = rendered.trim()
-        val invalid = trimmed.isBlank() || unsafeFileChars.containsMatchIn(trimmed) || trimmed == "." || trimmed == ".."
-        if (!invalid) return safeFileName(trimmed)
-        return when (action.emptyValuePolicy) {
-            EmptyValuePolicy.FALLBACK -> safeFileName(action.fallbackFileName.ifBlank { "ShareParser.txt" })
-            EmptyValuePolicy.ERROR -> throw ProcessingException(
-                if (trimmed.isBlank()) "Der erzeugte Dateiname ist leer." else "Der erzeugte Dateiname enthält unzulässige Zeichen.",
-                "share.fileName",
-                "Rejected rendered filename: '$rendered'"
-            )
+        if (trimmed.isBlank()) {
+            return when (action.emptyValuePolicy) {
+                EmptyValuePolicy.FALLBACK -> safeFileName(action.fallbackFileName.ifBlank { "ShareParser.txt" })
+                EmptyValuePolicy.ERROR -> throw ProcessingException(
+                    "Der erzeugte Dateiname ist leer.",
+                    "share.fileName",
+                    "Rendered filename was blank"
+                )
+            }
         }
+        if (trimmed == "." || trimmed == "..") {
+            return when (action.emptyValuePolicy) {
+                EmptyValuePolicy.FALLBACK -> safeFileName(action.fallbackFileName.ifBlank { "ShareParser.txt" })
+                EmptyValuePolicy.ERROR -> throw ProcessingException(
+                    "Der erzeugte Dateiname ist kein gültiger Dateiname.",
+                    "share.fileName",
+                    "Rejected path traversal filename: '$rendered'"
+                )
+            }
+        }
+        return safeFileName(trimmed)
     }
 
     private fun resolveRelativePath(action: ProcessingAction.Share, rendered: String): String {
         if (rendered.isBlank()) return ""
         val rawSegments = rendered.split('/', '\\')
-        val invalid = rawSegments.any { segment ->
+        val traversal = rawSegments.any { segment ->
             val trimmed = segment.trim()
-            trimmed == "." || trimmed == ".." || unsafeFileChars.containsMatchIn(trimmed) || trimmed.length > 80
+            trimmed == "." || trimmed == ".."
         }
-        if (!invalid) return safePathSegments(rendered).joinToString("/")
+        if (!traversal) return safePathSegments(rendered).joinToString("/")
         return when (action.emptyValuePolicy) {
             EmptyValuePolicy.FALLBACK -> safePathSegments(action.fallbackPath).joinToString("/")
             EmptyValuePolicy.ERROR -> throw ProcessingException(
-                "Der erzeugte Unterordner enthält unzulässige Zeichen oder Pfadteile.",
+                "Der erzeugte Unterordner enthält einen unzulässigen Pfadteil.",
                 "share.relativePath",
-                "Rejected rendered relative path: '$rendered'"
+                "Rejected traversal path: '$rendered'"
             )
         }
     }
@@ -637,6 +654,7 @@ class ActionExecutor(context: Context, private val settings: AppSettings = AppSe
         .substringAfterLast('\\')
         .trim()
         .replace(unsafeFileChars, "_")
+        .replace(Regex("[. ]+$"), "")
         .take(180)
         .ifBlank { "ShareParser.txt" }
 
