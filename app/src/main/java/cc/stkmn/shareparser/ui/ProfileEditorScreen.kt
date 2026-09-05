@@ -159,8 +159,23 @@ internal fun ProfileEditorScreen(
     var name by remember(existing?.id) { mutableStateOf(existing?.name.orEmpty()) }
     var enabled by remember(existing?.id) { mutableStateOf(existing?.enabled ?: true) }
     var parseDirection by remember(existing?.id) { mutableStateOf(existing?.parseDirection ?: ParseDirection.TOP_DOWN) }
-    val matchers = remember(existing?.id) { mutableStateListOf<MatcherRule>().apply { addAll(existing?.matchers.orEmpty()) } }
-    val extractors = remember(existing?.id) { mutableStateListOf<ExtractorRule>().apply { addAll(existing?.extractors.orEmpty()) } }
+    val matchers = remember(existing?.id) {
+        mutableStateListOf<MatcherRule>().apply {
+            addAll(existing?.matchers.orEmpty().map { matcher ->
+                matcher.copy(variableKey = matcher.variableKey.lowercase())
+            })
+        }
+    }
+    val extractors = remember(existing?.id) {
+        mutableStateListOf<ExtractorRule>().apply {
+            addAll(existing?.extractors.orEmpty().map { rule ->
+                rule.copy(
+                    key = GuidedRuleFactory.sanitizeKey(rule.key),
+                    sourceVariableKey = if (rule.sourceVariableKey.isBlank()) "" else GuidedRuleFactory.sanitizeKey(rule.sourceVariableKey)
+                )
+            })
+        }
+    }
     val actions = remember(existing?.id) { mutableStateListOf<ProcessingAction>().apply { addAll(initialActions) } }
     val initialProfile = remember(existing?.id, profileId) {
         Profile(
@@ -313,7 +328,7 @@ internal fun ProfileEditorScreen(
     fun renameVariableReferences(oldKey: String, newKey: String, sourceIndex: Int) {
         if (oldKey.isBlank() || oldKey == newKey) return
         for (i in matchers.indices) {
-            if (matchers[i].variableKey == oldKey) {
+            if (matchers[i].variableKey.equals(oldKey, ignoreCase = true)) {
                 val matcher = matchers[i]
                 matchers[i] = matcher.copy(
                     variableKey = newKey,
@@ -326,9 +341,17 @@ internal fun ProfileEditorScreen(
             }
         }
         for (i in (sourceIndex + 1) until extractors.size) {
-            if (extractors[i].sourceVariableKey == oldKey) {
+            if (extractors[i].sourceVariableKey.equals(oldKey, ignoreCase = true)) {
                 extractors[i] = extractors[i].copy(sourceVariableKey = newKey)
             }
+        }
+        for (i in actions.indices) {
+            val condition = ActionConditionEvaluator.condition(actions[i]) ?: continue
+            val clauses = condition.clauses.map { clause ->
+                if (clause.variableKey.equals(oldKey, ignoreCase = true)) clause.copy(variableKey = newKey)
+                else clause
+            }
+            actions[i] = ActionConditionEvaluator.withCondition(actions[i], condition.copy(clauses = clauses))
         }
     }
 
