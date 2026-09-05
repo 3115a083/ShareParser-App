@@ -83,7 +83,7 @@ object TemplateEngine {
             val body = template.substring(start + 2, close)
             val firstPipe = body.indexOf('|')
             val secondPipe = if (firstPipe >= 0) body.indexOf('|', firstPipe + 1) else -1
-            val key = if (firstPipe >= 0) body.substring(0, firstPipe) else body
+            val key = (if (firstPipe >= 0) body.substring(0, firstPipe) else body).lowercase()
             val modifier = if (firstPipe >= 0) body.substring(firstPipe + 1) else ""
 
             val validKey = key.isNotEmpty() && key.all { it.isLetterOrDigit() || it == '_' || it == '.' || it == '-' }
