@@ -57,12 +57,31 @@ object TemplateEngine {
         "lower" -> value.lowercase()
         "upper" -> value.uppercase()
         "trim" -> value.trim()
+        "json" -> jsonEscape(value)
         "" -> value
         else -> throw ProcessingException(
             "Unbekannte Umwandlung '$modifier'.",
             key,
             "Unknown template modifier: $modifier"
         )
+    }
+
+    private fun jsonEscape(value: String): String = buildString(value.length + 8) {
+        value.forEach { ch ->
+            when (ch) {
+                '\\' -> append("\\\\")
+                '"' -> append("\\\"")
+                '\b' -> append("\\b")
+                '\u000C' -> append("\\f")
+                '\n' -> append("\\n")
+                '\r' -> append("\\r")
+                '\t' -> append("\\t")
+                else -> if (ch.code < 0x20) {
+                    append("\\u")
+                    append(ch.code.toString(16).padStart(4, '0'))
+                } else append(ch)
+            }
+        }
     }
 
     /**
