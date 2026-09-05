@@ -156,8 +156,8 @@ class ParserEngineTest {
         )
 
         val values = engine.extract("PLZ_ort: 59000 Lünen", profile)
-        assertEquals("59000", values["PLZ"])
-        assertEquals("Lünen", values["Ort"])
+        assertEquals("59000", values["plz"])
+        assertEquals("Lünen", values["ort"])
     }
 
     @Test
