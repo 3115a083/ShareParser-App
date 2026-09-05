@@ -1311,16 +1311,55 @@ internal fun ProfileEditorScreen(
                         fontWeight = FontWeight.Bold,
                         modifier = Modifier.weight(1f)
                     )
-                    Column {
-                        TextButton(onClick = { addActionMenu = true }) {
-                            Icon(Icons.Outlined.Add, null)
-                            Text("Aktion")
+                    Row {
+                        Column {
+                            TextButton(onClick = { addModifierMenu = true }) {
+                                Icon(Icons.Outlined.Add, null)
+                                Text("Bedingung")
+                            }
+                            DropdownMenu(expanded = addModifierMenu, onDismissRequest = { addModifierMenu = false }) {
+                                actions.forEach { target ->
+                                    val condition = ActionConditionEvaluator.condition(target)
+                                    if (condition == null && ActionConditionEvaluator.elseOf(target).isBlank()) {
+                                        DropdownMenuItem(
+                                            text = { Text("Bedingung für ${target.friendlyName}") },
+                                            onClick = {
+                                                val variable = extractors.firstOrNull { it.key.isNotBlank() }?.key ?: "text"
+                                                val index = actions.indexOfFirst { it.id == target.id }
+                                                if (index >= 0) {
+                                                    actions[index] = ActionConditionEvaluator.withCondition(
+                                                        target,
+                                                        ActionCondition(
+                                                            listOf(ActionConditionClause(variableKey = variable))
+                                                        )
+                                                    )
+                                                }
+                                                addModifierMenu = false
+                                            }
+                                        )
+                                    } else if (condition != null && actions.none { ActionConditionEvaluator.elseOf(it) == target.id }) {
+                                        DropdownMenuItem(
+                                            text = { Text("Sonst-Zweig zu ${target.friendlyName}") },
+                                            onClick = {
+                                                actions += duplicateAsElse(target)
+                                                addModifierMenu = false
+                                            }
+                                        )
+                                    }
+                                }
+                            }
                         }
-                        DropdownMenu(expanded = addActionMenu, onDismissRequest = { addActionMenu = false }) {
-                            DropdownMenuItem(text = { Text("Kalendereintrag") }, onClick = { actions += defaultCalendarAction(); addActionMenu = false })
-                            DropdownMenuItem(text = { Text("URL öffnen") }, onClick = { actions += defaultUrlAction(); addActionMenu = false })
-                            DropdownMenuItem(text = { Text("Text oder Textdatei") }, onClick = { actions += defaultShareAction(); addActionMenu = false })
-                            DropdownMenuItem(text = { Text("Webhook") }, onClick = { actions += defaultWebhookAction(); addActionMenu = false })
+                        Column {
+                            TextButton(onClick = { addActionMenu = true }) {
+                                Icon(Icons.Outlined.Add, null)
+                                Text("Aktion")
+                            }
+                            DropdownMenu(expanded = addActionMenu, onDismissRequest = { addActionMenu = false }) {
+                                DropdownMenuItem(text = { Text("Kalendereintrag") }, onClick = { actions += defaultCalendarAction(); addActionMenu = false })
+                                DropdownMenuItem(text = { Text("URL öffnen") }, onClick = { actions += defaultUrlAction(); addActionMenu = false })
+                                DropdownMenuItem(text = { Text("Text oder Textdatei") }, onClick = { actions += defaultShareAction(); addActionMenu = false })
+                                DropdownMenuItem(text = { Text("Webhook") }, onClick = { actions += defaultWebhookAction(); addActionMenu = false })
+                            }
                         }
                     }
                 }
@@ -1338,6 +1377,7 @@ internal fun ProfileEditorScreen(
             ActionEditorCard(
                 action = action,
                 position = index + 1,
+                allActions = actions.toList(),
                 variables = variables,
                 highlighted = highlightField?.startsWith(actionHighlightPrefix(action)) == true || highlightField == action.id,
                 canMoveUp = index > 0,
@@ -2093,6 +2133,7 @@ private fun TransformEditor(
 private fun ActionEditorCard(
     action: ProcessingAction,
     position: Int,
+    allActions: List<ProcessingAction>,
     variables: List<String>,
     highlighted: Boolean,
     canMoveUp: Boolean,
@@ -2123,6 +2164,34 @@ private fun ActionEditorCard(
                     )
                 }
                 Spacer(Modifier.width(8.dp))
+                when {
+                    ActionConditionEvaluator.elseOf(action).isNotBlank() -> {
+                        Surface(
+                            color = MaterialTheme.colorScheme.secondaryContainer,
+                            shape = RoundedCornerShape(6.dp)
+                        ) {
+                            Text(
+                                "SONST",
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp),
+                                style = MaterialTheme.typography.labelSmall
+                            )
+                        }
+                        Spacer(Modifier.width(6.dp))
+                    }
+                    ActionConditionEvaluator.condition(action) != null -> {
+                        Surface(
+                            color = MaterialTheme.colorScheme.primaryContainer,
+                            shape = RoundedCornerShape(6.dp)
+                        ) {
+                            Text(
+                                "WENN",
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp),
+                                style = MaterialTheme.typography.labelSmall
+                            )
+                        }
+                        Spacer(Modifier.width(6.dp))
+                    }
+                }
                 Icon(actionIcon(action.icon), null)
                 Spacer(Modifier.width(8.dp))
                 Text(
@@ -2184,6 +2253,35 @@ private fun ActionEditorCard(
                         }
                     }
                 }
+                val elseParent = ActionConditionEvaluator.elseOf(action).takeIf { it.isNotBlank() }
+                    ?.let { parentId -> allActions.firstOrNull { it.id == parentId } }
+                if (elseParent != null) {
+                    Surface(
+                        modifier = Modifier.fillMaxWidth().padding(start = 12.dp),
+                        color = MaterialTheme.colorScheme.secondaryContainer,
+                        shape = RoundedCornerShape(10.dp)
+                    ) {
+                        Row(
+                            Modifier.padding(10.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                "Sonst-Zweig zu „${elseParent.friendlyName}“",
+                                modifier = Modifier.weight(1f),
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            TextButton(onClick = { onChange(ActionConditionEvaluator.withElseOf(action, "")) }) {
+                                Text("Lösen")
+                            }
+                        }
+                    }
+                } else {
+                    ActionConditionEditor(
+                        condition = ActionConditionEvaluator.condition(action),
+                        variables = variables,
+                        onChange = { changed -> onChange(ActionConditionEvaluator.withCondition(action, changed)) }
+                    )
+                }
                 Text("Auswahl-Anzeige", fontWeight = FontWeight.SemiBold)
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Checkbox(actionShowInOverlay(action), { onChange(withOverlayVisibility(action, it)) })
@@ -2203,6 +2301,153 @@ private fun ActionEditorCard(
                     is ProcessingAction.Share -> ShareActionFields(action, variables, onChange)
                     is ProcessingAction.Webhook -> WebhookActionFields(action, variables, onChange)
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ActionConditionEditor(
+    condition: ActionCondition?,
+    variables: List<String>,
+    onChange: (ActionCondition?) -> Unit
+) {
+    if (condition == null) {
+        OutlinedButton(
+            onClick = {
+                onChange(
+                    ActionCondition(
+                        listOf(ActionConditionClause(variableKey = variables.firstOrNull().orEmpty()))
+                    )
+                )
+            }
+        ) {
+            Icon(Icons.Outlined.Add, null)
+            Spacer(Modifier.width(6.dp))
+            Text("Bedingung hinzufügen")
+        }
+        return
+    }
+
+    Surface(
+        modifier = Modifier.fillMaxWidth().padding(start = 12.dp),
+        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f),
+        shape = RoundedCornerShape(10.dp)
+    ) {
+        Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("Wenn", fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                TextButton(onClick = { onChange(null) }) { Text("Entfernen") }
+            }
+            condition.clauses.forEachIndexed { index, clause ->
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    if (index > 0) {
+                        OutlinedButton(
+                            onClick = {
+                                val changed = condition.clauses.toMutableList()
+                                changed[index] = clause.copy(
+                                    join = if (clause.join == MatcherJoin.AND) MatcherJoin.OR else MatcherJoin.AND
+                                )
+                                onChange(condition.copy(clauses = changed))
+                            }
+                        ) { Text(if (clause.join == MatcherJoin.AND) "UND" else "ODER") }
+                    }
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        items(variables.distinct()) { variable ->
+                            FilterChip(
+                                selected = clause.variableKey == variable,
+                                onClick = {
+                                    val changed = condition.clauses.toMutableList()
+                                    changed[index] = clause.copy(variableKey = variable.lowercase())
+                                    onChange(condition.copy(clauses = changed))
+                                },
+                                label = { Text(variableLabel(variable)) }
+                            )
+                        }
+                    }
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        item {
+                            FilterChip(
+                                selected = clause.mode == ActionConditionMode.EMPTY,
+                                onClick = {
+                                    val changed = condition.clauses.toMutableList()
+                                    changed[index] = clause.copy(mode = ActionConditionMode.EMPTY, regex = "")
+                                    onChange(condition.copy(clauses = changed))
+                                },
+                                label = { Text("ist leer") }
+                            )
+                        }
+                        item {
+                            FilterChip(
+                                selected = clause.mode == ActionConditionMode.NOT_EMPTY,
+                                onClick = {
+                                    val changed = condition.clauses.toMutableList()
+                                    changed[index] = clause.copy(mode = ActionConditionMode.NOT_EMPTY, regex = "")
+                                    onChange(condition.copy(clauses = changed))
+                                },
+                                label = { Text("ist nicht leer") }
+                            )
+                        }
+                        item {
+                            FilterChip(
+                                selected = clause.mode == ActionConditionMode.REGEX,
+                                onClick = {
+                                    val changed = condition.clauses.toMutableList()
+                                    changed[index] = clause.copy(mode = ActionConditionMode.REGEX)
+                                    onChange(condition.copy(clauses = changed))
+                                },
+                                label = { Text("passt zu Inhalt") }
+                            )
+                        }
+                    }
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Checkbox(
+                            clause.negate,
+                            {
+                                val changed = condition.clauses.toMutableList()
+                                changed[index] = clause.copy(negate = it)
+                                onChange(condition.copy(clauses = changed))
+                            }
+                        )
+                        Text("NICHT")
+                        Spacer(Modifier.weight(1f))
+                        if (condition.clauses.size > 1) {
+                            IconButton(onClick = {
+                                val changed = condition.clauses.toMutableList().apply { removeAt(index) }
+                                onChange(condition.copy(clauses = changed))
+                            }) { Icon(Icons.Outlined.Delete, "Bedingung entfernen") }
+                        }
+                    }
+                    if (clause.mode == ActionConditionMode.REGEX) {
+                        OutlinedTextField(
+                            value = clause.regex,
+                            onValueChange = {
+                                val changed = condition.clauses.toMutableList()
+                                changed[index] = clause.copy(regex = it)
+                                onChange(condition.copy(clauses = changed))
+                            },
+                            label = { Text("Text oder Regex") },
+                            supportingText = { Text("Beispiel: ^online$ für exakt „online“. NICHT kehrt das Ergebnis um.") },
+                            isError = clause.regex.isNotBlank() && runCatching { Regex(clause.regex) }.isFailure,
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = true
+                        )
+                    }
+                }
+            }
+            OutlinedButton(onClick = {
+                onChange(
+                    condition.copy(
+                        clauses = condition.clauses + ActionConditionClause(
+                            variableKey = variables.firstOrNull().orEmpty(),
+                            join = MatcherJoin.AND
+                        )
+                    )
+                )
+            }) {
+                Icon(Icons.Outlined.Add, null)
+                Spacer(Modifier.width(6.dp))
+                Text("Weitere Bedingung")
             }
         }
     }
@@ -2592,6 +2837,33 @@ private fun actionTemplates(action: ProcessingAction): List<Pair<String, String>
     is ProcessingAction.Webhook -> listOf(
         "Webhook-URL" to action.urlTemplate,
         "Webhook-Inhalt" to action.bodyTemplate
+    )
+}
+
+private fun duplicateAsElse(action: ProcessingAction): ProcessingAction = when (action) {
+    is ProcessingAction.Calendar -> action.copy(
+        id = UUID.randomUUID().toString(),
+        friendlyName = action.friendlyName + " (Sonst)",
+        condition = null,
+        elseOfActionId = action.id
+    )
+    is ProcessingAction.Url -> action.copy(
+        id = UUID.randomUUID().toString(),
+        friendlyName = action.friendlyName + " (Sonst)",
+        condition = null,
+        elseOfActionId = action.id
+    )
+    is ProcessingAction.Share -> action.copy(
+        id = UUID.randomUUID().toString(),
+        friendlyName = action.friendlyName + " (Sonst)",
+        condition = null,
+        elseOfActionId = action.id
+    )
+    is ProcessingAction.Webhook -> action.copy(
+        id = UUID.randomUUID().toString(),
+        friendlyName = action.friendlyName + " (Sonst)",
+        condition = null,
+        elseOfActionId = action.id
     )
 }
 
