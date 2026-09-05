@@ -48,4 +48,14 @@ class TemplateEngineTest {
             TemplateEngine.render("{{missing}}", emptyMap())
         }
     }
+
+    @Test
+    fun variableNamesAreCaseInsensitiveAndJsonCanBeEscaped() {
+        assertEquals("Berlin", TemplateEngine.render("{{ORT}}", mapOf("ort" to "Berlin")))
+        assertEquals(
+            "A\\\"B\\nC",
+            TemplateEngine.render("{{text|json}}", mapOf("text" to "A\"B\nC"))
+        )
+    }
+
 }
