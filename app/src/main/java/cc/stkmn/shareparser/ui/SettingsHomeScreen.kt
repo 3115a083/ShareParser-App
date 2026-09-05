@@ -16,7 +16,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Apps
 import androidx.compose.material.icons.outlined.ChevronRight
+import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material.icons.outlined.Language
 import androidx.compose.material.icons.outlined.Notifications
@@ -25,6 +27,7 @@ import androidx.compose.material.icons.outlined.PictureInPictureAlt
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.Switch
@@ -62,6 +65,7 @@ internal fun SettingsHomeScreen(
     onRegionalSettings: () -> Unit,
     onLanguageSettings: () -> Unit,
     onAppearanceSettings: () -> Unit,
+    onAdditionalShareSettings: () -> Unit,
     onSettingsChanged: (cc.stkmn.shareparser.data.AppSettings) -> Unit = {}
 ) {
     val context = LocalContext.current
@@ -194,7 +198,7 @@ internal fun SettingsHomeScreen(
             ) {
                 ShareModeRow(
                     selected = settings.shareSelectionMode == ShareSelectionMode.APP,
-                    icon = null,
+                    icon = { Icon(Icons.Outlined.Apps, null) },
                     title = "In ShareParser",
                     description = "Volle Liste in der App.",
                     onClick = { saveMode(ShareSelectionMode.APP) }
@@ -260,54 +264,12 @@ internal fun SettingsHomeScreen(
         }
 
         item {
-            SettingsTopicCard(
-                title = "Zusätzliche Teiloptionen",
-                description = "Standardmäßig aus. Aktivierte Optionen erscheinen nur, wenn ShareParser passende Inhalte erkennt."
-            ) {
-                ExtraShareToggle(
-                    checked = settings.extraShareMap,
-                    title = "Adresse in Karten-App öffnen",
-                    onChange = {
-                        settings = settings.copy(extraShareMap = it)
-                        repository.saveSettings(settings)
-                        onSettingsChanged(settings)
-                    }
-                )
-                ExtraShareToggle(
-                    checked = settings.extraShareWebLink,
-                    title = "Erkannten Web-Link öffnen",
-                    onChange = {
-                        settings = settings.copy(extraShareWebLink = it)
-                        repository.saveSettings(settings)
-                        onSettingsChanged(settings)
-                    }
-                )
-                ExtraShareToggle(
-                    checked = settings.extraSharePhone,
-                    title = "Erkannte Telefonnummer öffnen",
-                    onChange = {
-                        settings = settings.copy(extraSharePhone = it)
-                        repository.saveSettings(settings)
-                        onSettingsChanged(settings)
-                    }
-                )
-                ExtraShareToggle(
-                    checked = settings.extraShareEmail,
-                    title = "Erkannte E-Mail-Adresse öffnen",
-                    onChange = {
-                        settings = settings.copy(extraShareEmail = it)
-                        repository.saveSettings(settings)
-                        onSettingsChanged(settings)
-                    }
-                )
-                ExtraShareToggle(
-                    checked = settings.extraShareFileOpen,
-                    title = "Geteilten Dateityp direkt öffnen",
-                    onChange = {
-                        settings = settings.copy(extraShareFileOpen = it)
-                        repository.saveSettings(settings)
-                        onSettingsChanged(settings)
-                    }
+            SettingsTopicCard("Teilen") {
+                SettingsLinkRow(
+                    icon = { Icon(Icons.Outlined.Share, null) },
+                    title = "Zusätzliche Teiloptionen",
+                    description = "Karten, Links, Telefon, E-Mail, Dateien und eigene Web-Ziele",
+                    onClick = onAdditionalShareSettings
                 )
             }
         }
@@ -393,6 +355,89 @@ internal fun SettingsHomeScreen(
 }
 
 @Composable
+internal fun AdditionalShareSettingsScreen(
+    repository: ProfileRepository,
+    onSettingsChanged: (cc.stkmn.shareparser.data.AppSettings) -> Unit = {}
+) {
+    var settings by remember { mutableStateOf(repository.settings()) }
+
+    fun save(changed: cc.stkmn.shareparser.data.AppSettings) {
+        settings = changed
+        repository.saveSettings(changed)
+        onSettingsChanged(changed)
+    }
+
+    LazyColumn(
+        contentPadding = PaddingValues(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        item {
+            Text(
+                "Diese Optionen sind standardmäßig aus. Sie erscheinen nur, wenn der geteilte Inhalt zum jeweiligen Ziel passt.",
+                style = MaterialTheme.typography.bodySmall
+            )
+        }
+        item {
+            SettingsTopicCard(
+                title = "Erkannte Ziele",
+                description = "ShareParser stellt passende Inhalte zusätzlich als eingebaute Variablen bereit: shared_address, shared_web, shared_phone und shared_email."
+            ) {
+                ExtraShareToggle(settings.extraShareMap, "Adresse in Karten-App öffnen") {
+                    save(settings.copy(extraShareMap = it))
+                }
+                ExtraShareToggle(settings.extraShareWebLink, "Erkannten Web-Link öffnen") {
+                    save(settings.copy(extraShareWebLink = it))
+                }
+                ExtraShareToggle(settings.extraSharePhone, "Erkannte Telefonnummer öffnen") {
+                    save(settings.copy(extraSharePhone = it))
+                }
+                ExtraShareToggle(settings.extraShareEmail, "Erkannte E-Mail-Adresse öffnen") {
+                    save(settings.copy(extraShareEmail = it))
+                }
+                ExtraShareToggle(settings.extraShareFileOpen, "Geteilten Text-Dateityp direkt öffnen") {
+                    save(settings.copy(extraShareFileOpen = it))
+                }
+            }
+        }
+        item {
+            SettingsTopicCard(
+                title = "Eigenes Web-Ziel",
+                description = "Fügt einen festen Link als zusätzliche Teiloption hinzu, zum Beispiel eine Such- oder Web-App."
+            ) {
+                ExtraShareToggle(settings.extraShareCustomWeb, "Eigenes Web-Ziel anzeigen") {
+                    save(settings.copy(extraShareCustomWeb = it))
+                }
+                if (settings.extraShareCustomWeb) {
+                    OutlinedTextField(
+                        value = settings.extraShareCustomWebName,
+                        onValueChange = { save(settings.copy(extraShareCustomWebName = it.take(60))) },
+                        label = { Text("Anzeigename") },
+                        placeholder = { Text("z. B. In interner Suche öffnen") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true
+                    )
+                    OutlinedTextField(
+                        value = settings.extraShareCustomWebUrl,
+                        onValueChange = { save(settings.copy(extraShareCustomWebUrl = it.take(1000))) },
+                        label = { Text("Web-Adresse") },
+                        placeholder = { Text("https://example.com/search?q={{input|url}}") },
+                        supportingText = { Text("Variablen wie {{input|url}} oder {{shared_web|url}} sind erlaubt.") },
+                        modifier = Modifier.fillMaxWidth(),
+                        minLines = 2
+                    )
+                }
+            }
+        }
+        item {
+            SettingsTopicCard(
+                title = "Beim Öffnen aus anderen Apps",
+                description = "ShareParser kann als Ziel für Web-Links, Karten-Adressen, Telefonnummern und E-Mail-Adressen erscheinen. Der empfangene Wert steht als target und der Typ als target_type zur Verfügung."
+            ) {}
+        }
+    }
+}
+
+@Composable
 private fun ExtraShareToggle(
     checked: Boolean,
     title: String,
@@ -403,6 +448,7 @@ private fun ExtraShareToggle(
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(title, modifier = Modifier.weight(1f))
+        androidx.compose.foundation.layout.Spacer(Modifier.padding(horizontal = 6.dp))
         Switch(checked = checked, onCheckedChange = onChange)
     }
 }
