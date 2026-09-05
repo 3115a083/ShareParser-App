@@ -209,6 +209,7 @@ internal fun SharedScreen(
     val matches = remember(payload, profiles) { parser.matchingProfiles(payload, profiles) }
     var selected by remember(payload, profiles) { mutableStateOf<Profile?>(matches.singleOrNull()) }
     var showActionPicker by remember { mutableStateOf(false) }
+    var showExtraPicker by remember { mutableStateOf(false) }
     var sharedTextExpanded by remember(payload) { mutableStateOf(false) }
     var pendingCalendarExecution by remember { mutableStateOf<Pair<Profile, ProcessingAction.Calendar>?>(null) }
 
@@ -297,6 +298,35 @@ internal fun SharedScreen(
         }
     }
 
+    if (showExtraPicker) {
+        ModalBottomSheet(onDismissRequest = { showExtraPicker = false }) {
+            Column(
+                Modifier.padding(horizontal = 16.dp).padding(bottom = 32.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text("Zusätzliche Teiloptionen", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
+                Text(
+                    "Nur aktivierte Optionen, die zum geteilten Inhalt passen.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                extraChoices.forEach { choice ->
+                    ElevatedButton(
+                        onClick = {
+                            showExtraPicker = false
+                            ShareCoordinator(context).execute(payload, choice.profileId, choice.actionId)
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Icon(actionIcon(choice.icon), null)
+                        Spacer(Modifier.width(8.dp))
+                        Text(choice.actionName)
+                    }
+                }
+            }
+        }
+    }
+
     LazyColumn(contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item {
             Card(Modifier.fillMaxWidth()) {
@@ -339,25 +369,14 @@ internal fun SharedScreen(
 
         if (extraChoices.isNotEmpty()) {
             item {
-                Card(Modifier.fillMaxWidth()) {
-                    Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text("Zusätzliche Aktionen", fontWeight = FontWeight.SemiBold)
-                        Text(
-                            "Diese Aktionen wurden in den Einstellungen aktiviert und erscheinen nur für passende Inhalte.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        extraChoices.forEach { choice ->
-                            OutlinedButton(
-                                onClick = { ShareCoordinator(context).execute(payload, choice.profileId, choice.actionId) },
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Icon(actionIcon(choice.icon), null)
-                                Spacer(Modifier.width(8.dp))
-                                Text(choice.actionName)
-                            }
-                        }
-                    }
+                OutlinedButton(
+                    onClick = { showExtraPicker = true },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(Icons.Outlined.Share, null)
+                    Spacer(Modifier.width(8.dp))
+                    Text("Zusätzliche Teiloptionen (${extraChoices.size})", modifier = Modifier.weight(1f))
+                    Icon(Icons.Outlined.ExpandMore, null)
                 }
             }
         }
