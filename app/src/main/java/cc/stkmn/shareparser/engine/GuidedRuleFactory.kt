@@ -216,13 +216,13 @@ object GuidedRuleFactory {
                 sampleLabel = candidate.value.take(80)
             )
         } else {
-            val literal = Regex.escape(candidate.sourceLine)
+            val structural = structuralPattern(candidate.value)
             ExtractorRule(
                 key = normalizedKey,
-                regex = "(?m)^\\s*($literal)\\s*$",
+                regex = "(?m)^\\s*($structural)\\s*$",
                 required = required,
                 source = InputSource.TEXT,
-                sampleLabel = candidate.label
+                sampleLabel = candidate.value.take(80)
             )
         }
     }
@@ -309,6 +309,34 @@ object GuidedRuleFactory {
         return value.split(Regex("[\\t\\p{Zs}]+"))
             .filter { it.isNotEmpty() }
             .joinToString("[\\t\\p{Zs}]+") { Regex.escape(it) }
+    }
+
+    private fun structuralPattern(value: String): String {
+        if (value.isBlank()) return ".+?"
+        val out = StringBuilder()
+        var index = 0
+        while (index < value.length) {
+            val ch = value[index]
+            when {
+                ch.isLetter() -> {
+                    while (index < value.length && value[index].isLetter()) index++
+                    out.append("\\p{L}+")
+                }
+                ch.isDigit() -> {
+                    while (index < value.length && value[index].isDigit()) index++
+                    out.append("\\d+")
+                }
+                ch.isWhitespace() -> {
+                    while (index < value.length && value[index].isWhitespace()) index++
+                    out.append("\\s+")
+                }
+                else -> {
+                    out.append(Regex.escape(ch.toString()))
+                    index++
+                }
+            }
+        }
+        return out.toString().ifBlank { ".+?" }
     }
 
     private fun suggestedKey(label: String, index: Int): String {
