@@ -28,6 +28,7 @@ class ShareCoordinator(context: Context) {
         private const val EXTRA_PHONE = "__extra_phone__"
         private const val EXTRA_EMAIL = "__extra_email__"
         private const val EXTRA_FILE = "__extra_file__"
+        private const val EXTRA_CUSTOM_WEB = "__extra_custom_web__"
 
         fun isExtraChoice(choice: Choice): Boolean = choice.profileId == EXTRA_PROFILE_ID
     }
@@ -99,12 +100,27 @@ class ShareCoordinator(context: Context) {
             if (settings.extraShareFileOpen && payload.fileName.isNotBlank()) {
                 add(Choice(EXTRA_PROFILE_ID, EXTRA_FILE, "ShareParser", "Datei direkt öffnen", "description"))
             }
+            if (settings.extraShareCustomWeb && settings.extraShareCustomWebUrl.isNotBlank()) {
+                add(
+                    Choice(
+                        EXTRA_PROFILE_ID,
+                        EXTRA_CUSTOM_WEB,
+                        "ShareParser",
+                        settings.extraShareCustomWebName.ifBlank { "Eigenes Web-Ziel" },
+                        "link"
+                    )
+                )
+            }
         }
     }
 
     private fun executeExtra(payload: SharedPayload, actionId: String): Boolean {
         val settings = repository.settings()
         val candidates = GuidedRuleFactory.candidates(payload)
+        val address = candidates.firstOrNull { it.suggestedKey == "adresse" }?.value.orEmpty()
+        val web = candidates.firstOrNull { it.suggestedKey == "link" && !it.value.startsWith("mailto:", true) && !it.value.startsWith("tel:", true) }?.value.orEmpty()
+        val phone = candidates.firstOrNull { it.suggestedKey == "telefon" }?.value.orEmpty()
+        val email = candidates.firstOrNull { it.suggestedKey == "email" }?.value.orEmpty()
         val values = mapOf(
             "input" to payload.combined,
             "text" to payload.text,
@@ -112,7 +128,13 @@ class ShareCoordinator(context: Context) {
             "source_app" to payload.sourceApp,
             "source_package" to payload.sourcePackage,
             "file_name" to payload.fileName,
-            "mime_type" to payload.mimeType
+            "mime_type" to payload.mimeType,
+            "target" to payload.target,
+            "target_type" to payload.targetType,
+            "shared_address" to address,
+            "shared_web" to web,
+            "shared_phone" to phone,
+            "shared_email" to email
         )
         val action: ProcessingAction = when (actionId) {
             EXTRA_MAP -> {
@@ -148,6 +170,12 @@ class ShareCoordinator(context: Context) {
                     fileExtension = ext
                 )
             }
+            EXTRA_CUSTOM_WEB -> ProcessingAction.Url(
+                id = EXTRA_CUSTOM_WEB,
+                friendlyName = settings.extraShareCustomWebName.ifBlank { "Eigenes Web-Ziel" },
+                icon = "link",
+                urlTemplate = settings.extraShareCustomWebUrl
+            )
             else -> return false
         }
         return try {
@@ -177,6 +205,7 @@ class ShareCoordinator(context: Context) {
         is ProcessingAction.Calendar -> action.showInOverlay
         is ProcessingAction.Url -> action.showInOverlay
         is ProcessingAction.Share -> action.showInOverlay
+        is ProcessingAction.Target -> action.showInOverlay
         is ProcessingAction.Webhook -> action.showInOverlay
     }
 
@@ -184,6 +213,7 @@ class ShareCoordinator(context: Context) {
         is ProcessingAction.Calendar -> action.showInNotification
         is ProcessingAction.Url -> action.showInNotification
         is ProcessingAction.Share -> action.showInNotification
+        is ProcessingAction.Target -> action.showInNotification
         is ProcessingAction.Webhook -> action.showInNotification
     }
 
