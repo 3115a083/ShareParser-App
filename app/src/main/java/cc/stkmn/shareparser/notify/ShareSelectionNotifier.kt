@@ -12,6 +12,7 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import cc.stkmn.shareparser.ActionDispatchActivity
+import cc.stkmn.shareparser.AppLocale
 import cc.stkmn.shareparser.MainActivity
 import cc.stkmn.shareparser.R
 import cc.stkmn.shareparser.share.ShareCoordinator
@@ -27,10 +28,10 @@ object ShareSelectionNotifier {
             manager.createNotificationChannel(
                 NotificationChannel(
                     CHANNEL,
-                    "Auswahl beim Teilen",
+                    AppLocale.text("Auswahl beim Teilen", "Share selection"),
                     NotificationManager.IMPORTANCE_DEFAULT
                 ).apply {
-                    description = "Auswahl von Profil und Weiterverarbeitung für geteilte Inhalte"
+                    description = AppLocale.text("Auswahl von Profil und Weiterverarbeitung für geteilte Inhalte", "Select a profile and processing action for shared content")
                     enableVibration(true)
                 }
             )
@@ -60,9 +61,15 @@ object ShareSelectionNotifier {
 
             val builder = NotificationCompat.Builder(context.applicationContext, CHANNEL)
                 .setSmallIcon(R.drawable.ic_notification)
-                .setContentTitle("ShareParser: Weiterverarbeitung auswählen")
-                .setContentText(if (choices.size == 1) choices.first().label(multipleProfiles) else "${choices.size} Möglichkeiten verfügbar")
-                .setStyle(NotificationCompat.BigTextStyle().bigText(choices.take(6).joinToString("\n") { it.label(multipleProfiles) }))
+                .setContentTitle(AppLocale.text("ShareParser: Weiterverarbeitung auswählen", "ShareParser: Select processing action"))
+                .setContentText(
+                    when {
+                        choices.size == 1 -> choices.first().label(multipleProfiles)
+                        choices.size <= 3 -> AppLocale.text("${choices.size} Möglichkeiten verfügbar", "${choices.size} options available")
+                        else -> AppLocale.text("3 Schnellaktionen, weitere in ShareParser", "3 quick actions, more in ShareParser")
+                    }
+                )
+                .setStyle(NotificationCompat.BigTextStyle().bigText(choices.take(3).joinToString("\n") { it.label(multipleProfiles) }))
                 .setPriority(NotificationCompat.PRIORITY_DEFAULT)
                 .setAutoCancel(true)
                 .setTimeoutAfter(TIMEOUT_MS)

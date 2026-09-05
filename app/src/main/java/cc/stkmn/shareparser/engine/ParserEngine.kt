@@ -3,6 +3,8 @@ package cc.stkmn.shareparser.engine
 import cc.stkmn.shareparser.data.CaseMode
 import cc.stkmn.shareparser.data.ExtractorRule
 import cc.stkmn.shareparser.data.InputSource
+import cc.stkmn.shareparser.data.MatcherJoin
+import cc.stkmn.shareparser.data.MatcherValueMode
 import cc.stkmn.shareparser.data.ParseDirection
 import cc.stkmn.shareparser.data.Profile
 import cc.stkmn.shareparser.data.SharedPayload
@@ -13,19 +15,39 @@ class ParserEngine {
         val matched = profiles.filter { profile ->
             if (!profile.enabled) return@filter false
             val triggerValues = availableValues(payload, profile)
-            profile.matchers.all { matcher ->
-                runCatching {
-                    val options = buildSet {
-                        add(RegexOption.MULTILINE)
-                        if (matcher.ignoreCase) add(RegexOption.IGNORE_CASE)
+            if (profile.matchers.isEmpty()) {
+                true
+            } else {
+                profile.matchers.map { matcher ->
+                    runCatching {
+                        val source = if (matcher.variableKey.isBlank()) {
+                            payload.combined
+                        } else {
+                            triggerValues[matcher.variableKey.lowercase()].orEmpty()
+                        }
+                        val matchedValue = when (matcher.valueMode) {
+                            MatcherValueMode.EMPTY -> source.isBlank()
+                            MatcherValueMode.NOT_EMPTY -> source.isNotBlank()
+                            MatcherValueMode.REGEX -> {
+                                val options = buildSet {
+                                    add(RegexOption.MULTILINE)
+                                    if (matcher.ignoreCase) add(RegexOption.IGNORE_CASE)
+                                }
+                                Regex(matcher.regex, options).containsMatchIn(source)
+                            }
+                        }
+                        if (matcher.negate) !matchedValue else matchedValue
+                    }.getOrDefault(false)
+                }.let { results ->
+                    var matchedResult = results.first()
+                    for (index in 1 until results.size) {
+                        matchedResult = when (profile.matchers[index].join) {
+                            MatcherJoin.AND -> matchedResult && results[index]
+                            MatcherJoin.OR -> matchedResult || results[index]
+                        }
                     }
-                    val source = if (matcher.variableKey.isBlank()) {
-                        payload.combined
-                    } else {
-                        triggerValues[matcher.variableKey] ?: return@runCatching false
-                    }
-                    Regex(matcher.regex, options).containsMatchIn(source)
-                }.getOrDefault(false)
+                    matchedResult
+                }
             }
         }
         val specific = matched.filter { it.matchers.isNotEmpty() }
@@ -52,7 +74,7 @@ class ParserEngine {
                     technicalDetails = details
                 )
             }
-            if (value != null) values[rule.key] = value
+            if (value != null) values[rule.key.lowercase()] = value
         }
         return values
     }
@@ -66,7 +88,7 @@ class ParserEngine {
             val source = extractionSource(payload, rule, values) ?: return@forEach
             runCatching { extractOne(source, rule, profile.parseDirection) }
                 .getOrNull()
-                ?.let { values[rule.key] = it }
+                ?.let { values[rule.key.lowercase()] = it }
         }
         return values
     }
@@ -78,23 +100,41 @@ class ParserEngine {
     ): String? = if (rule.sourceVariableKey.isBlank()) {
         sourceFor(payload, rule.source)
     } else {
-        values[rule.sourceVariableKey]
+        values[rule.sourceVariableKey.lowercase()]
     }
 
-    private fun builtInValues(payload: SharedPayload) = linkedMapOf(
-        "input" to payload.combined,
-        "text" to payload.text,
-        "subject" to payload.subject,
-        "source_app" to payload.sourceApp,
-        "source_package" to payload.sourcePackage,
-        "file_name" to payload.fileName,
-        "mime_type" to payload.mimeType
-    )
+    private fun builtInValues(payload: SharedPayload): LinkedHashMap<String, String> {
+        val candidates = GuidedRuleFactory.candidates(payload)
+        val sharedAddress = candidates.firstOrNull { it.suggestedKey == "adresse" }?.value.orEmpty()
+        val sharedWeb = candidates.firstOrNull {
+            it.suggestedKey == "link" &&
+                !it.value.startsWith("mailto:", true) &&
+                !it.value.startsWith("tel:", true)
+        }?.value.orEmpty()
+        val sharedPhone = candidates.firstOrNull { it.suggestedKey == "telefon" }?.value.orEmpty()
+        val sharedEmail = candidates.firstOrNull { it.suggestedKey == "email" }?.value.orEmpty()
+        return linkedMapOf(
+            "input" to payload.combined,
+            "text" to payload.text,
+            "subject" to payload.subject,
+            "source_app" to payload.sourceApp,
+            "source_package" to payload.sourcePackage,
+            "file_name" to payload.fileName,
+            "mime_type" to payload.mimeType,
+            "target" to payload.target,
+            "target_type" to payload.targetType,
+            "shared_address" to sharedAddress,
+            "shared_web" to sharedWeb,
+            "shared_phone" to sharedPhone,
+            "shared_email" to sharedEmail
+        )
+    }
 
     private fun sourceFor(payload: SharedPayload, source: InputSource): String = when (source) {
         InputSource.COMBINED -> payload.combined
         InputSource.TEXT -> payload.text
         InputSource.SUBJECT -> payload.subject
+        InputSource.LINKS -> payload.linkTargets.joinToString("\n")
     }
 
     private fun extractOne(input: String, rule: ExtractorRule, direction: ParseDirection): String? {

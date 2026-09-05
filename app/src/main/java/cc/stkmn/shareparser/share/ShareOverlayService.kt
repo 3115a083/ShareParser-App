@@ -9,6 +9,7 @@ import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
 import android.provider.Settings
+import android.content.res.Configuration
 import android.view.Gravity
 import android.view.View
 import android.view.WindowManager
@@ -17,8 +18,11 @@ import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
-import cc.stkmn.shareparser.R
+import cc.stkmn.shareparser.AppArtwork
+import cc.stkmn.shareparser.AppLocale
+import cc.stkmn.shareparser.MainActivity
 import cc.stkmn.shareparser.data.PendingShareStore
+import cc.stkmn.shareparser.data.ShareSelectionMode
 
 class ShareOverlayService : Service() {
     private val handler = Handler(Looper.getMainLooper())
@@ -48,17 +52,24 @@ class ShareOverlayService : Service() {
             return
         }
         val coordinator = ShareCoordinator(this)
-        val choices = coordinator.choices(pending.payload)
+        val choices = coordinator.choices(pending.payload, ShareSelectionMode.OVERLAY)
         if (choices.isEmpty()) {
             stopSelf()
             return
         }
         val multipleProfiles = choices.map { it.profileId }.distinct().size > 1
+        val dark = resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK == Configuration.UI_MODE_NIGHT_YES
+        val surface = if (dark) 0xFF1B1B1F.toInt() else 0xFFFDFBFF.toInt()
+        val onSurface = if (dark) 0xFFE6E1E5.toInt() else 0xFF1C1B1F.toInt()
+        val onSurfaceVariant = if (dark) 0xFFCAC4D0.toInt() else 0xFF49454F.toInt()
+        val primary = if (dark) 0xFFB4C5FF.toInt() else 0xFF315DA8.toInt()
+        val onPrimary = if (dark) 0xFF002E69.toInt() else Color.WHITE
+        val outline = if (dark) 0xFF938F99.toInt() else 0xFF79747E.toInt()
 
         val content = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(22), dp(20), dp(22), dp(18))
-            background = roundedBackground(0xFFFDFBFF.toInt(), 24f)
+            background = roundedBackground(surface, 20f)
             elevation = dp(18).toFloat()
         }
 
@@ -67,21 +78,21 @@ class ShareOverlayService : Service() {
             gravity = Gravity.CENTER_VERTICAL
         }
         header.addView(ImageView(this).apply {
-            setImageResource(R.drawable.ic_launcher_foreground)
+            AppArtwork.loadBitmap(this@ShareOverlayService, AppArtwork.FOREGROUND_ASSET)?.let { setImageBitmap(it) }
             scaleType = ImageView.ScaleType.CENTER_INSIDE
-        }, LinearLayout.LayoutParams(dp(42), dp(42)).apply { marginEnd = dp(12) })
+        }, LinearLayout.LayoutParams(dp(66), dp(66)).apply { marginEnd = dp(12) })
         header.addView(LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             addView(TextView(this@ShareOverlayService).apply {
                 text = "ShareParser"
                 textSize = 20f
-                setTextColor(0xFF1C1B1F.toInt())
+                setTextColor(onSurface)
                 setTypeface(typeface, android.graphics.Typeface.BOLD)
             })
             addView(TextView(this@ShareOverlayService).apply {
-                text = "Weiterverarbeitung auswählen"
+                text = AppLocale.text("Weiterverarbeitung auswählen", "Select processing action")
                 textSize = 13f
-                setTextColor(0xFF5F5E62.toInt())
+                setTextColor(onSurfaceVariant)
                 setPadding(0, dp(2), 0, 0)
             })
         }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
@@ -90,18 +101,18 @@ class ShareOverlayService : Service() {
         content.addView(TextView(this).apply {
             text = pending.payload.subject.ifBlank { pending.payload.fileName }.take(80)
             textSize = 12f
-            setTextColor(0xFF77747A.toInt())
+            setTextColor(onSurfaceVariant)
             visibility = if (text.isBlank()) View.GONE else View.VISIBLE
             setPadding(0, dp(12), 0, dp(4))
         })
 
-        choices.take(12).forEach { choice ->
+        choices.take(4).forEach { choice ->
             content.addView(Button(this).apply {
                 text = choice.label(multipleProfiles)
                 isAllCaps = false
                 textSize = 15f
-                setTextColor(Color.WHITE)
-                background = roundedBackground(0xFF3168D8.toInt(), 14f)
+                setTextColor(onPrimary)
+                background = roundedBackground(primary, 12f)
                 setPadding(dp(14), dp(10), dp(14), dp(10))
                 setOnClickListener {
                     coordinator.executePending(id, choice.profileId, choice.actionId)
@@ -111,12 +122,34 @@ class ShareOverlayService : Service() {
                 topMargin = dp(10)
             })
         }
+        if (choices.size > 4) {
+            content.addView(Button(this).apply {
+                text = AppLocale.text("Alle Möglichkeiten anzeigen", "Show all options")
+                isAllCaps = false
+                textSize = 14f
+                setTextColor(primary)
+                background = roundedStrokeBackground(Color.TRANSPARENT, outline, 12f)
+                setOnClickListener {
+                    startActivity(
+                        Intent(this@ShareOverlayService, MainActivity::class.java).apply {
+                            action = MainActivity.ACTION_OPEN_PENDING_SHARE
+                            putExtra(MainActivity.EXTRA_PENDING_SHARE_ID, id)
+                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+                        }
+                    )
+                    dismiss(removePending = false)
+                }
+            }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+                topMargin = dp(10)
+            })
+        }
+
         content.addView(Button(this).apply {
-            text = "Abbrechen"
+            text = AppLocale.text("Abbrechen", "Cancel")
             isAllCaps = false
             textSize = 14f
-            setTextColor(0xFF3C4043.toInt())
-            background = roundedStrokeBackground(0x00FFFFFF, 0xFFCAC4D0.toInt(), 14f)
+            setTextColor(onSurface)
+            background = roundedStrokeBackground(Color.TRANSPARENT, outline, 12f)
             setOnClickListener { dismiss(removePending = true) }
         }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
             topMargin = dp(12)
