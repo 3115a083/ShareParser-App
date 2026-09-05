@@ -64,6 +64,7 @@ import cc.stkmn.shareparser.data.Profile
 import cc.stkmn.shareparser.data.ProfileRepository
 import cc.stkmn.shareparser.data.SharedPayload
 import cc.stkmn.shareparser.data.WebhookMode
+import cc.stkmn.shareparser.engine.ActionConditionEvaluator
 import cc.stkmn.shareparser.engine.ActionExecutor
 import cc.stkmn.shareparser.engine.ParserEngine
 import cc.stkmn.shareparser.engine.ProcessingException
@@ -260,9 +261,15 @@ internal fun SharedScreen(
         }
     }
 
+    val selectedValues = extraction?.getOrNull().orEmpty()
     val selectableActions = selected?.actions
         ?.filterNot { it is ProcessingAction.Webhook && it.mode == WebhookMode.ALWAYS }
+        ?.filter { action -> ActionConditionEvaluator.isAvailable(action, selected!!.actions, selectedValues) }
         .orEmpty()
+    val extraChoices = remember(payload, repository.settings()) {
+        ShareCoordinator(context).choices(payload, cc.stkmn.shareparser.data.ShareSelectionMode.APP)
+            .filter(ShareCoordinator::isExtraChoice)
+    }
 
     LaunchedEffect(selected?.id, selectableActions.size) {
         showActionPicker = selectableActions.size > 1
@@ -326,6 +333,31 @@ internal fun SharedScreen(
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
+                }
+            }
+        }
+
+        if (extraChoices.isNotEmpty()) {
+            item {
+                Card(Modifier.fillMaxWidth()) {
+                    Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("Zusätzliche Aktionen", fontWeight = FontWeight.SemiBold)
+                        Text(
+                            "Diese Aktionen wurden in den Einstellungen aktiviert und erscheinen nur für passende Inhalte.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        extraChoices.forEach { choice ->
+                            OutlinedButton(
+                                onClick = { ShareCoordinator(context).execute(payload, choice.profileId, choice.actionId) },
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Icon(actionIcon(choice.icon), null)
+                                Spacer(Modifier.width(8.dp))
+                                Text(choice.actionName)
+                            }
+                        }
+                    }
                 }
             }
         }
