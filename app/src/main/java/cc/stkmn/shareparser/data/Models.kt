@@ -302,7 +302,7 @@ sealed class ProcessingAction {
         val showInOverlay: Boolean = true,
         val showInNotification: Boolean = true,
         val urlTemplate: String = "",
-        val bodyTemplate: String = """{"text":"{{text}}","subject":"{{subject}}"}""",
+        val bodyTemplate: String = """{"text":"{{text|json}}","subject":"{{subject|json}}"}""",
         val contentType: String = "application/json; charset=utf-8",
         val mode: WebhookMode = WebhookMode.ON_SELECTION,
         val emptyValuePolicy: EmptyValuePolicy = EmptyValuePolicy.ERROR,
