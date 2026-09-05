@@ -20,7 +20,7 @@ class ParserEngineTest {
     @Test
     fun extractsRegexGroup() {
         val profile = Profile("1", "Mail", extractors = listOf(ExtractorRule("mailSubject", "(?m)^Subject: (.+)$", required = true)))
-        assertEquals("Train 42", engine.extract("Subject: Train 42\nBody", profile)["mailSubject"])
+        assertEquals("Train 42", engine.extract("Subject: Train 42\nBody", profile)["mailsubject"])
     }
 
     @Test
