@@ -6,7 +6,7 @@ import java.util.UUID
 
 @Serializable
 data class ProfileBundle(
-    val schemaVersion: Int = 10,
+    val schemaVersion: Int = 11,
     val profile: Profile
 )
 
@@ -107,6 +107,27 @@ enum class CaseMode {
 }
 
 @Serializable
+enum class ActionConditionMode {
+    REGEX,
+    EMPTY,
+    NOT_EMPTY
+}
+
+@Serializable
+data class ActionConditionClause(
+    val variableKey: String = "",
+    val mode: ActionConditionMode = ActionConditionMode.NOT_EMPTY,
+    val regex: String = "",
+    val join: MatcherJoin = MatcherJoin.AND,
+    val negate: Boolean = false
+)
+
+@Serializable
+data class ActionCondition(
+    val clauses: List<ActionConditionClause> = emptyList()
+)
+
+@Serializable
 enum class UrlOpenMode {
     BROWSER,
     WEBVIEW
@@ -195,7 +216,11 @@ data class AppSettings(
     val defaultSaveTreeUri: String = "",
     val appLanguage: AppLanguage = AppLanguage.SYSTEM,
     val appearanceMode: AppearanceMode = AppearanceMode.SYSTEM,
-    val colorPalette: ColorPalette = ColorPalette.MATERIAL_YOU
+    val colorPalette: ColorPalette = ColorPalette.MATERIAL_YOU,
+    val extraShareMap: Boolean = false,
+    val extraShareWebLink: Boolean = false,
+    val extraSharePhone: Boolean = false,
+    val extraShareEmail: Boolean = false
 )
 
 @Serializable
@@ -210,6 +235,8 @@ sealed class ProcessingAction {
         override val id: String,
         override val friendlyName: String,
         override val icon: String = "event",
+        val condition: ActionCondition? = null,
+        val elseOfActionId: String = "",
         val showInOverlay: Boolean = true,
         val showInNotification: Boolean = true,
         val titleTemplate: String = "{{subject}}",
@@ -232,6 +259,8 @@ sealed class ProcessingAction {
         override val id: String,
         override val friendlyName: String,
         override val icon: String = "link",
+        val condition: ActionCondition? = null,
+        val elseOfActionId: String = "",
         val showInOverlay: Boolean = true,
         val showInNotification: Boolean = true,
         val urlTemplate: String = "https://example.com/?q={{input|url}}",
@@ -244,6 +273,8 @@ sealed class ProcessingAction {
         override val id: String,
         override val friendlyName: String,
         override val icon: String = "share",
+        val condition: ActionCondition? = null,
+        val elseOfActionId: String = "",
         val showInOverlay: Boolean = true,
         val showInNotification: Boolean = true,
         val textTemplate: String = "{{text}}",
@@ -265,6 +296,8 @@ sealed class ProcessingAction {
         override val id: String,
         override val friendlyName: String,
         override val icon: String = "send",
+        val condition: ActionCondition? = null,
+        val elseOfActionId: String = "",
         val showInOverlay: Boolean = true,
         val showInNotification: Boolean = true,
         val urlTemplate: String = "",
