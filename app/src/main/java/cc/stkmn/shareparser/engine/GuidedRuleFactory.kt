@@ -172,6 +172,26 @@ object GuidedRuleFactory {
             )
         }
 
+        val semanticRegex = when (candidate.label) {
+            "E-Mail-Adresse" -> "(?i)([A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z]{2,})"
+            "E-Mail-Link" -> "(?i)(mailto:[^\\s<>\"']+)"
+            "Telefonnummer" -> "(\\+?[0-9][0-9 ()/.-]{5,}[0-9])"
+            "Telefon-Link" -> "(?i)(tel:[+0-9()./ -]{5,})"
+            "Web-Link" -> "(?i)((?:https?://|www\\.)[^\\s<>\"']+)"
+            "Adresse" -> "(?i)((?:\\b(?:am|an der|auf der|unter den|zum|zur)\\s+)?[\\p{L}][\\p{L}.'’/-]*(?:straße|strasse|str\\.?|weg|allee|platz|gasse|ring|ufer|chaussee|damm|steig|stieg|pfad|promenade)\\s+\\d{1,5}[a-zA-Z]?(?:\\s*[-/]\\s*\\d{1,5}[a-zA-Z]?)?)"
+            "PLZ und Ort" -> "((?<!\\d)\\d{5}\\s+[\\p{L}][\\p{L} .'-]{1,50}(?!\\d))"
+            else -> null
+        }
+        if (semanticRegex != null) {
+            return ExtractorRule(
+                key = normalizedKey,
+                regex = semanticRegex,
+                required = required,
+                source = candidate.source,
+                sampleLabel = candidate.value.take(80)
+            )
+        }
+
         val selectedIndex = candidate.sourceLine.indexOf(candidate.value)
         if (selectedIndex >= 0 && candidate.value != candidate.sourceLine) {
             return extractorFromSelection(
