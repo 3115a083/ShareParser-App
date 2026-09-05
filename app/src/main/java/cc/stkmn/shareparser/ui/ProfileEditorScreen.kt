@@ -2753,7 +2753,14 @@ private fun WebhookActionFields(action: ProcessingAction.Webhook, variables: Lis
         urlEncodeVariables = true,
         copyTechnicalValue = true
     ) { onChange(action.copy(urlTemplate = it)) }
-    TemplateField("POST-Inhalt", action.bodyTemplate, variables, placeholder = "{\"text\":\"{{text}}\"}", minLines = 5) { onChange(action.copy(bodyTemplate = it)) }
+    TemplateField(
+        "POST-Inhalt",
+        action.bodyTemplate,
+        variables,
+        placeholder = "{\"text\":\"{{text|json}}\"}",
+        minLines = 5,
+        jsonEncodeVariables = true
+    ) { onChange(action.copy(bodyTemplate = it)) }
     OutlinedTextField(action.contentType, { onChange(action.copy(contentType = it)) }, label = { Text("Content-Type") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
     Text("Ausführung", fontWeight = FontWeight.SemiBold)
     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -2787,6 +2794,7 @@ private fun TemplateField(
     minLines: Int = 1,
     urlEncodeVariables: Boolean = false,
     copyTechnicalValue: Boolean = false,
+    jsonEncodeVariables: Boolean = false,
     onChange: (String) -> Unit
 ) {
     val clipboard = LocalClipboardManager.current
@@ -2835,7 +2843,11 @@ private fun TemplateField(
             items(variables.distinct()) { variable ->
                 AssistChip(
                     onClick = {
-                        val token = if (urlEncodeVariables) "{{${variable}|url}}" else "{{${variable}}}"
+                        val token = when {
+                            urlEncodeVariables -> "{{${variable}|url}}"
+                            jsonEncodeVariables -> "{{${variable}|json}}"
+                            else -> "{{${variable}}"
+                        }
                         val start = minOf(field.selection.start, field.selection.end).coerceIn(0, field.text.length)
                         val end = maxOf(field.selection.start, field.selection.end).coerceIn(0, field.text.length)
                         val changed = field.text.replaceRange(start, end, token)
