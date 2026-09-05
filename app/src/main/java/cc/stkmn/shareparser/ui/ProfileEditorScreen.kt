@@ -1768,6 +1768,7 @@ private fun ExtractorCard(
     var sourceMenu by remember { mutableStateOf(false) }
     var splitDialog by remember { mutableStateOf(false) }
     var regexHelp by remember(rule.id) { mutableStateOf(false) }
+    var captureInfo by remember(rule.id) { mutableStateOf(false) }
     val preview = remember(rule, sample, parseDirection, previewRules) {
         sample?.let {
             val safePreviewRules = previewRules.map { previewRule ->
@@ -1789,6 +1790,21 @@ private fun ExtractorCard(
             preview = preview.orEmpty(),
             onConfirm = onSplit,
             onDismiss = { splitDialog = false }
+        )
+    }
+
+    if (captureInfo) {
+        AlertDialog(
+            onDismissRequest = { captureInfo = false },
+            title = { Text("Was ist eine Capture Group?") },
+            text = {
+                Text(
+                    "Klammern im Regex markieren Teilbereiche. Capture Group 1 ist der Inhalt der ersten Klammergruppe, Group 2 der zweiten usw. ShareParser übernimmt nur die ausgewählte Gruppe als Variablenwert. Beispiel: „PLZ: (\\d{5})“ speichert nur die fünf Ziffern."
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = { captureInfo = false }) { Text("Verstanden") }
+            }
         )
     }
 
@@ -1823,7 +1839,20 @@ private fun ExtractorCard(
                 value = rule.regex,
                 onValueChange = { onChange(rule.copy(regex = it)) },
                 label = { Text("Erkennungslogik") },
-                supportingText = { Text("Der Inhalt der Capture Group ${rule.group} wird als Variable übernommen.") },
+                supportingText = {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            "Capture Group ${rule.group} wird als Variable übernommen.",
+                            modifier = Modifier.weight(1f)
+                        )
+                        IconButton(
+                            onClick = { captureInfo = true },
+                            modifier = Modifier.width(32.dp).height(32.dp)
+                        ) {
+                            Icon(Icons.Outlined.HelpOutline, "Capture Groups erklären")
+                        }
+                    }
+                },
                 isError = runCatching { Regex(rule.regex) }.isFailure,
                 modifier = Modifier.fillMaxWidth(),
                 minLines = 2
