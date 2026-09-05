@@ -48,21 +48,20 @@ class ShareReceiverActivity : ComponentActivity() {
         val allChoices = coordinator.choices(payload, ShareSelectionMode.APP)
         val choices = coordinator.choices(payload, settings.shareSelectionMode)
 
-        if (matches.isNotEmpty() && allChoices.isEmpty()) {
+        if (allChoices.isEmpty() && matches.isNotEmpty()) {
             finish()
             return
         }
 
-        if (matches.size == 1 && choices.size == 1) {
+        if (choices.size == 1) {
             val choice = choices.first()
-            val action = matches.first().actions.firstOrNull { it.id == choice.actionId }
-            if (action != null) coordinator.execute(payload, matches.first(), action)
+            coordinator.execute(payload, choice.profileId, choice.actionId)
             finish()
             return
         }
 
         val pending = pendingStore.put(payload)
-        if (matches.isEmpty() || choices.isEmpty()) {
+        if (choices.isEmpty()) {
             openApp(pending.id)
             finish()
             return
