@@ -621,50 +621,55 @@ internal fun ProfileEditorScreen(
         }
     }
 
-    LazyColumn(
-        state = editorListState,
-        contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp)
-    ) {
-        stickyHeader {
-            Surface(tonalElevation = 3.dp) {
-                LazyRow(
-                    modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
+    Column(Modifier.fillMaxSize()) {
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            tonalElevation = 3.dp,
+            color = MaterialTheme.colorScheme.surfaceContainer
+        ) {
+            LazyRow(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                item {
+                    FilterChip(
+                        selected = activeEditorSection == "recognition",
+                        onClick = { navigationScope.launch { editorListState.animateScrollToItem(recognitionIndex) } },
+                        label = { Text("Profil erkennen") }
+                    )
+                }
+                if (sample != null) {
                     item {
                         FilterChip(
-                            selected = activeEditorSection == "recognition",
-                            onClick = { navigationScope.launch { editorListState.animateScrollToItem(recognitionIndex) } },
-                            label = { Text("Profil erkennen") }
-                        )
-                    }
-                    if (sample != null) {
-                        item {
-                            FilterChip(
-                                selected = activeEditorSection == "example",
-                                onClick = { navigationScope.launch { editorListState.animateScrollToItem(exampleIndex) } },
-                                label = { Text("Variablen aus Beispiel") }
-                            )
-                        }
-                    }
-                    item {
-                        FilterChip(
-                            selected = activeEditorSection == "variables",
-                            onClick = { navigationScope.launch { editorListState.animateScrollToItem(variablesIndex) } },
-                            label = { Text("Variablen") }
-                        )
-                    }
-                    item {
-                        FilterChip(
-                            selected = activeEditorSection == "actions",
-                            onClick = { navigationScope.launch { editorListState.animateScrollToItem(actionsIndex) } },
-                            label = { Text("Weiterverarbeitung") }
+                            selected = activeEditorSection == "example",
+                            onClick = { navigationScope.launch { editorListState.animateScrollToItem(exampleIndex) } },
+                            label = { Text("Variablen aus Beispiel") }
                         )
                     }
                 }
+                item {
+                    FilterChip(
+                        selected = activeEditorSection == "variables",
+                        onClick = { navigationScope.launch { editorListState.animateScrollToItem(variablesIndex) } },
+                        label = { Text("Variablen") }
+                    )
+                }
+                item {
+                    FilterChip(
+                        selected = activeEditorSection == "actions",
+                        onClick = { navigationScope.launch { editorListState.animateScrollToItem(actionsIndex) } },
+                        label = { Text("Weiterverarbeitung") }
+                    )
+                }
             }
         }
+        LazyColumn(
+            modifier = Modifier.weight(1f),
+            state = editorListState,
+            contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
+        ) {
+            item { Spacer(Modifier.height(0.dp)) }
         item {
             Card(Modifier.fillMaxWidth()) {
                 Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -1442,6 +1447,7 @@ internal fun ProfileEditorScreen(
             }
         }
         item { Spacer(Modifier.height(36.dp)) }
+        }
     }
 }
 
