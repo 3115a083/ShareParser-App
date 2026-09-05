@@ -165,6 +165,106 @@ private fun colorScheme(palette: ColorPalette, dark: Boolean): ColorScheme {
                 onSurfaceVariant = Color(0xFF504537)
             )
         }
+        ColorPalette.FOREST -> if (dark) {
+            darkColorScheme(
+                primary = Color(0xFFA7D7A8),
+                onPrimary = Color(0xFF123817),
+                primaryContainer = Color(0xFF29502C),
+                onPrimaryContainer = Color(0xFFC2F0C2),
+                secondary = Color(0xFFB8CCB4),
+                background = Color(0xFF101510),
+                surface = Color(0xFF101510),
+                surfaceVariant = Color(0xFF414A40),
+                onSurfaceVariant = Color(0xFFC1CBC0)
+            )
+        } else {
+            lightColorScheme(
+                primary = Color(0xFF356A3B),
+                onPrimary = Color.White,
+                primaryContainer = Color(0xFFBCEFBF),
+                onPrimaryContainer = Color(0xFF08210C),
+                secondary = Color(0xFF52634F),
+                background = Color(0xFFF7FBF4),
+                surface = Color(0xFFF7FBF4),
+                surfaceVariant = Color(0xFFDFE7DC),
+                onSurfaceVariant = Color(0xFF434A41)
+            )
+        }
+        ColorPalette.ROSE -> if (dark) {
+            darkColorScheme(
+                primary = Color(0xFFFFB1C8),
+                onPrimary = Color(0xFF5A1230),
+                primaryContainer = Color(0xFF792947),
+                onPrimaryContainer = Color(0xFFFFD9E3),
+                secondary = Color(0xFFE2BDC8),
+                background = Color(0xFF191114),
+                surface = Color(0xFF191114),
+                surfaceVariant = Color(0xFF504349),
+                onSurfaceVariant = Color(0xFFD4C2C7)
+            )
+        } else {
+            lightColorScheme(
+                primary = Color(0xFF98405F),
+                onPrimary = Color.White,
+                primaryContainer = Color(0xFFFFD9E3),
+                onPrimaryContainer = Color(0xFF3E001D),
+                secondary = Color(0xFF765660),
+                background = Color(0xFFFFF7F8),
+                surface = Color(0xFFFFF7F8),
+                surfaceVariant = Color(0xFFF2DFE4),
+                onSurfaceVariant = Color(0xFF514348)
+            )
+        }
+        ColorPalette.TEAL -> if (dark) {
+            darkColorScheme(
+                primary = Color(0xFF80D5CE),
+                onPrimary = Color(0xFF003735),
+                primaryContainer = Color(0xFF00504D),
+                onPrimaryContainer = Color(0xFF9EF2EA),
+                secondary = Color(0xFFA8CCC7),
+                background = Color(0xFF0D1514),
+                surface = Color(0xFF0D1514),
+                surfaceVariant = Color(0xFF3D4947),
+                onSurfaceVariant = Color(0xFFBCC9C6)
+            )
+        } else {
+            lightColorScheme(
+                primary = Color(0xFF006A66),
+                onPrimary = Color.White,
+                primaryContainer = Color(0xFF9DF2EA),
+                onPrimaryContainer = Color(0xFF00201E),
+                secondary = Color(0xFF4A6360),
+                background = Color(0xFFF5FBF9),
+                surface = Color(0xFFF5FBF9),
+                surfaceVariant = Color(0xFFDCE8E5),
+                onSurfaceVariant = Color(0xFF3F4947)
+            )
+        }
+        ColorPalette.INDIGO -> if (dark) {
+            darkColorScheme(
+                primary = Color(0xFFBBC3FF),
+                onPrimary = Color(0xFF222B62),
+                primaryContainer = Color(0xFF394378),
+                onPrimaryContainer = Color(0xFFDDE1FF),
+                secondary = Color(0xFFC4C6DD),
+                background = Color(0xFF11131B),
+                surface = Color(0xFF11131B),
+                surfaceVariant = Color(0xFF45464F),
+                onSurfaceVariant = Color(0xFFC6C6D0)
+            )
+        } else {
+            lightColorScheme(
+                primary = Color(0xFF515B92),
+                onPrimary = Color.White,
+                primaryContainer = Color(0xFFDDE1FF),
+                onPrimaryContainer = Color(0xFF0B174B),
+                secondary = Color(0xFF5C5D72),
+                background = Color(0xFFFAF8FF),
+                surface = Color(0xFFFAF8FF),
+                surfaceVariant = Color(0xFFE4E1EC),
+                onSurfaceVariant = Color(0xFF46464F)
+            )
+        }
     }
 }
 
