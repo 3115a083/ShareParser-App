@@ -125,7 +125,11 @@ private val reservedVariables = setOf(
     "file_name",
     "mime_type",
     "target",
-    "target_type"
+    "target_type",
+    "shared_address",
+    "shared_web",
+    "shared_phone",
+    "shared_email"
 )
 
 @OptIn(ExperimentalFoundationApi::class)
@@ -1406,7 +1410,7 @@ internal fun ProfileEditorScreen(
                 style = MaterialTheme.typography.bodySmall
             )
         }
-        val variables = listOf("subject", "text", "input", "source_app", "source_package", "file_name", "mime_type", "target", "target_type") + extractors.map { it.key.lowercase() }.filter { it.isNotBlank() }
+        val variables = listOf("subject", "text", "input", "source_app", "source_package", "file_name", "mime_type", "target", "target_type", "shared_address", "shared_web", "shared_phone", "shared_email") + extractors.map { it.key.lowercase() }.filter { it.isNotBlank() }
         val actionPreviewValues = sample?.let { currentSample ->
             runCatching {
                 parser.extract(
@@ -3249,6 +3253,10 @@ private fun variableLabel(key: String): String = when (key) {
     "mime_type" -> "Inhaltstyp"
     "target" -> "Geöffnetes Ziel"
     "target_type" -> "Zieltyp"
+    "shared_address" -> "Erkannte Adresse"
+    "shared_web" -> "Erkannter Web-Link"
+    "shared_phone" -> "Erkannte Telefonnummer"
+    "shared_email" -> "Erkannte E-Mail-Adresse"
     else -> key
 }
 
