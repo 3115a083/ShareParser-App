@@ -22,6 +22,7 @@ import androidx.compose.material.icons.outlined.Language
 import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material.icons.outlined.Palette
 import androidx.compose.material.icons.outlined.PictureInPictureAlt
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -249,6 +250,59 @@ internal fun SettingsHomeScreen(
 
         item {
             SettingsTopicCard(
+                title = "Zusätzliche Teiloptionen",
+                description = "Standardmäßig aus. Aktivierte Optionen erscheinen nur, wenn ShareParser passende Inhalte erkennt."
+            ) {
+                ExtraShareToggle(
+                    checked = settings.extraShareMap,
+                    title = "Adresse in Karten-App öffnen",
+                    onChange = {
+                        settings = settings.copy(extraShareMap = it)
+                        repository.saveSettings(settings)
+                        onSettingsChanged(settings)
+                    }
+                )
+                ExtraShareToggle(
+                    checked = settings.extraShareWebLink,
+                    title = "Erkannten Web-Link öffnen",
+                    onChange = {
+                        settings = settings.copy(extraShareWebLink = it)
+                        repository.saveSettings(settings)
+                        onSettingsChanged(settings)
+                    }
+                )
+                ExtraShareToggle(
+                    checked = settings.extraSharePhone,
+                    title = "Erkannte Telefonnummer öffnen",
+                    onChange = {
+                        settings = settings.copy(extraSharePhone = it)
+                        repository.saveSettings(settings)
+                        onSettingsChanged(settings)
+                    }
+                )
+                ExtraShareToggle(
+                    checked = settings.extraShareEmail,
+                    title = "Erkannte E-Mail-Adresse öffnen",
+                    onChange = {
+                        settings = settings.copy(extraShareEmail = it)
+                        repository.saveSettings(settings)
+                        onSettingsChanged(settings)
+                    }
+                )
+                ExtraShareToggle(
+                    checked = settings.extraShareFileOpen,
+                    title = "Geteilten Dateityp direkt öffnen",
+                    onChange = {
+                        settings = settings.copy(extraShareFileOpen = it)
+                        repository.saveSettings(settings)
+                        onSettingsChanged(settings)
+                    }
+                )
+            }
+        }
+
+        item {
+            SettingsTopicCard(
                 title = "Über ShareParser",
                 description = "Vibecoded für den eigenen Bedarf und mit der Community geteilt."
             ) {
@@ -277,6 +331,21 @@ internal fun SettingsHomeScreen(
                 )
             }
         }
+    }
+}
+
+@Composable
+private fun ExtraShareToggle(
+    checked: Boolean,
+    title: String,
+    onChange: (Boolean) -> Unit
+) {
+    Row(
+        Modifier.fillMaxWidth().clickable { onChange(!checked) }.padding(vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Checkbox(checked = checked, onCheckedChange = onChange)
+        Text(title, modifier = Modifier.weight(1f))
     }
 }
 
