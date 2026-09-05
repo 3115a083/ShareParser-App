@@ -22,7 +22,6 @@ import androidx.compose.material.icons.outlined.Language
 import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material.icons.outlined.Palette
 import androidx.compose.material.icons.outlined.PictureInPictureAlt
-import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -31,6 +30,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -40,6 +40,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.vectorResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
@@ -47,6 +48,11 @@ import cc.stkmn.shareparser.R
 import cc.stkmn.shareparser.data.ProfileRepository
 import cc.stkmn.shareparser.data.ShareSelectionMode
 import cc.stkmn.shareparser.notify.ShareSelectionNotifier
+import java.net.HttpURLConnection
+import java.net.URL
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 @Composable
 internal fun SettingsHomeScreen(
@@ -58,6 +64,7 @@ internal fun SettingsHomeScreen(
 ) {
     val context = LocalContext.current
     val clipboard = LocalClipboardManager.current
+    val scope = rememberCoroutineScope()
     var settings by remember { mutableStateOf(repository.settings()) }
     val packageInfo = remember {
         runCatching { context.packageManager.getPackageInfo(context.packageName, 0) }.getOrNull()
@@ -67,6 +74,8 @@ internal fun SettingsHomeScreen(
         else packageInfo?.versionCode?.toLong() ?: 0L
     var overlayGranted by remember { mutableStateOf(Settings.canDrawOverlays(context)) }
     var overlayPermissionRequested by remember { mutableStateOf(false) }
+    var updateChecking by remember { mutableStateOf(false) }
+    var updateStatus by remember { mutableStateOf<String?>(null) }
 
     fun saveMode(mode: ShareSelectionMode) {
         settings = settings.copy(shareSelectionMode = mode)
@@ -302,15 +311,60 @@ internal fun SettingsHomeScreen(
         }
 
         item {
-            SettingsTopicCard(
-                title = "Über ShareParser",
-                description = "Vibecoded für den eigenen Bedarf und mit der Community geteilt."
+            Column(
+                modifier = Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-                Text(
-                    "Version ${versionName} · Build ${versionCode}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        "Version ${versionName} · Build ${versionCode}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    TextButton(
+                        enabled = !updateChecking,
+                        onClick = {
+                            updateChecking = true
+                            updateStatus = null
+                            scope.launch {
+                                val result = withContext(Dispatchers.IO) {
+                                    runCatching {
+                                        val connection = URL("https://api.github.com/repos/3115a083/ShareParser-App/releases/latest")
+                                            .openConnection() as HttpURLConnection
+                                        connection.connectTimeout = 6_000
+                                        connection.readTimeout = 6_000
+                                        connection.setRequestProperty("Accept", "application/vnd.github+json")
+                                        connection.setRequestProperty("User-Agent", "ShareParser/$versionName")
+                                        connection.inputStream.bufferedReader().use { it.readText() }
+                                    }.mapCatching { body ->
+                                        Regex("\\\"tag_name\\\"\\s*:\\s*\\\"([^\\\"]+)\\\"")
+                                            .find(body)?.groupValues?.get(1)
+                                            ?: error("Keine Release-Version gefunden")
+                                    }
+                                }
+                                updateChecking = false
+                                updateStatus = result.fold(
+                                    onSuccess = { latest ->
+                                        if (isNewerVersion(latest, versionName)) "Update verfügbar: $latest"
+                                        else "ShareParser ist aktuell."
+                                    },
+                                    onFailure = { "Update-Prüfung fehlgeschlagen." }
+                                )
+                            }
+                        }
+                    ) {
+                        Text(if (updateChecking) "Prüfe…" else "Updates prüfen")
+                    }
+                }
+                updateStatus?.let {
+                    Text(
+                        it,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center
+                    )
+                }
                 OutlinedButton(
                     onClick = {
                         context.startActivity(
@@ -324,10 +378,12 @@ internal fun SettingsHomeScreen(
                     Icon(ImageVector.vectorResource(R.drawable.ic_github_mark), null)
                     Text("GitHub", modifier = Modifier.padding(start = 8.dp))
                 }
-                TechnicalValue(
-                    value = "https://github.com/3115a083/ShareParser-App",
-                    onCopy = { clipboard.setText(AnnotatedString("https://github.com/3115a083/ShareParser-App")) },
-                    maxLines = 1
+                Text(
+                    "Vibecoded with ❤️",
+                    modifier = Modifier.fillMaxWidth(),
+                    textAlign = TextAlign.Center,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
         }
@@ -344,8 +400,8 @@ private fun ExtraShareToggle(
         Modifier.fillMaxWidth().clickable { onChange(!checked) }.padding(vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Checkbox(checked = checked, onCheckedChange = onChange)
         Text(title, modifier = Modifier.weight(1f))
+        Switch(checked = checked, onCheckedChange = onChange)
     }
 }
 
@@ -403,3 +459,23 @@ private fun ShareModeRow(
 private fun folderLabel(uri: String): String = runCatching {
     Uri.parse(uri).lastPathSegment?.substringAfterLast(':')?.ifBlank { "Ausgewählter Ordner" }
 }.getOrNull().orEmpty().ifBlank { "Ausgewählter Ordner" }
+
+
+private fun isNewerVersion(latestTag: String, currentVersion: String): Boolean {
+    fun parts(value: String): List<Int> = value
+        .trim()
+        .removePrefix("v")
+        .substringBefore('-')
+        .split('.')
+        .map { it.toIntOrNull() ?: 0 }
+
+    val latest = parts(latestTag)
+    val current = parts(currentVersion)
+    val count = maxOf(latest.size, current.size)
+    for (index in 0 until count) {
+        val left = latest.getOrElse(index) { 0 }
+        val right = current.getOrElse(index) { 0 }
+        if (left != right) return left > right
+    }
+    return false
+}
