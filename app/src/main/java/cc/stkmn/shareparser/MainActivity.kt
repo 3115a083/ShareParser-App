@@ -198,32 +198,19 @@ private fun ShareParserApp(startIntent: Intent?, onIntentConsumed: () -> Unit) {
             topBar = {
                 androidx.compose.material3.CenterAlignedTopAppBar(
                     title = {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Surface(
-                                color = MaterialTheme.colorScheme.surfaceVariant,
-                                shape = RoundedCornerShape(10.dp)
-                            ) {
-                                AppArtworkImage(
-                                    assetPath = AppArtwork.FOREGROUND_ASSET,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(44.dp).padding(5.dp)
-                                )
-                            }
-                            Spacer(Modifier.width(10.dp))
-                            Text(
-                                localized(when (val current = screen) {
-                                    Screen.Home -> "ShareParser"
-                                    Screen.Settings -> "Einstellungen"
-                                    Screen.AppearanceSettings -> "Darstellung"
-                                    Screen.AdditionalShareSettings -> "Zusätzliche Teiloptionen"
-                                    Screen.LanguageSettings -> "App-Sprache"
-                                    Screen.RegionalSettings -> "Datum und Uhrzeit"
-                                    is Screen.Editor -> if (current.profile == null) "Profil erstellen" else "Profil bearbeiten"
-                                    is Screen.Shared -> "Geteilter Inhalt"
-                                    Screen.Failure -> "Fehlerbericht"
-                                })
-                            )
-                        }
+                        Text(
+                            localized(when (val current = screen) {
+                                Screen.Home -> "ShareParser"
+                                Screen.Settings -> "Einstellungen"
+                                Screen.AppearanceSettings -> "Darstellung"
+                                Screen.AdditionalShareSettings -> "Zusätzliche Teiloptionen"
+                                Screen.LanguageSettings -> "App-Sprache"
+                                Screen.RegionalSettings -> "Datum und Uhrzeit"
+                                is Screen.Editor -> if (current.profile == null) "Profil erstellen" else "Profil bearbeiten"
+                                is Screen.Shared -> "Geteilter Inhalt"
+                                Screen.Failure -> "Fehlerbericht"
+                            })
+                        )
                     },
                     navigationIcon = {
                         if (screen !is Screen.Home) {
