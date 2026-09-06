@@ -241,7 +241,7 @@ Each action can be included or excluded from the overlay and notification surfac
 
 Settings provide a dedicated additional-share-options page. Built-in options are disabled by default and appear only when ShareParser detects suitable content. Available options include opening a detected address in a maps app, a web link, phone number or email target, opening a shared text file, and configuring a custom web target with templates. Recognized targets are also exposed as built-in profile variables so they can be parsed or transformed before a Target action opens them.
 
-ShareParser can also register as an Android ACTION_VIEW target for http/https, geo, tel and mailto links. Incoming targets are exposed as `target` and `target_type`. The Target action safely opens processed values using http/https, geo, tel or mailto schemes.
+The Target action safely opens processed values using http/https, geo, tel or mailto schemes. ShareParser does not register itself globally as a handler for phone, email or map links, because Android manifest intent filters cannot be enabled and disabled dynamically from these app settings.
 
 ## App icon
 
