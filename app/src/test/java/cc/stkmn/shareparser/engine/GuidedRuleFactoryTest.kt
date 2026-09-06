@@ -42,6 +42,7 @@ class GuidedRuleFactoryTest {
     fun sanitizeKeyAllowsTemporarilyBlankEditorValue() {
         assertEquals("", GuidedRuleFactory.sanitizeKey(""))
         assertEquals("mein_feld", GuidedRuleFactory.sanitizeKey("mein feld"))
+        assertEquals("ort", GuidedRuleFactory.sanitizeKey("Ort"))
     }
 
     @Test
@@ -59,4 +60,72 @@ class GuidedRuleFactoryTest {
         val profile = Profile("1", "Selected", matchers = listOf(matcher))
         assertTrue(parser.matchingProfiles("Neue Mail mit Profilkennung ABC und anderen Werten", listOf(profile)).isNotEmpty())
     }
+
+    @Test
+    fun selectedVariableCapturesOnlySelectedPart() {
+        val text = "Ort: Berlin / Raum: 12"
+        val start = text.indexOf("Berlin")
+        val rule = GuidedRuleFactory.extractorFromSelection(
+            text,
+            start,
+            start + "Berlin".length,
+            "ort",
+            InputSource.TEXT,
+            true
+        )
+        val profile = Profile("1", "Ort", extractors = listOf(rule))
+        assertEquals("Hamburg", parser.extract("Ort: Hamburg / Raum: 12", profile)["ort"])
+    }
+
+    @Test
+    fun suggestsLinksEmailAndPhoneTargets() {
+        val sample = SharedPayload(
+            text = "Web https://example.com/test\nMail mailto:test@example.com\nTelefon tel:+491701234567"
+        )
+        val candidates = GuidedRuleFactory.candidates(sample)
+        assertTrue(candidates.any { it.suggestedKey == "link" && it.value.startsWith("https://") })
+        assertTrue(candidates.any { it.suggestedKey == "email" && it.value.startsWith("mailto:") })
+        assertTrue(candidates.any { it.suggestedKey == "telefon" && it.value.startsWith("tel:") })
+    }
+
+
+    @Test
+    fun suggestsAndExtractsFormattedLinkTargets() {
+        val sample = SharedPayload(
+            text = "Website öffnen",
+            linkTargets = listOf("https://example.com/booking/ABC", "mailto:test@example.com")
+        )
+        val candidates = GuidedRuleFactory.candidates(sample)
+        val web = candidates.first { it.source == InputSource.LINKS && it.suggestedKey == "link" }
+        val rule = GuidedRuleFactory.extractor(web, "booking_link", required = true)
+        val profile = Profile("links", "Links", extractors = listOf(rule))
+
+        assertEquals(
+            "https://example.com/booking/XYZ",
+            parser.extract(
+                SharedPayload(
+                    text = "Website öffnen",
+                    linkTargets = listOf("https://example.com/booking/XYZ")
+                ),
+                profile
+            )["booking_link"]
+        )
+        assertTrue(candidates.any { it.source == InputSource.LINKS && it.value.startsWith("mailto:") })
+    }
+
+
+    @Test
+    fun emailSuggestionDoesNotBakeSampleAddressIntoRegex() {
+        val sample = SharedPayload(text = "Kontakt: max.mustermann@example.com")
+        val candidate = GuidedRuleFactory.candidates(sample).first { it.label == "E-Mail-Adresse" }
+        val rule = GuidedRuleFactory.extractor(candidate, "email")
+        val profile = Profile("mail", "Mail", extractors = listOf(rule))
+
+        assertEquals(
+            "anna@example.org",
+            parser.extract("Kontakt: anna@example.org", profile)["email"]
+        )
+        assertTrue("max.mustermann" !in rule.regex)
+    }
+
 }

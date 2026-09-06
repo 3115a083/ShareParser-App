@@ -4,6 +4,8 @@ import android.app.Activity
 import android.content.Intent
 import android.net.Uri
 import android.provider.OpenableColumns
+import android.text.Spanned
+import android.text.style.URLSpan
 import cc.stkmn.shareparser.data.SharedPayload
 import java.io.InputStreamReader
 
@@ -16,6 +18,32 @@ object SharePayloadFactory {
     )
 
     fun from(activity: Activity, intent: Intent): SharedPayload? {
+        if (intent.action == Intent.ACTION_VIEW) {
+            val uri = intent.data ?: return null
+            val scheme = uri.scheme?.lowercase().orEmpty()
+            val targetType = when (scheme) {
+                "http", "https" -> "web"
+                "geo" -> "map"
+                "tel" -> "phone"
+                "mailto" -> "email"
+                else -> return null
+            }
+            val value = uri.toString()
+            val sourcePackage = resolveSourcePackage(activity, intent, null)
+            val sourceApp = if (sourcePackage.isBlank()) "" else runCatching {
+                val info = activity.packageManager.getApplicationInfo(sourcePackage, 0)
+                activity.packageManager.getApplicationLabel(info).toString()
+            }.getOrDefault(sourcePackage)
+            return SharedPayload(
+                text = value,
+                mimeType = "text/uri-list",
+                sourcePackage = sourcePackage,
+                sourceApp = sourceApp,
+                linkTargets = listOf(value),
+                target = value,
+                targetType = targetType
+            )
+        }
         if (intent.action != Intent.ACTION_SEND) return null
 
         val streamUri = streamUri(intent)
@@ -25,10 +53,22 @@ object SharePayloadFactory {
             ?.takeIf { isSupportedTextPayload(mimeType, fileName) }
             ?.let { readSharedText(activity, it) }
             .orEmpty()
-        val inlineText = intent.getCharSequenceExtra(Intent.EXTRA_TEXT)?.toString()
-            ?: intent.getStringExtra(Intent.EXTRA_HTML_TEXT)
-            ?: ""
+        val inlineValue = intent.getCharSequenceExtra(Intent.EXTRA_TEXT)
+        val htmlText = intent.getStringExtra(Intent.EXTRA_HTML_TEXT).orEmpty()
+        val inlineText = inlineValue?.toString()
+            ?: htmlText
         val text = streamText.ifBlank { inlineText }
+        val linkTargets = buildList {
+            if (inlineValue is Spanned) {
+                inlineValue.getSpans(0, inlineValue.length, URLSpan::class.java)
+                    .mapNotNull { it.url?.trim()?.takeIf(String::isNotBlank) }
+                    .forEach(::add)
+            }
+            Regex("(?i)href\\s*=\\s*[\"']([^\"']+)[\"']")
+                .findAll(htmlText)
+                .mapNotNull { it.groups[1]?.value?.trim()?.takeIf(String::isNotBlank) }
+                .forEach(::add)
+        }.distinct()
         val subject = intent.getCharSequenceExtra(Intent.EXTRA_SUBJECT)?.toString().orEmpty()
         if (text.isBlank() && subject.isBlank()) return null
 
@@ -44,7 +84,10 @@ object SharePayloadFactory {
             mimeType = mimeType,
             sourcePackage = sourcePackage,
             sourceApp = sourceApp,
-            fileName = fileName
+            fileName = fileName,
+            linkTargets = linkTargets,
+            target = "",
+            targetType = ""
         )
     }
 

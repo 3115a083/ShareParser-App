@@ -16,6 +16,7 @@ import cc.stkmn.shareparser.share.SharePayloadFactory
 class ShareReceiverActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        AppLocale.apply(this, ProfileRepository(this).settings().appLanguage)
         handle(intent)
     }
 
@@ -42,22 +43,54 @@ class ShareReceiverActivity : ComponentActivity() {
 
         val coordinator = ShareCoordinator(this)
         val matches = coordinator.matchingProfiles(payload)
-        val choices = coordinator.choices(payload)
+        coordinator.executeAlwaysWebhooks(payload, matches)
+        val settings = ProfileRepository(this).settings()
+        val allChoices = coordinator.choices(payload, ShareSelectionMode.APP)
+        val choices = coordinator.choices(payload, settings.shareSelectionMode)
 
-        if (matches.size == 1 && choices.size == 1) {
-            coordinator.execute(payload, matches.first(), matches.first().actions.first())
+        if (matches.size > 1) {
+            val pending = pendingStore.put(payload)
+            when (settings.shareSelectionMode) {
+                ShareSelectionMode.APP -> openApp(pending.id)
+                ShareSelectionMode.NOTIFICATION -> {
+                    val profiles = coordinator.profileChoices(payload)
+                    if (!ShareSelectionNotifier.show(this, pending.id, profiles)) openApp(pending.id)
+                }
+                ShareSelectionMode.OVERLAY -> {
+                    if (Settings.canDrawOverlays(this)) {
+                        startService(
+                            Intent(this, ShareOverlayService::class.java)
+                                .putExtra(ShareOverlayService.EXTRA_PENDING_ID, pending.id)
+                        )
+                    } else {
+                        openApp(pending.id)
+                    }
+                }
+            }
+            finish()
+            return
+        }
+
+        if (allChoices.isEmpty() && matches.isNotEmpty()) {
+            finish()
+            return
+        }
+
+        if (choices.size == 1 && !ShareCoordinator.isExtraChoice(choices.first())) {
+            val choice = choices.first()
+            coordinator.execute(payload, choice.profileId, choice.actionId)
             finish()
             return
         }
 
         val pending = pendingStore.put(payload)
-        if (matches.isEmpty() || choices.isEmpty()) {
+        if (choices.isEmpty()) {
             openApp(pending.id)
             finish()
             return
         }
 
-        when (ProfileRepository(this).settings().shareSelectionMode) {
+        when (settings.shareSelectionMode) {
             ShareSelectionMode.APP -> openApp(pending.id)
             ShareSelectionMode.NOTIFICATION -> {
                 if (!ShareSelectionNotifier.show(this, pending.id, choices)) openApp(pending.id)

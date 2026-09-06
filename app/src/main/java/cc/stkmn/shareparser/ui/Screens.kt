@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -23,10 +24,13 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material.icons.outlined.ExpandLess
+import androidx.compose.material.icons.outlined.ExpandMore
 import androidx.compose.material.icons.outlined.FileOpen
-import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material.icons.outlined.Tune
+import androidx.compose.material.icons.outlined.PlayArrow
+import androidx.compose.material3.AssistChip
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -41,7 +45,6 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Switch
-import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -55,18 +58,19 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
-import cc.stkmn.shareparser.data.AppSettings
-import cc.stkmn.shareparser.data.DateTimeLocale
 import cc.stkmn.shareparser.data.FailureReport
 import cc.stkmn.shareparser.data.ProcessingAction
 import cc.stkmn.shareparser.data.Profile
 import cc.stkmn.shareparser.data.ProfileRepository
 import cc.stkmn.shareparser.data.SharedPayload
+import cc.stkmn.shareparser.data.WebhookMode
+import cc.stkmn.shareparser.engine.ActionConditionEvaluator
 import cc.stkmn.shareparser.engine.ActionExecutor
 import cc.stkmn.shareparser.engine.ParserEngine
 import cc.stkmn.shareparser.engine.ProcessingException
 import cc.stkmn.shareparser.notify.FailureNotifier
 import cc.stkmn.shareparser.notify.WarningNotifier
+import cc.stkmn.shareparser.share.ShareCoordinator
 import java.util.UUID
 
 @Composable
@@ -77,15 +81,14 @@ internal fun HomeScreen(
     onCreate: () -> Unit,
     onImport: () -> Unit,
     onToggle: (Profile, Boolean) -> Unit,
-    onDelete: (Profile) -> Unit,
-    onSettings: () -> Unit
+    onDelete: (Profile) -> Unit
 ) {
     var deleteCandidate by remember { mutableStateOf<Profile?>(null) }
     deleteCandidate?.let { profile ->
         AlertDialog(
             onDismissRequest = { deleteCandidate = null },
             title = { Text("Profil löschen?") },
-            text = { Text("„${profile.name}“ wird dauerhaft aus ShareParser entfernt.") },
+            text = { Text("„${profile.name}“ wird dauerhaft entfernt. Diese Aktion kann nicht rückgängig gemacht werden.") },
             confirmButton = {
                 TextButton(onClick = {
                     onDelete(profile)
@@ -102,42 +105,38 @@ internal fun HomeScreen(
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         item {
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    Text("Profile", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
-                    Text("Bestimme, wie geteilte Texte erkannt und weiterverarbeitet werden.")
-                }
-            }
+            SectionHeading(
+                "Profile",
+                "Erkennung und Weiterverarbeitung geteilter Inhalte."
+            )
         }
         item {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedButton(onClick = onImport) {
-                    Icon(Icons.Outlined.FileOpen, null)
-                    Spacer(Modifier.width(6.dp))
-                    Text("Importieren")
-                }
-                OutlinedButton(onClick = onSettings) {
-                    Icon(Icons.Outlined.Settings, null)
-                    Spacer(Modifier.width(6.dp))
-                    Text("Einstellungen")
-                }
+            OutlinedButton(onClick = onImport) {
+                Icon(Icons.Outlined.FileOpen, null)
+                Spacer(Modifier.width(6.dp))
+                Text("Importieren", maxLines = 1)
             }
         }
-        importError?.let { message ->
-            item { Text(message, color = MaterialTheme.colorScheme.error) }
+        if (importError != null) {
+            item {
+                ErrorNotice(
+                    title = "Import fehlgeschlagen",
+                    description = "Die Profildatei konnte nicht gelesen werden. Prüfe, ob sie aus ShareParser exportiert wurde.",
+                    action = { TextButton(onClick = onImport) { Text("Erneut versuchen") } }
+                )
+            }
         }
 
         if (profiles.isEmpty()) {
             item {
                 Card(Modifier.fillMaxWidth()) {
-                    Column(
-                        Modifier.padding(24.dp),
-                        verticalArrangement = Arrangement.spacedBy(12.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Icon(Icons.Outlined.Share, null, modifier = Modifier.size(52.dp))
-                        Text("Noch kein Profil", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
-                        Text("Erstelle ein Profil direkt hier oder teile eine Beispiel-Mail mit ShareParser. Aus dem Beispiel kannst du Felder ohne Regex auswählen.")
+                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("Noch kein Profil", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                        Text(
+                            "Erstelle ein Profil oder teile zuerst einen Beispieltext mit ShareParser.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                         Button(onClick = onCreate) {
                             Icon(Icons.Outlined.Add, null)
                             Spacer(Modifier.width(6.dp))
@@ -148,12 +147,16 @@ internal fun HomeScreen(
             }
         } else {
             items(profiles, key = { it.id }) { profile ->
-                Card(Modifier.fillMaxWidth()) {
-                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Card(Modifier.fillMaxWidth().clickable { onEdit(profile) }) {
+                    Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Column(Modifier.weight(1f)) {
                                 Text(profile.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                                Text("${profile.extractors.size} Variablen · ${profile.actions.size} Aktionen", style = MaterialTheme.typography.bodySmall)
+                                Text(
+                                    if (profile.enabled) "Aktiv" else "Deaktiviert",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
                             }
                             Switch(
                                 checked = profile.enabled,
@@ -161,6 +164,18 @@ internal fun HomeScreen(
                             )
                         }
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            AssistChip(
+                                onClick = { onEdit(profile) },
+                                label = { Text("${profile.extractors.size}") },
+                                leadingIcon = { Icon(Icons.Outlined.Tune, null) }
+                            )
+                            AssistChip(
+                                onClick = { onEdit(profile) },
+                                label = { Text("${profile.actions.size}") },
+                                leadingIcon = { Icon(Icons.Outlined.PlayArrow, null) }
+                            )
+                        }
+                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                             TextButton(onClick = { onEdit(profile) }) {
                                 Icon(Icons.Outlined.Edit, null)
                                 Spacer(Modifier.width(4.dp))
@@ -180,62 +195,6 @@ internal fun HomeScreen(
     }
 }
 
-@Composable
-internal fun SettingsScreen(repository: ProfileRepository) {
-    var settings by remember { mutableStateOf(repository.settings()) }
-
-    fun select(locale: DateTimeLocale) {
-        settings = AppSettings(dateTimeLocale = locale)
-        repository.saveSettings(settings)
-    }
-
-    LazyColumn(
-        contentPadding = PaddingValues(16.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp)
-    ) {
-        item {
-            Text("Datum und Uhrzeit", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
-        }
-        item {
-            Text("Diese Einstellung steuert, wie freie Datums- und Zeitangaben für Kalenderaktionen interpretiert werden.")
-        }
-        item {
-            Card(Modifier.fillMaxWidth()) {
-                Column(Modifier.padding(16.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        RadioButton(
-                            selected = settings.dateTimeLocale == DateTimeLocale.DE_DE,
-                            onClick = { select(DateTimeLocale.DE_DE) }
-                        )
-                        Column {
-                            Text("Deutsch (Deutschland)", fontWeight = FontWeight.SemiBold)
-                            Text("Empfohlen für deutsche E-Mails und Nachrichten.", style = MaterialTheme.typography.bodySmall)
-                        }
-                    }
-                    Text(
-                        "Beispiele: 14.12.2026, 14/12/26, 14.12., morgen, nächsten Montag, 12-14, 12 Uhr bis 14 Uhr, 12:00 Uhr bis 14:00 Uhr.",
-                        modifier = Modifier.padding(start = 48.dp)
-                    )
-                }
-            }
-        }
-        item {
-            Card(Modifier.fillMaxWidth()) {
-                Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                    RadioButton(
-                        selected = settings.dateTimeLocale == DateTimeLocale.SYSTEM,
-                        onClick = { select(DateTimeLocale.SYSTEM) }
-                    )
-                    Column {
-                        Text("Geräteeinstellung", fontWeight = FontWeight.SemiBold)
-                        Text("Verwendet die Gerätesprache für Textvergleiche. Die flexiblen deutschen Zahlenformate bleiben weiterhin verfügbar.", style = MaterialTheme.typography.bodySmall)
-                    }
-                }
-            }
-        }
-    }
-}
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun SharedScreen(
@@ -250,6 +209,8 @@ internal fun SharedScreen(
     val matches = remember(payload, profiles) { parser.matchingProfiles(payload, profiles) }
     var selected by remember(payload, profiles) { mutableStateOf<Profile?>(matches.singleOrNull()) }
     var showActionPicker by remember { mutableStateOf(false) }
+    var showExtraPicker by remember { mutableStateOf(false) }
+    var sharedTextExpanded by remember(payload) { mutableStateOf(false) }
     var pendingCalendarExecution by remember { mutableStateOf<Pair<Profile, ProcessingAction.Calendar>?>(null) }
 
     val extraction = remember(payload, selected) {
@@ -257,6 +218,10 @@ internal fun SharedScreen(
     }
 
     fun executeNow(profile: Profile, action: ProcessingAction) {
+        if (action is ProcessingAction.Webhook) {
+            ShareCoordinator(context).execute(payload, profile, action)
+            return
+        }
         try {
             val extracted = parser.extract(payload, profile)
             val result = ActionExecutor(context, repository.settings()).execute(action, extracted)
@@ -297,8 +262,18 @@ internal fun SharedScreen(
         }
     }
 
-    LaunchedEffect(selected?.id) {
-        showActionPicker = selected?.actions?.size?.let { it > 1 } == true
+    val selectedValues = extraction?.getOrNull().orEmpty()
+    val selectableActions = selected?.actions
+        ?.filterNot { it is ProcessingAction.Webhook && it.mode == WebhookMode.ALWAYS }
+        ?.filter { action -> ActionConditionEvaluator.isAvailable(action, selected!!.actions, selectedValues) }
+        .orEmpty()
+    val extraChoices = remember(payload, repository.settings()) {
+        ShareCoordinator(context).choices(payload, cc.stkmn.shareparser.data.ShareSelectionMode.APP)
+            .filter(ShareCoordinator::isExtraChoice)
+    }
+
+    LaunchedEffect(selected?.id, selectableActions.size) {
+        showActionPicker = selectableActions.size > 1
     }
 
     if (showActionPicker && selected != null) {
@@ -306,7 +281,7 @@ internal fun SharedScreen(
             Column(Modifier.padding(horizontal = 16.dp).padding(bottom = 32.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("Wie weiterverarbeiten?", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
                 Text(selected!!.name)
-                selected!!.actions.forEach { action ->
+                selectableActions.forEach { action ->
                     ElevatedButton(
                         onClick = {
                             showActionPicker = false
@@ -323,18 +298,85 @@ internal fun SharedScreen(
         }
     }
 
+    if (showExtraPicker) {
+        ModalBottomSheet(onDismissRequest = { showExtraPicker = false }) {
+            Column(
+                Modifier.padding(horizontal = 16.dp).padding(bottom = 32.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text("Zusätzliche Teiloptionen", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
+                Text(
+                    "Nur aktivierte Optionen, die zum geteilten Inhalt passen.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                extraChoices.forEach { choice ->
+                    ElevatedButton(
+                        onClick = {
+                            showExtraPicker = false
+                            ShareCoordinator(context).execute(payload, choice.profileId, choice.actionId)
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Icon(actionIcon(choice.icon), null)
+                        Spacer(Modifier.width(8.dp))
+                        Text(choice.actionName)
+                    }
+                }
+            }
+        }
+    }
+
     LazyColumn(contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item {
             Card(Modifier.fillMaxWidth()) {
-                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("Geteilte Informationen", fontWeight = FontWeight.SemiBold)
-                    if (payload.subject.isNotBlank()) {
-                        Text("Betreff", style = MaterialTheme.typography.labelMedium)
-                        SelectionContainer { Text(payload.subject) }
+                Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("Geteilte Informationen", fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                        IconButton(onClick = { sharedTextExpanded = !sharedTextExpanded }) {
+                            Icon(
+                                if (sharedTextExpanded) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore,
+                                if (sharedTextExpanded) "Weniger anzeigen" else "Mehr anzeigen"
+                            )
+                        }
                     }
-                    Text("Text", style = MaterialTheme.typography.labelMedium)
-                    SelectionContainer { Text(payload.text, maxLines = 18) }
-                    Text("Typ: ${payload.mimeType}", style = MaterialTheme.typography.bodySmall)
+                    if (payload.subject.isNotBlank()) {
+                        Text(
+                            "Betreff",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        SelectionContainer {
+                            Text(payload.subject, maxLines = if (sharedTextExpanded) Int.MAX_VALUE else 2)
+                        }
+                    }
+                    Text(
+                        "Text",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    SelectionContainer {
+                        Text(payload.text, maxLines = if (sharedTextExpanded) Int.MAX_VALUE else 8)
+                    }
+                    Text(
+                        "Typ: ${payload.mimeType}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        }
+
+        if (extraChoices.isNotEmpty()) {
+            item {
+                OutlinedButton(
+                    onClick = { showExtraPicker = true },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(Icons.Outlined.Share, null)
+                    Spacer(Modifier.width(8.dp))
+                    Text("Zusätzliche Teiloptionen (${extraChoices.size})", modifier = Modifier.weight(1f))
+                    Icon(Icons.Outlined.ExpandMore, null)
                 }
             }
         }
@@ -344,7 +386,11 @@ internal fun SharedScreen(
                 Card(Modifier.fillMaxWidth()) {
                     Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         Text("Kein Profil passt", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                        Text("Erstelle aus diesem Beispiel ein Profil. Du kannst anschließend einzelne Zeilen als Variablen markieren, ShareParser erzeugt die Regeln automatisch.")
+                        Text(
+                            "Erstelle aus diesem Beispiel ein Profil. Variablen und Erkennungsregeln lassen sich anschließend direkt aus dem Text ableiten.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                         Button(onClick = onCreateFromSample, modifier = Modifier.fillMaxWidth()) {
                             Icon(Icons.Outlined.Add, null)
                             Spacer(Modifier.width(8.dp))
@@ -398,7 +444,11 @@ internal fun SharedScreen(
                     Card(Modifier.fillMaxWidth()) {
                         Column(Modifier.padding(16.dp)) {
                             Text("Extraktion nicht vollständig", fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.error)
-                            Text(error?.userMessage ?: result.exceptionOrNull()?.message.orEmpty())
+                            Text(
+                                error?.userMessage ?: "Die Variablen konnten mit diesem Profil nicht vollständig erkannt werden. Öffne das Profil und prüfe die markierten Regeln.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
                         }
                     }
                 }
@@ -406,10 +456,10 @@ internal fun SharedScreen(
 
             item { HorizontalDivider() }
             item { Text("Weiterverarbeitung", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold) }
-            when (selected!!.actions.size) {
-                0 -> item { Text("Dieses Profil hat noch keine Aktion.") }
+            when (selectableActions.size) {
+                0 -> item { Text("Dieses Profil hat noch keine auswählbare Aktion.") }
                 1 -> {
-                    val action = selected!!.actions.first()
+                    val action = selectableActions.first()
                     item {
                         ElevatedButton(onClick = { runAction(selected!!, action) }, modifier = Modifier.fillMaxWidth()) {
                             Icon(actionIcon(action.icon), null)
@@ -445,34 +495,47 @@ internal fun FailureScreen(
     onEdit: (Profile, String?) -> Unit
 ) {
     if (report == null) {
-        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("Kein Fehlerbericht vorhanden.") }
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Text("Kein Fehlerbericht vorhanden.")
+        }
         return
     }
-    LazyColumn(contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        item { Text(report.message, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold) }
-        report.profileName?.let { item { Text("Profil: $it") } }
-        report.failingField?.let { field ->
-            item {
-                Card(Modifier.fillMaxWidth()) {
-                    Column(Modifier.padding(16.dp)) {
-                        Text("Betroffener Bereich", fontWeight = FontWeight.SemiBold)
-                        Text(field)
+    LazyColumn(
+        contentPadding = PaddingValues(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        item {
+            ErrorNotice(
+                title = report.message,
+                description = if (report.failingField.isNullOrBlank())
+                    "Die Verarbeitung wurde beendet. Öffne das betroffene Profil und prüfe die zuletzt geänderten Regeln."
+                else "Betroffener Bereich: ${report.failingField}. Öffne das Profil, um die markierte Stelle zu prüfen.",
+                action = if (profile != null) {
+                    {
+                        TextButton(onClick = { onEdit(profile, report.failingField) }) {
+                            Icon(Icons.Outlined.Edit, null)
+                            Spacer(Modifier.width(6.dp))
+                            Text("Profil öffnen")
+                        }
                     }
-                }
+                } else null
+            )
+        }
+        report.profileName?.let { name ->
+            item {
+                Text(
+                    "Profil: ${name}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
         }
-        item { Text("Technische Details", fontWeight = FontWeight.SemiBold) }
-        item { SelectionContainer { Text(report.technicalDetails) } }
-        item { Text("Eingabe", fontWeight = FontWeight.SemiBold) }
-        item { SelectionContainer { Text(report.inputPreview) } }
-        if (profile != null) {
-            item {
-                Button(onClick = { onEdit(profile, report.failingField) }, modifier = Modifier.fillMaxWidth()) {
-                    Icon(Icons.Outlined.Edit, null)
-                    Spacer(Modifier.width(8.dp))
-                    Text("Profil an Fehlerstelle bearbeiten")
-                }
-            }
+        item {
+            Text(
+                "Technische Details werden im internen Fehlerbericht gespeichert und nicht als Roh-Exception angezeigt.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
     }
 }
