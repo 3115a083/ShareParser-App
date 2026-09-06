@@ -778,7 +778,7 @@ internal fun ProfileEditorScreen(
         }
 
         item {
-            PrimaryEditorSectionHeader("Profil erkennen")
+            EditorSectionHeader("Profil erkennen")
         }
         item {
             Text(
@@ -1299,7 +1299,7 @@ internal fun ProfileEditorScreen(
         }
 
         item {
-            PrimaryEditorSectionHeader("Variablen") {
+            EditorSectionHeader("Variablen") {
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     Spacer(Modifier.weight(1f))
                     TextButton(onClick = {
@@ -1380,7 +1380,7 @@ internal fun ProfileEditorScreen(
         }
 
         item {
-            PrimaryEditorSectionHeader("Aktionen") {
+            EditorSectionHeader("Aktionen") {
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     Spacer(Modifier.weight(1f))
                     Row {
@@ -3033,34 +3033,25 @@ private fun TemplateField(
 }
 
 @Composable
-private fun PrimaryEditorSectionHeader(
+private fun EditorSectionHeader(
     text: String,
+    modifier: Modifier = Modifier,
     content: @Composable () -> Unit = {}
 ) {
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        color = MaterialTheme.colorScheme.surfaceVariant,
-        shape = RoundedCornerShape(12.dp)
+    Column(
+        modifier.fillMaxWidth().padding(top = 10.dp, bottom = 10.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-        Column(
-            Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp)
-        ) {
-            Text(text, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+        HorizontalDivider(thickness = 2.dp)
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text,
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.weight(1f)
+            )
             content()
         }
-    }
-}
-
-@Composable
-private fun EditorSectionHeader(text: String, modifier: Modifier = Modifier) {
-    Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        HorizontalDivider()
-        Text(
-            text,
-            style = MaterialTheme.typography.titleLarge,
-            fontWeight = FontWeight.Bold
-        )
     }
 }
 
