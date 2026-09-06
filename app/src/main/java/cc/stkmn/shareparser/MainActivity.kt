@@ -31,6 +31,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -195,7 +196,7 @@ private fun ShareParserApp(startIntent: Intent?, onIntentConsumed: () -> Unit) {
     ShareParserTheme(settings = appSettings) {
         Scaffold(
             topBar = {
-                TopAppBar(
+                androidx.compose.material3.CenterAlignedTopAppBar(
                     title = {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Surface(
