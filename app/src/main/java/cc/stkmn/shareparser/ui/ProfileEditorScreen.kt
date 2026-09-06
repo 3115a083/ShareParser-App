@@ -3039,10 +3039,10 @@ private fun EditorSectionHeader(
     content: @Composable () -> Unit = {}
 ) {
     Column(
-        modifier.fillMaxWidth().padding(top = 10.dp, bottom = 10.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp)
+        modifier.fillMaxWidth().padding(top = 18.dp, bottom = 14.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
-        HorizontalDivider(thickness = 2.dp)
+        HorizontalDivider(thickness = 3.dp)
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Text(
                 text,
