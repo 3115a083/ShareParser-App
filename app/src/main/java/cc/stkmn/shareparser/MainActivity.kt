@@ -185,6 +185,12 @@ private fun ShareParserApp(startIntent: Intent?, onIntentConsumed: () -> Unit) {
                     pendingShareStore.remove(id)
                 }
             }
+            cc.stkmn.shareparser.BuildConfig.FULL_SHARE_TARGETS && startIntent.isExternalTarget() -> {
+                val payload = startIntent.externalTargetPayload()
+                if (payload != null) {
+                    screen = if (profiles.isEmpty()) Screen.Editor(null, sample = payload) else Screen.Shared(payload)
+                }
+            }
         }
         onIntentConsumed()
     }
@@ -200,7 +206,7 @@ private fun ShareParserApp(startIntent: Intent?, onIntentConsumed: () -> Unit) {
                     title = {
                         Text(
                             localized(when (val current = screen) {
-                                Screen.Home -> "ShareParser"
+                                Screen.Home -> cc.stkmn.shareparser.BuildConfig.APP_VARIANT_TITLE
                                 Screen.Settings -> "Einstellungen"
                                 Screen.AppearanceSettings -> "Darstellung"
                                 Screen.AdditionalShareSettings -> "Zusätzliche Teiloptionen"
@@ -349,6 +355,32 @@ private fun ShareParserApp(startIntent: Intent?, onIntentConsumed: () -> Unit) {
             }
         }
     }
+}
+
+
+private fun Intent.isExternalTarget(): Boolean {
+    if (action != Intent.ACTION_VIEW) return false
+    val scheme = data?.scheme?.lowercase().orEmpty()
+    return scheme in setOf("http", "https", "geo", "tel", "mailto")
+}
+
+private fun Intent.externalTargetPayload(): cc.stkmn.shareparser.data.SharedPayload? {
+    if (!isExternalTarget()) return null
+    val value = data?.toString().orEmpty()
+    if (value.isBlank()) return null
+    val kind = when (data?.scheme?.lowercase()) {
+        "http", "https" -> "web"
+        "geo" -> "map"
+        "tel" -> "phone"
+        "mailto" -> "email"
+        else -> return null
+    }
+    return cc.stkmn.shareparser.data.SharedPayload(
+        text = value,
+        mimeType = "text/uri-list",
+        target = value,
+        targetType = kind
+    )
 }
 
 private fun Intent.isFailureLink(): Boolean =
