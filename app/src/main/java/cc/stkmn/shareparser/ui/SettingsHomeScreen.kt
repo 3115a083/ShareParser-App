@@ -429,12 +429,6 @@ internal fun AdditionalShareSettingsScreen(
                 }
             }
         }
-        item {
-            SettingsTopicCard(
-                title = "Beim Öffnen aus anderen Apps",
-                description = "ShareParser kann als Ziel für Web-Links, Karten-Adressen, Telefonnummern und E-Mail-Adressen erscheinen. Der empfangene Wert steht als target und der Typ als target_type zur Verfügung."
-            ) {}
-        }
     }
 }
 
