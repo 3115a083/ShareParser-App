@@ -36,20 +36,45 @@ internal fun rememberVariableHighlighting(
 
     val transformation = VisualTransformation { text ->
         val builder = AnnotatedString.Builder(text)
+        val occupied = mutableListOf<IntRange>()
         relevant.forEach { rule ->
             val color = byKey[rule.key]?.color ?: return@forEach
-            runCatching { Regex(rule.regex, setOf(RegexOption.MULTILINE)).findAll(text.text).toList() }
-                .getOrDefault(emptyList())
-                .forEach { match ->
-                    val group = if (rule.group in match.groupValues.indices) match.groups[rule.group] else null
-                    if (group != null && group.range.first >= 0 && group.range.last < text.length) {
-                        builder.addStyle(
-                            SpanStyle(background = color, fontWeight = FontWeight.SemiBold),
-                            group.range.first,
-                            group.range.last + 1
-                        )
+            val matches = runCatching {
+                Regex(rule.regex, setOf(RegexOption.MULTILINE))
+                    .findAll(text.text)
+                    .take(200)
+                    .toList()
+            }.getOrDefault(emptyList())
+
+            matches.forEach { match ->
+                val group = if (rule.group in 0 until match.groups.size) match.groups[rule.group] else null
+                if (group == null) return@forEach
+                val range = group.range
+                if (range.first < 0 || range.last < range.first || range.last >= text.length) return@forEach
+                val length = range.last - range.first + 1
+                val sample = rule.sampleLabel.trim()
+                val expected = sample.length
+                val groupText = text.text.substring(range.first, range.last + 1)
+                val exactSampleOffset = if (sample.isNotBlank()) groupText.indexOf(sample) else -1
+                val suspiciouslyLarge = length > 1000 ||
+                    (expected > 0 && length > maxOf(expected * 3, expected + 48))
+                val highlightRange = when {
+                    exactSampleOffset >= 0 && groupText != sample -> {
+                        val start = range.first + exactSampleOffset
+                        start until (start + sample.length)
                     }
-                }
+                    suspiciouslyLarge -> null
+                    else -> range
+                } ?: return@forEach
+                if (highlightRange.first < 0 || highlightRange.last >= text.length) return@forEach
+                if (occupied.any { it.first <= highlightRange.last && highlightRange.first <= it.last }) return@forEach
+                occupied += highlightRange
+                builder.addStyle(
+                    SpanStyle(background = color, fontWeight = FontWeight.SemiBold),
+                    highlightRange.first,
+                    highlightRange.last + 1
+                )
+            }
         }
         TransformedText(builder.toAnnotatedString(), OffsetMapping.Identity)
     }
