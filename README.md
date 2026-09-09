@@ -4,7 +4,7 @@
   <img src="app/src/main/res/mipmap-nodpi/app_logo_3.png" width="160" alt="ShareParser logo">
 </p>
 
-ShareParser is a privacy-focused Android app for parsing and transforming text, emails and text files shared from other apps.
+ShareParser is a privacy-focused Android app for parsing and transforming text, emails and text files shared from other apps. The project now builds two install-compatible editions: **ShareParser light** and **ShareParser full**.
 
 This is a **vibecoded project** that was created primarily for the author's own everyday needs. It is shared with the community because the same workflows may be useful to other people. Contributions, testing and practical feedback are welcome, especially where generated code or Android-specific behavior needs additional review.
 
@@ -37,7 +37,7 @@ Opening a profile for editing activates editing mode. While that editor is open,
 
 Editor changes remain local until **Save profile** is used. Undo and redo are available directly in the editor top bar. If the user leaves the editor with unsaved changes, ShareParser asks whether to apply them, discard them or continue editing. Deleting a profile requires confirmation.
 
-The editor has a sticky section navigation row for profile recognition, variables from the example, variables and processing actions. It remains visible while scrolling and indicates the current section. The example section is shown only when an example is available. Processing-action cards are collapsed by default so large profiles remain manageable.
+The editor has a sticky section navigation row for profile recognition, variables from the example, variables and actions. It remains visible while scrolling and indicates the current section. Section titles keep their full width even when add-action controls are present. The example section is shown only when an example is available. Action cards are collapsed by default so large profiles remain manageable.
 
 ## Visual extraction without Regex
 
@@ -237,11 +237,17 @@ When several profiles match, ShareParser first asks which profile to use and the
 
 Each action can be included or excluded from the overlay and notification surfaces. The overlay shows at most four configured actions and offers to open the full list in ShareParser when more are available. Android notifications expose at most three configured action buttons and open the full picker in the app for the remaining choices. Overlay permission is optional. The notification mode has its own Android channel for sound/vibration settings. Temporary selectors expire automatically.
 
-## Optional built-in share actions
+## Light and full editions
 
-Settings provide a dedicated additional-share-options page. Built-in options are disabled by default and appear only when ShareParser detects suitable content. Available options include opening a detected address in a maps app, a web link, phone number or email target, opening a shared text file, and configuring a custom web target with templates. Recognized targets are also exposed as built-in profile variables so they can be parsed or transformed before a Target action opens them.
+Both editions use the same Android application ID, launcher name (**ShareParser**) and profile storage. No application-ID suffix is used. When release builds are signed with the same signing key, light and full are intended to update/replace one another instead of installing side by side. The edition name is shown only inside the app title as **ShareParser light** or **ShareParser full**.
 
-The Target action safely opens processed values using http/https, geo, tel or mailto schemes. ShareParser does not register itself globally as a handler for phone, email or map links, because Android manifest intent filters cannot be enabled and disabled dynamically from these app settings.
+**ShareParser light** does not advertise itself as an Android handler for external web, map, telephone or email targets. It remains the standard edition for normal Android sharing through `ACTION_SEND`.
+
+**ShareParser full** additionally registers static Android `ACTION_VIEW` handlers for `http`, `https`, `geo`, `tel` and `mailto`. Android requires these target declarations in the manifest, so they cannot be controlled by runtime toggles. For that reason those external targets are not presented as switches in Settings.
+
+Incoming full-edition targets are exposed as `target` and `target_type`. Profiles that depend on these variables are marked with a warning in the profile overview when the light edition is installed, and remain editable so the dependency can be removed.
+
+The Target action safely opens processed values using http/https, geo, tel or mailto schemes. Optional runtime share actions that do not require manifest registration, such as opening a shared text file or a custom templated web destination, remain available in the additional-share-options settings page.
 
 ## App icon
 
@@ -324,10 +330,10 @@ Profiles use a versioned JSON format. The current profile schema is version 13. 
 The repository intentionally does not vendor `gradle-wrapper.jar`. Use Gradle 9.5.1 directly:
 
 ```bash
-gradle :app:testDebugUnitTest :app:lintDebug :app:assembleDebug
+gradle :app:testLightDebugUnitTest :app:testFullDebugUnitTest :app:lintLightDebug :app:lintFullDebug :app:assembleLightDebug :app:assembleFullDebug
 ```
 
-GitHub Actions runs security checks, icon-format checks, unit tests, Android Lint and a debug APK build for pull requests and pushes to `main`.
+GitHub Actions runs security checks, icon-format checks, unit tests and Android Lint for both editions, then builds separate light and full debug APKs for pull requests and pushes to `main`.
 
 ## F-Droid direction
 
