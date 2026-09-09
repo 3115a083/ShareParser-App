@@ -269,7 +269,7 @@ internal fun SettingsHomeScreen(
                 SettingsLinkRow(
                     icon = { Icon(Icons.Outlined.Share, null) },
                     title = "Zusätzliche Teiloptionen",
-                    description = "Karten, Links, Telefon, E-Mail, Dateien und eigene Web-Ziele",
+                    description = "Dateien und eigene Web-Ziele",
                     onClick = onAdditionalShareSettings
                 )
             }
@@ -374,27 +374,15 @@ internal fun AdditionalShareSettingsScreen(
     ) {
         item {
             Text(
-                "Diese Optionen sind standardmäßig aus. Sie erscheinen nur, wenn der geteilte Inhalt zum jeweiligen Ziel passt.",
+                "Zusätzliche Aktionen für normal geteilte Inhalte. Externe Öffnen-Ziele der Full-Version sind Teil der App-Variante und werden hier nicht geschaltet.",
                 style = MaterialTheme.typography.bodySmall
             )
         }
         item {
             SettingsTopicCard(
-                title = "Erkannte Ziele",
-                description = "ShareParser stellt passende Inhalte zusätzlich als eingebaute Variablen bereit: shared_address, shared_web, shared_phone und shared_email."
+                title = "Datei öffnen",
+                description = "Optional für geteilte Textdateien."
             ) {
-                ExtraShareToggle(settings.extraShareMap, "Adresse in Karten-App öffnen") {
-                    save(settings.copy(extraShareMap = it))
-                }
-                ExtraShareToggle(settings.extraShareWebLink, "Erkannten Web-Link öffnen") {
-                    save(settings.copy(extraShareWebLink = it))
-                }
-                ExtraShareToggle(settings.extraSharePhone, "Erkannte Telefonnummer öffnen") {
-                    save(settings.copy(extraSharePhone = it))
-                }
-                ExtraShareToggle(settings.extraShareEmail, "Erkannte E-Mail-Adresse öffnen") {
-                    save(settings.copy(extraShareEmail = it))
-                }
                 ExtraShareToggle(settings.extraShareFileOpen, "Geteilten Text-Dateityp direkt öffnen") {
                     save(settings.copy(extraShareFileOpen = it))
                 }
