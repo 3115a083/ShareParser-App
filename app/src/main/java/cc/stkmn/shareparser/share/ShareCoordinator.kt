@@ -110,18 +110,6 @@ class ShareCoordinator(context: Context) {
         val phone = candidates.firstOrNull { it.suggestedKey == "telefon" }?.value
         val email = candidates.firstOrNull { it.suggestedKey == "email" }?.value
         return buildList {
-            if (settings.extraShareMap && !address.isNullOrBlank()) {
-                add(Choice(EXTRA_PROFILE_ID, EXTRA_MAP, "ShareParser", "Adresse in Karten-App öffnen", "map"))
-            }
-            if (settings.extraShareWebLink && !web.isNullOrBlank()) {
-                add(Choice(EXTRA_PROFILE_ID, EXTRA_WEB, "ShareParser", "Web-Link öffnen", "link"))
-            }
-            if (settings.extraSharePhone && !phone.isNullOrBlank()) {
-                add(Choice(EXTRA_PROFILE_ID, EXTRA_PHONE, "ShareParser", "Telefonnummer öffnen", "phone"))
-            }
-            if (settings.extraShareEmail && !email.isNullOrBlank()) {
-                add(Choice(EXTRA_PROFILE_ID, EXTRA_EMAIL, "ShareParser", "E-Mail öffnen", "mail"))
-            }
             if (settings.extraShareFileOpen && payload.fileName.isNotBlank()) {
                 add(Choice(EXTRA_PROFILE_ID, EXTRA_FILE, "ShareParser", "Datei direkt öffnen", "description"))
             }
