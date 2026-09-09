@@ -6,7 +6,7 @@ import cc.stkmn.shareparser.data.Profile
 
 internal object BuildEdition {
     val isFull: Boolean get() = BuildConfig.FULL_SHARE_TARGETS
-    val title: String get() = BuildConfig.EDITION_TITLE
+    val title: String get() = BuildConfig.APP_VARIANT_TITLE
 
     fun profileRequiresFull(profile: Profile): Boolean {
         if (isFull) return false
