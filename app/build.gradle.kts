@@ -22,7 +22,24 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
 
-    buildFeatures { compose = true }
+    flavorDimensions += "distribution"
+    productFlavors {
+        create("light") {
+            dimension = "distribution"
+            buildConfigField("boolean", "FULL_SHARE_TARGETS", "false")
+            buildConfigField("String", "APP_VARIANT_TITLE", "\"ShareParser light\"")
+        }
+        create("full") {
+            dimension = "distribution"
+            buildConfigField("boolean", "FULL_SHARE_TARGETS", "true")
+            buildConfigField("String", "APP_VARIANT_TITLE", "\"ShareParser full\"")
+        }
+    }
+
+    buildFeatures {
+        compose = true
+        buildConfig = true
+    }
     packaging { resources.excludes += "/META-INF/{AL2.0,LGPL2.1}" }
 
     lint {
