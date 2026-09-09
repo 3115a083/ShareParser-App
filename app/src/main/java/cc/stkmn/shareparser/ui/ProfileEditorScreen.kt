@@ -1300,14 +1300,11 @@ internal fun ProfileEditorScreen(
 
         item {
             EditorSectionHeader("Variablen") {
-                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    Spacer(Modifier.weight(1f))
-                    TextButton(onClick = {
-                        applyExtractor(ExtractorRule(key = "", regex = "(.+)", required = false))
-                    }) {
-                        Icon(Icons.Outlined.Add, null)
-                        Text("Manuell")
-                    }
+                TextButton(onClick = {
+                    applyExtractor(ExtractorRule(key = "", regex = "(.+)", required = false))
+                }) {
+                    Icon(Icons.Outlined.Add, null)
+                    Text("Manuell")
                 }
             }
         }
@@ -1381,22 +1378,17 @@ internal fun ProfileEditorScreen(
 
         item {
             EditorSectionHeader("Aktionen") {
-                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    Spacer(Modifier.weight(1f))
-                    Row {
-                        Column {
-                            TextButton(onClick = { addActionMenu = true }) {
-                                Icon(Icons.Outlined.Add, null)
-                                Text("Aktion")
-                            }
-                            DropdownMenu(expanded = addActionMenu, onDismissRequest = { addActionMenu = false }) {
-                                DropdownMenuItem(text = { Text("Kalendereintrag") }, onClick = { actions += defaultCalendarAction(); addActionMenu = false })
-                                DropdownMenuItem(text = { Text("URL öffnen") }, onClick = { actions += defaultUrlAction(); addActionMenu = false })
-                                DropdownMenuItem(text = { Text("Text oder Textdatei") }, onClick = { actions += defaultShareAction(); addActionMenu = false })
-                                DropdownMenuItem(text = { Text("Ziel öffnen") }, onClick = { actions += defaultTargetAction(); addActionMenu = false })
-                                DropdownMenuItem(text = { Text("Webhook") }, onClick = { actions += defaultWebhookAction(); addActionMenu = false })
-                            }
-                        }
+                Column {
+                    TextButton(onClick = { addActionMenu = true }) {
+                        Icon(Icons.Outlined.Add, null)
+                        Text("Aktion")
+                    }
+                    DropdownMenu(expanded = addActionMenu, onDismissRequest = { addActionMenu = false }) {
+                        DropdownMenuItem(text = { Text("Kalendereintrag") }, onClick = { actions += defaultCalendarAction(); addActionMenu = false })
+                        DropdownMenuItem(text = { Text("URL öffnen") }, onClick = { actions += defaultUrlAction(); addActionMenu = false })
+                        DropdownMenuItem(text = { Text("Text oder Textdatei") }, onClick = { actions += defaultShareAction(); addActionMenu = false })
+                        DropdownMenuItem(text = { Text("Ziel öffnen") }, onClick = { actions += defaultTargetAction(); addActionMenu = false })
+                        DropdownMenuItem(text = { Text("Webhook") }, onClick = { actions += defaultWebhookAction(); addActionMenu = false })
                     }
                 }
             }
