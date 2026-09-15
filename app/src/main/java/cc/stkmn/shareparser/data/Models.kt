@@ -5,7 +5,10 @@ import kotlinx.serialization.Serializable
 import java.util.UUID
 
 @Serializable
-data class ProfileBundle(val schemaVersion: Int = 14, val profile: Profile)
+data class ProfileBundle(
+    val schemaVersion: Int = 13,
+    val profile: Profile
+)
 
 @Serializable
 data class Profile(
@@ -18,23 +21,69 @@ data class Profile(
     val parseDirection: ParseDirection = ParseDirection.TOP_DOWN
 )
 
-@Serializable enum class ParseDirection { TOP_DOWN, BOTTOM_UP }
-@Serializable enum class MatcherJoin { AND, OR }
-@Serializable enum class MatcherValueMode { REGEX, EMPTY, NOT_EMPTY }
-@Serializable data class MatcherRule(val regex: String, val ignoreCase: Boolean = true, val friendlyText: String = "", val variableKey: String = "", val join: MatcherJoin = MatcherJoin.AND, val valueMode: MatcherValueMode = MatcherValueMode.REGEX, val negate: Boolean = false)
-@Serializable enum class InputSource { COMBINED, TEXT, SUBJECT, LINKS }
-@Serializable data class ExtractorRule(val key: String, val regex: String, val group: Int = 1, val required: Boolean = false, val source: InputSource = InputSource.COMBINED, val sourceVariableKey: String = "", val transforms: List<ValueTransform> = listOf(ValueTransform.Trim), val id: String = UUID.randomUUID().toString(), val sampleLabel: String = "")
-@Serializable sealed class ValueTransform {
+@Serializable
+enum class ParseDirection { TOP_DOWN, BOTTOM_UP }
+@Serializable
+enum class MatcherJoin { AND, OR }
+@Serializable
+enum class MatcherValueMode { REGEX, EMPTY, NOT_EMPTY }
+
+@Serializable
+data class MatcherRule(
+    val regex: String,
+    val ignoreCase: Boolean = true,
+    val friendlyText: String = "",
+    val variableKey: String = "",
+    val join: MatcherJoin = MatcherJoin.AND,
+    val valueMode: MatcherValueMode = MatcherValueMode.REGEX,
+    val negate: Boolean = false
+)
+
+@Serializable
+enum class InputSource { COMBINED, TEXT, SUBJECT, LINKS }
+
+@Serializable
+data class ExtractorRule(
+    val key: String,
+    val regex: String,
+    val group: Int = 1,
+    val required: Boolean = false,
+    val source: InputSource = InputSource.COMBINED,
+    val sourceVariableKey: String = "",
+    val transforms: List<ValueTransform> = listOf(ValueTransform.Trim),
+    val id: String = UUID.randomUUID().toString(),
+    val sampleLabel: String = ""
+)
+
+@Serializable
+sealed class ValueTransform {
     @Serializable @SerialName("trim") data object Trim : ValueTransform()
-    @Serializable @SerialName("regex_replace") data class RegexReplace(val regex: String, val replacement: String = "", val ignoreCase: Boolean = false, val literal: Boolean = true) : ValueTransform()
+    @Serializable @SerialName("regex_replace") data class RegexReplace(
+        val regex: String,
+        val replacement: String = "",
+        val ignoreCase: Boolean = false,
+        val literal: Boolean = true
+    ) : ValueTransform()
     @Serializable @SerialName("prefix") data class Prefix(val value: String) : ValueTransform()
     @Serializable @SerialName("suffix") data class Suffix(val value: String) : ValueTransform()
     @Serializable @SerialName("case") data class ChangeCase(val mode: CaseMode) : ValueTransform()
 }
+
 @Serializable enum class CaseMode { LOWER, UPPER }
 @Serializable enum class ActionConditionMode { REGEX, EMPTY, NOT_EMPTY }
-@Serializable data class ActionConditionClause(val variableKey: String = "", val mode: ActionConditionMode = ActionConditionMode.NOT_EMPTY, val regex: String = "", val join: MatcherJoin = MatcherJoin.AND, val negate: Boolean = false)
-@Serializable data class ActionCondition(val clauses: List<ActionConditionClause> = emptyList())
+
+@Serializable
+data class ActionConditionClause(
+    val variableKey: String = "",
+    val mode: ActionConditionMode = ActionConditionMode.NOT_EMPTY,
+    val regex: String = "",
+    val join: MatcherJoin = MatcherJoin.AND,
+    val negate: Boolean = false
+)
+
+@Serializable
+data class ActionCondition(val clauses: List<ActionConditionClause> = emptyList())
+
 @Serializable enum class UrlOpenMode { BROWSER, WEBVIEW }
 @Serializable enum class CalendarTargetMode { APP_EDITOR, DIRECT_SAVE }
 @Serializable enum class DateTimeLocale { DE_DE, EN_US, EN_GB, ISO, SYSTEM }
@@ -46,7 +95,6 @@ data class Profile(
 @Serializable enum class ShareSelectionMode { APP, OVERLAY, NOTIFICATION }
 @Serializable enum class TextFileMode { SHARE, OPEN, SAVE }
 @Serializable enum class TargetType { AUTO, WEB, MAP, PHONE, EMAIL }
-@Serializable enum class ChainExecutionMode { SEQUENTIAL, PARALLEL }
 @Serializable enum class LauncherIcon { LOGO_1, LOGO_2, LOGO_3, LOGO_4, LOGO_5, LOGO_6 }
 
 @Serializable
@@ -74,51 +122,130 @@ sealed class ProcessingAction {
     abstract val friendlyName: String
     abstract val icon: String
     abstract val editorDescription: String
-    abstract val confirmBeforeRun: Boolean
 
     @Serializable @SerialName("calendar")
     data class Calendar(
-        override val id: String, override val friendlyName: String, override val icon: String = "event", override val editorDescription: String = "", override val confirmBeforeRun: Boolean = true,
-        val condition: ActionCondition? = null, val elseOfActionId: String = "", val showInOverlay: Boolean = true, val showInNotification: Boolean = true,
-        val titleTemplate: String = "{{subject}}", val descriptionTemplate: String = "{{text}}", val locationTemplate: String = "", val startTemplate: String = "", val endTemplate: String = "", val durationTemplate: String = "", val startPattern: String = "", val endPattern: String = "", val allDay: Boolean = false, val calendarNameTemplate: String = "", val calendarId: Long? = null, val targetMode: CalendarTargetMode = CalendarTargetMode.APP_EDITOR
+        override val id: String,
+        override val friendlyName: String,
+        override val icon: String = "event",
+        override val editorDescription: String = "",
+        val condition: ActionCondition? = null,
+        val elseOfActionId: String = "",
+        val showInOverlay: Boolean = true,
+        val showInNotification: Boolean = true,
+        val titleTemplate: String = "{{subject}}",
+        val descriptionTemplate: String = "{{text}}",
+        val locationTemplate: String = "",
+        val startTemplate: String = "",
+        val endTemplate: String = "",
+        val durationTemplate: String = "",
+        val startPattern: String = "",
+        val endPattern: String = "",
+        val allDay: Boolean = false,
+        val calendarNameTemplate: String = "",
+        val calendarId: Long? = null,
+        val targetMode: CalendarTargetMode = CalendarTargetMode.APP_EDITOR
     ) : ProcessingAction()
 
     @Serializable @SerialName("url")
     data class Url(
-        override val id: String, override val friendlyName: String, override val icon: String = "link", override val editorDescription: String = "", override val confirmBeforeRun: Boolean = true,
-        val condition: ActionCondition? = null, val elseOfActionId: String = "", val showInOverlay: Boolean = true, val showInNotification: Boolean = true, val urlTemplate: String = "https://example.com/?q={{input|url}}", val openMode: UrlOpenMode = UrlOpenMode.BROWSER
+        override val id: String,
+        override val friendlyName: String,
+        override val icon: String = "link",
+        override val editorDescription: String = "",
+        val condition: ActionCondition? = null,
+        val elseOfActionId: String = "",
+        val showInOverlay: Boolean = true,
+        val showInNotification: Boolean = true,
+        val urlTemplate: String = "https://example.com/?q={{input|url}}",
+        val openMode: UrlOpenMode = UrlOpenMode.BROWSER
     ) : ProcessingAction()
 
     @Serializable @SerialName("share")
     data class Share(
-        override val id: String, override val friendlyName: String, override val icon: String = "share", override val editorDescription: String = "", override val confirmBeforeRun: Boolean = true,
-        val condition: ActionCondition? = null, val elseOfActionId: String = "", val showInOverlay: Boolean = true, val showInNotification: Boolean = true,
-        val textTemplate: String = "{{text}}", val subjectTemplate: String = "{{subject}}", val mimeType: String = "text/plain", val fileExtension: String = "", val asFile: Boolean = false, val fileMode: TextFileMode = TextFileMode.SHARE, val fileNameTemplate: String = "ShareParser.txt", val relativePathTemplate: String = "", val emptyValuePolicy: EmptyValuePolicy = EmptyValuePolicy.FALLBACK, val fallbackFileName: String = "ShareParser.txt", val fallbackPath: String = ""
+        override val id: String,
+        override val friendlyName: String,
+        override val icon: String = "share",
+        override val editorDescription: String = "",
+        val condition: ActionCondition? = null,
+        val elseOfActionId: String = "",
+        val showInOverlay: Boolean = true,
+        val showInNotification: Boolean = true,
+        val textTemplate: String = "{{text}}",
+        val subjectTemplate: String = "{{subject}}",
+        val mimeType: String = "text/plain",
+        val fileExtension: String = "",
+        val asFile: Boolean = false,
+        val fileMode: TextFileMode = TextFileMode.SHARE,
+        val fileNameTemplate: String = "ShareParser.txt",
+        val relativePathTemplate: String = "",
+        val emptyValuePolicy: EmptyValuePolicy = EmptyValuePolicy.FALLBACK,
+        val fallbackFileName: String = "ShareParser.txt",
+        val fallbackPath: String = ""
     ) : ProcessingAction()
 
     @Serializable @SerialName("target")
     data class Target(
-        override val id: String, override val friendlyName: String, override val icon: String = "open_in_new", override val editorDescription: String = "", override val confirmBeforeRun: Boolean = true,
-        val condition: ActionCondition? = null, val elseOfActionId: String = "", val showInOverlay: Boolean = true, val showInNotification: Boolean = true, val targetTemplate: String = "{{target}}", val targetType: TargetType = TargetType.AUTO
+        override val id: String,
+        override val friendlyName: String,
+        override val icon: String = "open_in_new",
+        override val editorDescription: String = "",
+        val condition: ActionCondition? = null,
+        val elseOfActionId: String = "",
+        val showInOverlay: Boolean = true,
+        val showInNotification: Boolean = true,
+        val targetTemplate: String = "{{target}}",
+        val targetType: TargetType = TargetType.AUTO
     ) : ProcessingAction()
 
     @Serializable @SerialName("webhook")
     data class Webhook(
-        override val id: String, override val friendlyName: String, override val icon: String = "send", override val editorDescription: String = "", override val confirmBeforeRun: Boolean = true,
-        val condition: ActionCondition? = null, val elseOfActionId: String = "", val showInOverlay: Boolean = true, val showInNotification: Boolean = true,
-        val urlTemplate: String = "", val bodyTemplate: String = """{"text":"{{text|json}}","subject":"{{subject|json}}"}""", val contentType: String = "application/json; charset=utf-8", val mode: WebhookMode = WebhookMode.ON_SELECTION, val emptyValuePolicy: EmptyValuePolicy = EmptyValuePolicy.ERROR, val fallbackBody: String = "{}"
-    ) : ProcessingAction()
-
-    @Serializable @SerialName("chain")
-    data class Chain(
-        override val id: String, override val friendlyName: String, override val icon: String = "account_tree", override val editorDescription: String = "", override val confirmBeforeRun: Boolean = true,
-        val condition: ActionCondition? = null, val elseOfActionId: String = "", val showInOverlay: Boolean = true, val showInNotification: Boolean = true,
-        val actionIds: List<String> = emptyList(), val executionMode: ChainExecutionMode = ChainExecutionMode.SEQUENTIAL, val delayMs: Long = 0L
+        override val id: String,
+        override val friendlyName: String,
+        override val icon: String = "send",
+        override val editorDescription: String = "",
+        val condition: ActionCondition? = null,
+        val elseOfActionId: String = "",
+        val showInOverlay: Boolean = true,
+        val showInNotification: Boolean = true,
+        val urlTemplate: String = "",
+        val bodyTemplate: String = """{"text":"{{text|json}}","subject":"{{subject|json}}"}""",
+        val contentType: String = "application/json; charset=utf-8",
+        val mode: WebhookMode = WebhookMode.ON_SELECTION,
+        val emptyValuePolicy: EmptyValuePolicy = EmptyValuePolicy.ERROR,
+        val fallbackBody: String = "{}"
     ) : ProcessingAction()
 }
 
-@Serializable data class SharedPayload(val text: String, val subject: String = "", val mimeType: String = "text/plain", val sourcePackage: String = "", val sourceApp: String = "", val fileName: String = "", val linkTargets: List<String> = emptyList(), val target: String = "", val targetType: String = "") {
-    val combined: String get() = buildString { if (subject.isNotBlank()) append(subject.trim()).append("\n"); append(text) }.trim()
+@Serializable
+data class SharedPayload(
+    val text: String,
+    val subject: String = "",
+    val mimeType: String = "text/plain",
+    val sourcePackage: String = "",
+    val sourceApp: String = "",
+    val fileName: String = "",
+    val linkTargets: List<String> = emptyList(),
+    val target: String = "",
+    val targetType: String = ""
+) {
+    val combined: String get() = buildString {
+        if (subject.isNotBlank()) append(subject.trim()).append("\n")
+        append(text)
+    }.trim()
 }
+
 @Serializable data class PendingShare(val id: String, val payload: SharedPayload, val createdAtEpochMs: Long)
-@Serializable data class FailureReport(val id: String, val profileId: String?, val profileName: String?, val actionId: String?, val message: String, val technicalDetails: String, val failingField: String? = null, val inputPreview: String, val createdAtEpochMs: Long)
+
+@Serializable
+data class FailureReport(
+    val id: String,
+    val profileId: String?,
+    val profileName: String?,
+    val actionId: String?,
+    val message: String,
+    val technicalDetails: String,
+    val failingField: String? = null,
+    val inputPreview: String,
+    val createdAtEpochMs: Long
+)
