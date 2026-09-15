@@ -18,10 +18,14 @@ import cc.stkmn.shareparser.WebViewActivity
 import cc.stkmn.shareparser.data.AppSettings
 import cc.stkmn.shareparser.data.CalendarTargetMode
 import cc.stkmn.shareparser.data.DateTimeLocale
+import cc.stkmn.shareparser.data.EmptyValuePolicy
 import cc.stkmn.shareparser.data.ProcessingAction
 import cc.stkmn.shareparser.data.TextFileMode
+import cc.stkmn.shareparser.data.TargetType
 import cc.stkmn.shareparser.data.UrlOpenMode
 import java.io.File
+import java.net.HttpURLConnection
+import java.net.URL
 import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalDateTime
@@ -30,7 +34,7 @@ import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 
-class ActionExecutor(context: Context, private val settings: AppSettings = AppSettings()) {
+class ActionExecutor(context: Context, private val settings: AppSettings = AppSettings(), private val backgroundMode: Boolean = false) {
     private val appContext = context.applicationContext
 
     data class ExecutionResult(val warnings: List<String> = emptyList())
@@ -39,6 +43,46 @@ class ActionExecutor(context: Context, private val settings: AppSettings = AppSe
         is ProcessingAction.Calendar -> openCalendar(action, values)
         is ProcessingAction.Url -> openUrl(action, values)
         is ProcessingAction.Share -> shareText(action, values)
+        is ProcessingAction.Target -> openTarget(action, values)
+        is ProcessingAction.Webhook -> sendWebhook(action, values)
+    }
+
+    private fun openTarget(action: ProcessingAction.Target, values: Map<String, String>): ExecutionResult {
+        val raw = TemplateEngine.render(action.targetTemplate, values).trim()
+        if (raw.isBlank()) {
+            throw ProcessingException("Das Ziel ist leer.", "target", "Rendered target is blank")
+        }
+        val inferred = when {
+            raw.startsWith("geo:", true) -> TargetType.MAP
+            raw.startsWith("tel:", true) -> TargetType.PHONE
+            raw.startsWith("mailto:", true) -> TargetType.EMAIL
+            raw.startsWith("http://", true) || raw.startsWith("https://", true) || raw.startsWith("www.", true) -> TargetType.WEB
+            else -> TargetType.WEB
+        }
+        val type = if (action.targetType == TargetType.AUTO) inferred else action.targetType
+        val target = when (type) {
+            TargetType.AUTO -> raw
+            TargetType.WEB -> when {
+                raw.startsWith("http://", true) || raw.startsWith("https://", true) -> raw
+                raw.startsWith("www.", true) -> "https://$raw"
+                else -> "https://$raw"
+            }
+            TargetType.MAP -> if (raw.startsWith("geo:", true)) raw else "geo:0,0?q=${Uri.encode(raw)}"
+            TargetType.PHONE -> if (raw.startsWith("tel:", true)) raw else "tel:${raw.filter { it.isDigit() || it == '+' || it == '*' || it == '#' }}"
+            TargetType.EMAIL -> if (raw.startsWith("mailto:", true)) raw else "mailto:$raw"
+        }
+        val uri = runCatching { Uri.parse(target) }.getOrElse {
+            throw ProcessingException("Das Ziel ist ungültig.", "target", it.message ?: it.toString())
+        }
+        val scheme = uri.scheme?.lowercase()
+        if (scheme !in setOf("http", "https", "geo", "tel", "mailto")) {
+            throw ProcessingException("Das Ziel-Schema ist nicht erlaubt.", "target", "Rejected target scheme: $scheme")
+        }
+        val intent = Intent(Intent.ACTION_VIEW, uri).apply {
+            if (scheme == "http" || scheme == "https") addCategory(Intent.CATEGORY_BROWSABLE)
+        }
+        launch(intent, "target", "Ziel konnte nicht geöffnet werden")
+        return ExecutionResult()
     }
 
     private fun openCalendar(action: ProcessingAction.Calendar, values: Map<String, String>): ExecutionResult {
@@ -301,8 +345,10 @@ class ActionExecutor(context: Context, private val settings: AppSettings = AppSe
 
         when (action.openMode) {
             UrlOpenMode.BROWSER -> {
-                val browserIntent = Intent(Intent.ACTION_VIEW, uri).addCategory(Intent.CATEGORY_BROWSABLE)
-                launch(browserIntent, "url", "Link konnte nicht im Browser geöffnet werden")
+                val viewIntent = Intent(Intent.ACTION_VIEW, uri).apply {
+                    if (scheme == "http" || scheme == "https") addCategory(Intent.CATEGORY_BROWSABLE)
+                }
+                launch(viewIntent, "url", "Link konnte nicht geöffnet werden")
             }
             UrlOpenMode.WEBVIEW -> {
                 if (scheme !in setOf("http", "https")) {
@@ -325,7 +371,7 @@ class ActionExecutor(context: Context, private val settings: AppSettings = AppSe
     private fun shareText(action: ProcessingAction.Share, values: Map<String, String>): ExecutionResult {
         val text = TemplateEngine.render(action.textTemplate, values)
         val subject = if (action.subjectTemplate.isBlank()) "" else TemplateEngine.render(action.subjectTemplate, values)
-        val mimeType = action.mimeType.ifBlank { "text/plain" }
+        val mimeType = "text/plain"
         if (!action.asFile) {
             val intent = Intent(Intent.ACTION_SEND).apply {
                 type = mimeType
@@ -336,15 +382,48 @@ class ActionExecutor(context: Context, private val settings: AppSettings = AppSe
             return ExecutionResult()
         }
 
-        val renderedName = TemplateEngine.render(action.fileNameTemplate.ifBlank { "ShareParser.txt" }, values)
-        val fileName = safeFileName(renderedName)
-        val relativePath = if (action.relativePathTemplate.isBlank()) "" else TemplateEngine.render(action.relativePathTemplate, values)
+        val renderedName = renderFileTemplate(
+            template = action.fileNameTemplate,
+            values = values,
+            policy = action.emptyValuePolicy,
+            fallback = action.fallbackFileName.ifBlank { "ShareParser.txt" },
+            field = "share.fileName",
+            label = "Dateiname"
+        )
+        val baseFileName = resolveFileName(action, renderedName)
+        val extension = if (action.fileExtension.isBlank()) {
+            inferLegacyExtension(baseFileName, action.mimeType)
+        } else {
+            normalizeExtension(action.fileExtension)
+        }
+        val fileName = if (action.fileExtension.isBlank()) {
+            ensureExtension(baseFileName, extension)
+        } else {
+            replaceExtension(baseFileName, extension)
+        }
+        val fileType = textMimeForExtension(extension)
+        val fileWarnings = if (fileType.supported) emptyList() else listOf(
+            "Die Dateiendung '.$extension' ist kein bekanntes Textformat. ShareParser speichert den Inhalt trotzdem als Textdatei mit dieser Endung."
+        )
+        val renderedPath = if (action.relativePathTemplate.isBlank()) {
+            ""
+        } else {
+            renderFileTemplate(
+                template = action.relativePathTemplate,
+                values = values,
+                policy = action.emptyValuePolicy,
+                fallback = action.fallbackPath,
+                field = "share.relativePath",
+                label = "Unterordner"
+            )
+        }
+        val relativePath = resolveRelativePath(action, renderedPath)
         return when (action.fileMode) {
             TextFileMode.SHARE -> {
                 val file = writeTemporaryFile(fileName, text)
                 val uri = shareUri(file)
                 val intent = Intent(Intent.ACTION_SEND).apply {
-                    type = mimeType
+                    type = fileType.mimeType
                     putExtra(Intent.EXTRA_STREAM, uri)
                     putExtra(Intent.EXTRA_TEXT, text)
                     if (subject.isNotBlank()) putExtra(Intent.EXTRA_SUBJECT, subject)
@@ -352,26 +431,133 @@ class ActionExecutor(context: Context, private val settings: AppSettings = AppSe
                     addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                 }
                 launch(Intent.createChooser(intent, action.friendlyName), "share.file", "Datei konnte nicht geteilt werden")
-                ExecutionResult()
+                ExecutionResult(fileWarnings)
             }
             TextFileMode.OPEN -> {
                 val file = writeTemporaryFile(fileName, text)
                 val uri = shareUri(file)
                 launch(
                     Intent(Intent.ACTION_VIEW).apply {
-                        setDataAndType(uri, mimeType)
+                        setDataAndType(uri, fileType.mimeType)
                         clipData = ClipData.newUri(appContext.contentResolver, fileName, uri)
                         addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                     },
                     "share.file",
                     "Datei konnte nicht geöffnet werden"
                 )
-                ExecutionResult()
+                ExecutionResult(fileWarnings)
             }
-            TextFileMode.SAVE -> saveTextFile(fileName, relativePath, mimeType, text)
+            TextFileMode.SAVE -> {
+                val result = saveTextFile(fileName, relativePath, fileType.mimeType, text)
+                result.copy(warnings = (fileWarnings + result.warnings).distinct())
+            }
         }
     }
 
+    private data class TextFileType(val mimeType: String, val supported: Boolean)
+
+    private fun inferLegacyExtension(fileName: String, mimeType: String): String {
+        val fromName = fileName.substringAfterLast('.', "").takeIf { it.isNotBlank() }?.let(::normalizeExtension)
+        if (fromName != null) return fromName
+        return when (mimeType.lowercase(Locale.ROOT)) {
+            "text/markdown" -> "md"
+            "text/html" -> "html"
+            "text/csv" -> "csv"
+            "application/json" -> "json"
+            "application/xml", "text/xml" -> "xml"
+            "application/yaml", "text/yaml" -> "yaml"
+            else -> "txt"
+        }
+    }
+
+    private fun normalizeExtension(value: String): String = value
+        .trim()
+        .removePrefix(".")
+        .lowercase(Locale.ROOT)
+        .replace(Regex("[^a-z0-9]+"), "")
+        .ifBlank { "txt" }
+        .take(12)
+
+    private fun ensureExtension(fileName: String, extension: String): String {
+        val suffix = "." + extension
+        return if (fileName.endsWith(suffix, ignoreCase = true)) fileName else fileName.trimEnd('.') + suffix
+    }
+
+    private fun replaceExtension(fileName: String, extension: String): String {
+        val clean = fileName.trimEnd('.')
+        val dot = clean.lastIndexOf('.')
+        val base = if (dot > 0) clean.substring(0, dot) else clean
+        return base + "." + extension
+    }
+
+    private fun textMimeForExtension(extension: String): TextFileType = when (extension) {
+        "txt", "log", "ini", "conf", "cfg" -> TextFileType("text/plain", true)
+        "md", "markdown" -> TextFileType("text/markdown", true)
+        "html", "htm" -> TextFileType("text/html", true)
+        "csv" -> TextFileType("text/csv", true)
+        "tsv" -> TextFileType("text/tab-separated-values", true)
+        "json" -> TextFileType("application/json", true)
+        "xml" -> TextFileType("application/xml", true)
+        "yaml", "yml" -> TextFileType("application/yaml", true)
+        "css" -> TextFileType("text/css", true)
+        "js", "mjs" -> TextFileType("text/javascript", true)
+        "ics" -> TextFileType("text/calendar", true)
+        "sql", "kt", "java", "py", "sh" -> TextFileType("text/plain", true)
+        else -> TextFileType("text/plain", false)
+    }
+
+    private fun sendWebhook(action: ProcessingAction.Webhook, values: Map<String, String>): ExecutionResult {
+        val renderedUrl = TemplateEngine.render(action.urlTemplate, values).trim()
+        if (renderedUrl.isBlank()) throw ProcessingException("Die Webhook-URL ist leer.", "webhook.url", "Rendered webhook URL was blank")
+        val uri = runCatching { Uri.parse(renderedUrl) }.getOrElse {
+            throw ProcessingException("Die Webhook-URL ist ungültig.", "webhook.url", it.message ?: it.toString())
+        }
+        if (uri.scheme?.lowercase() !in setOf("http", "https") || uri.host.isNullOrBlank()) {
+            throw ProcessingException("Webhooks unterstützen nur vollständige http- oder https-URLs.", "webhook.url", "Rejected webhook URL: $renderedUrl")
+        }
+
+        val renderedBody = TemplateEngine.render(action.bodyTemplate, values)
+        val body = if (renderedBody.isNotBlank()) renderedBody else when (action.emptyValuePolicy) {
+            EmptyValuePolicy.FALLBACK -> action.fallbackBody.ifBlank { "{}" }
+            EmptyValuePolicy.ERROR -> throw ProcessingException("Der Webhook-Inhalt ist leer.", "webhook.body", "Rendered webhook body was blank")
+        }
+
+        val connection = try {
+            (URL(renderedUrl).openConnection() as HttpURLConnection).apply {
+                requestMethod = "POST"
+                connectTimeout = if (backgroundMode) 20_000 else 10_000
+                readTimeout = if (backgroundMode) 25_000 else 10_000
+                doOutput = true
+                val safeContentType = action.contentType
+                    .replace("\r", "")
+                    .replace("\n", "")
+                    .trim()
+                    .take(120)
+                    .ifBlank { "application/json; charset=utf-8" }
+                setRequestProperty("Content-Type", safeContentType)
+                setRequestProperty("Accept", "*/*")
+                setRequestProperty("User-Agent", "ShareParser")
+            }
+        } catch (e: Exception) {
+            throw ProcessingException("Die Webhook-Verbindung konnte nicht erstellt werden.", "webhook.url", "${e::class.java.name}: ${e.message ?: e.toString()}")
+        }
+
+        try {
+            connection.outputStream.bufferedWriter(Charsets.UTF_8).use { it.write(body) }
+            val code = connection.responseCode
+            if (code !in 200..299) {
+                val response = runCatching { (connection.errorStream ?: connection.inputStream)?.bufferedReader()?.use { it.readText().take(1000) } }.getOrNull().orEmpty()
+                throw ProcessingException("Der Webhook wurde vom Server abgelehnt (HTTP $code).", "webhook", "HTTP $code ${connection.responseMessage.orEmpty()}\n$response")
+            }
+        } catch (e: ProcessingException) {
+            throw e
+        } catch (e: Exception) {
+            throw ProcessingException("Der Webhook konnte nicht gesendet werden.", "webhook", "${e::class.java.name}: ${e.message ?: e.toString()}")
+        } finally {
+            connection.disconnect()
+        }
+        return ExecutionResult()
+    }
     private fun saveTextFile(fileName: String, relativePath: String, mimeType: String, text: String): ExecutionResult {
         if (settings.defaultSaveTreeUri.isNotBlank()) {
             val saved = runCatching {
@@ -437,23 +623,89 @@ class ActionExecutor(context: Context, private val settings: AppSettings = AppSe
         )
     }
 
+    private fun renderFileTemplate(
+        template: String,
+        values: Map<String, String>,
+        policy: EmptyValuePolicy,
+        fallback: String,
+        field: String,
+        label: String
+    ): String {
+        val emptyVariables = TemplateEngine.variables(template).filter { values[it].isNullOrBlank() }
+        if (template.isBlank() || emptyVariables.isNotEmpty()) {
+            return when (policy) {
+                EmptyValuePolicy.FALLBACK -> fallback
+                EmptyValuePolicy.ERROR -> throw ProcessingException(
+                    "$label ist leer oder enthält eine leere Variable.",
+                    field,
+                    if (emptyVariables.isEmpty()) "Template was blank"
+                    else "Blank variables: ${emptyVariables.joinToString()}"
+                )
+            }
+        }
+        return TemplateEngine.render(template, values)
+    }
+
+    private val unsafeFileChars = Regex("[\\u0000-\\u001F<>:\"/\\\\|?*]+")
+
+    private fun resolveFileName(action: ProcessingAction.Share, rendered: String): String {
+        val trimmed = rendered.trim()
+        if (trimmed.isBlank()) {
+            return when (action.emptyValuePolicy) {
+                EmptyValuePolicy.FALLBACK -> safeFileName(action.fallbackFileName.ifBlank { "ShareParser.txt" })
+                EmptyValuePolicy.ERROR -> throw ProcessingException(
+                    "Der erzeugte Dateiname ist leer.",
+                    "share.fileName",
+                    "Rendered filename was blank"
+                )
+            }
+        }
+        if (trimmed == "." || trimmed == "..") {
+            return when (action.emptyValuePolicy) {
+                EmptyValuePolicy.FALLBACK -> safeFileName(action.fallbackFileName.ifBlank { "ShareParser.txt" })
+                EmptyValuePolicy.ERROR -> throw ProcessingException(
+                    "Der erzeugte Dateiname ist kein gültiger Dateiname.",
+                    "share.fileName",
+                    "Rejected path traversal filename: '$rendered'"
+                )
+            }
+        }
+        return safeFileName(trimmed)
+    }
+
+    private fun resolveRelativePath(action: ProcessingAction.Share, rendered: String): String {
+        if (rendered.isBlank()) return ""
+        val rawSegments = rendered.split('/', '\\')
+        val traversal = rawSegments.any { segment ->
+            val trimmed = segment.trim()
+            trimmed == "." || trimmed == ".."
+        }
+        if (!traversal) return safePathSegments(rendered).joinToString("/")
+        return when (action.emptyValuePolicy) {
+            EmptyValuePolicy.FALLBACK -> safePathSegments(action.fallbackPath).joinToString("/")
+            EmptyValuePolicy.ERROR -> throw ProcessingException(
+                "Der erzeugte Unterordner enthält einen unzulässigen Pfadteil.",
+                "share.relativePath",
+                "Rejected traversal path: '$rendered'"
+            )
+        }
+    }
+
     private fun safeFileName(value: String): String = value
         .substringAfterLast('/')
         .substringAfterLast('\\')
         .trim()
-        .replace(Regex("[\\u0000-\\u001F<>:\"/\\\\|?*]+"), "_")
+        .replace(unsafeFileChars, "_")
+        .replace(Regex("[. ]+$"), "")
         .take(180)
         .ifBlank { "ShareParser.txt" }
 
     private fun safePathSegments(value: String): List<String> = value
         .split('/', '\\')
         .map { segment ->
-            segment.trim()
-                .replace(Regex("[\\u0000-\\u001F<>:\"/\\\\|?*]+"), "_")
-                .take(80)
+            segment.trim().replace(unsafeFileChars, "_").take(80)
         }
         .filter { it.isNotBlank() && it != "." && it != ".." }
-
     private fun launch(intent: Intent, failingField: String, message: String) {
         val safeIntent = Intent(intent).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
 

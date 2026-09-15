@@ -39,12 +39,13 @@ object TemplateEngine {
     ): String {
         val tokens = findTokens(template)
         if (tokens.isEmpty()) return template
+        val normalizedValues = values.entries.associate { it.key.lowercase() to it.value }
 
         val result = StringBuilder(template.length)
         var cursor = 0
         for (token in tokens) {
             result.append(template, cursor, token.start)
-            val value = values[token.key] ?: missing(token.key)
+            val value = normalizedValues[token.key] ?: missing(token.key)
             result.append(applyModifier(value, token.key, token.modifier))
             cursor = token.endExclusive
         }
@@ -57,12 +58,31 @@ object TemplateEngine {
         "lower" -> value.lowercase()
         "upper" -> value.uppercase()
         "trim" -> value.trim()
+        "json" -> jsonEscape(value)
         "" -> value
         else -> throw ProcessingException(
             "Unbekannte Umwandlung '$modifier'.",
             key,
             "Unknown template modifier: $modifier"
         )
+    }
+
+    private fun jsonEscape(value: String): String = buildString(value.length + 8) {
+        value.forEach { ch ->
+            when (ch) {
+                '\\' -> append("\\\\")
+                '"' -> append("\\\"")
+                '\b' -> append("\\b")
+                '\u000C' -> append("\\f")
+                '\n' -> append("\\n")
+                '\r' -> append("\\r")
+                '\t' -> append("\\t")
+                else -> if (ch.code < 0x20) {
+                    append("\\u")
+                    append(ch.code.toString(16).padStart(4, '0'))
+                } else append(ch)
+            }
+        }
     }
 
     /**
@@ -83,7 +103,7 @@ object TemplateEngine {
             val body = template.substring(start + 2, close)
             val firstPipe = body.indexOf('|')
             val secondPipe = if (firstPipe >= 0) body.indexOf('|', firstPipe + 1) else -1
-            val key = if (firstPipe >= 0) body.substring(0, firstPipe) else body
+            val key = (if (firstPipe >= 0) body.substring(0, firstPipe) else body).lowercase()
             val modifier = if (firstPipe >= 0) body.substring(firstPipe + 1) else ""
 
             val validKey = key.isNotEmpty() && key.all { it.isLetterOrDigit() || it == '_' || it == '.' || it == '-' }
