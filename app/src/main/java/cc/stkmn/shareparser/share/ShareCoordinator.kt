@@ -1,6 +1,15 @@
 package cc.stkmn.shareparser.share
 
 import android.content.Context
+import cc.stkmn.shareparser.engine.ActionChainRunner
+import cc.stkmn.shareparser.engine.ActionRunPolicy
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.delay
+import java.util.Collections
 import cc.stkmn.shareparser.data.FailureReport
 import cc.stkmn.shareparser.data.PendingShareStore
 import cc.stkmn.shareparser.data.ProcessingAction
@@ -22,6 +31,7 @@ import java.util.UUID
 
 class ShareCoordinator(context: Context) {
     companion object {
+        private val executionScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
         const val EXTRA_PROFILE_ID = "__shareparser_extra__"
         const val SELECT_PROFILE_ACTION_ID = "__select_profile__"
         private const val EXTRA_MAP = "__extra_map__"
@@ -70,9 +80,9 @@ class ShareCoordinator(context: Context) {
         mode: ShareSelectionMode = ShareSelectionMode.APP
     ): List<Choice> {
         val profile = matchingProfiles(payload).firstOrNull { it.id == profileId } ?: return emptyList()
-        val values = runCatching { parser.extract(payload, profile) }.getOrDefault(emptyMap())
+        val values = parser.extract(payload, profile)
         return profile.actions
-            .filterNot { it is ProcessingAction.Webhook && it.mode == WebhookMode.ALWAYS }
+            .filter(ActionRunPolicy::isSelectable)
             .filter { action -> ActionConditionEvaluator.isAvailable(action, profile.actions, values) }
             .filter { action ->
                 when (mode) {
@@ -195,6 +205,8 @@ class ShareCoordinator(context: Context) {
             val result = ActionExecutor(appContext, settings).execute(action, values)
             WarningNotifier.show(appContext, result.warnings)
             true
+        } catch (error: kotlinx.coroutines.CancellationException) {
+            throw error
         } catch (error: Throwable) {
             val processing = error as? ProcessingException
             val report = FailureReport(
@@ -218,6 +230,7 @@ class ShareCoordinator(context: Context) {
         is ProcessingAction.Calendar -> action.showInOverlay
         is ProcessingAction.Url -> action.showInOverlay
         is ProcessingAction.Share -> action.showInOverlay
+        is ProcessingAction.Chain -> action.showInOverlay
         is ProcessingAction.Target -> action.showInOverlay
         is ProcessingAction.Webhook -> action.showInOverlay
     }
@@ -226,15 +239,33 @@ class ShareCoordinator(context: Context) {
         is ProcessingAction.Calendar -> action.showInNotification
         is ProcessingAction.Url -> action.showInNotification
         is ProcessingAction.Share -> action.showInNotification
+        is ProcessingAction.Chain -> action.showInNotification
         is ProcessingAction.Target -> action.showInNotification
         is ProcessingAction.Webhook -> action.showInNotification
     }
 
     fun execute(payload: SharedPayload, profileId: String, actionId: String): Boolean {
-        if (profileId == EXTRA_PROFILE_ID) return executeExtra(payload, actionId)
+        if (profileId == EXTRA_PROFILE_ID) {
+            executionScope.launch(Dispatchers.IO) { executeExtra(payload, actionId) }
+            return true
+        }
         val profile = repository.profiles().firstOrNull { it.id == profileId } ?: return false
         val action = profile.actions.firstOrNull { it.id == actionId } ?: return false
         return execute(payload, profile, action)
+    }
+
+    suspend fun executeAwait(payload: SharedPayload, profileId: String, actionId: String): Boolean = withContext(Dispatchers.IO) {
+        if (profileId == EXTRA_PROFILE_ID) return@withContext executeExtra(payload, actionId)
+        val profile = repository.profiles().firstOrNull { it.id == profileId } ?: return@withContext false
+        val action = profile.actions.firstOrNull { it.id == actionId } ?: return@withContext false
+        executeInternal(payload, profile, action)
+    }
+    suspend fun executePendingAwait(pendingId: String, profileId: String, actionId: String): Boolean {
+        val store = PendingShareStore(appContext)
+        val pending = store.get(pendingId) ?: return false
+        val result = executeAwait(pending.payload, profileId, actionId)
+        if (result) store.remove(pendingId)
+        return result
     }
 
     fun executePending(pendingId: String, profileId: String, actionId: String, consume: Boolean = true): Boolean {
@@ -249,46 +280,31 @@ class ShareCoordinator(context: Context) {
         profiles.forEach { profile ->
             profile.actions
                 .filterIsInstance<ProcessingAction.Webhook>()
-                .filter { it.mode == WebhookMode.ALWAYS }
+                .filter(ActionRunPolicy::isAutomaticWebhook)
                 .forEach { action ->
-                    Thread {
+                    executionScope.launch {
                         var succeeded = false
                         repeat(3) { attempt ->
                             if (!succeeded) {
-                                succeeded = executeInternal(
-                                    payload = payload,
-                                    profile = profile,
-                                    action = action,
-                                    notifyFailure = attempt == 2,
-                                    backgroundMode = true
-                                )
-                                if (!succeeded && attempt < 2) {
-                                    Thread.sleep(if (attempt == 0) 2_000L else 5_000L)
-                                }
+                                succeeded = withContext(Dispatchers.IO) { executeInternal(payload, profile, action, notifyFailure = attempt == 2, backgroundMode = true) }
+                                if (!succeeded && attempt < 2) delay(if (attempt == 0) 2_000L else 5_000L)
                             }
                         }
-                    }.apply {
-                        name = "ShareParser-background-webhook"
-                        start()
                     }
                 }
         }
     }
 
+    fun mayRunAutomatically(profileId: String, actionId: String): Boolean =
+        repository.profiles().firstOrNull { it.id == profileId }?.actions
+            ?.firstOrNull { it.id == actionId }?.let(ActionRunPolicy::mayRunAutomatically) == true
+
     fun execute(payload: SharedPayload, profile: Profile, action: ProcessingAction): Boolean {
-        if (action is ProcessingAction.Webhook) {
-            Thread {
-                executeInternal(payload, profile, action)
-            }.apply {
-                name = "ShareParser-webhook"
-                start()
-            }
-            return true
-        }
-        return executeInternal(payload, profile, action)
+        executionScope.launch(Dispatchers.IO) { executeInternal(payload, profile, action) }
+        return true
     }
 
-    private fun executeInternal(
+    private suspend fun executeInternal(
         payload: SharedPayload,
         profile: Profile,
         action: ProcessingAction,
@@ -300,9 +316,15 @@ class ShareCoordinator(context: Context) {
             if (!ActionConditionEvaluator.isAvailable(action, profile.actions, extracted)) {
                 return true
             }
-            val result = ActionExecutor(appContext, repository.settings(), backgroundMode).execute(action, extracted)
-            WarningNotifier.show(appContext, result.warnings)
+            val warnings = Collections.synchronizedList(mutableListOf<String>())
+            val executor = ActionExecutor(appContext, repository.settings(), backgroundMode)
+            ActionChainRunner.run(action, profile.actions, extracted) { child ->
+                withContext(Dispatchers.IO) { warnings.addAll(executor.execute(child, extracted).warnings) }
+            }
+            WarningNotifier.show(appContext, warnings.toList())
             true
+        } catch (error: kotlinx.coroutines.CancellationException) {
+            throw error
         } catch (error: Throwable) {
             val processing = error as? ProcessingException
             val report = FailureReport(
@@ -310,7 +332,7 @@ class ShareCoordinator(context: Context) {
                 profileId = profile.id,
                 profileName = profile.name,
                 actionId = action.id,
-                message = processing?.userMessage ?: "Verarbeitung fehlgeschlagen.",
+                message = processing?.userMessage ?: (error as? IllegalArgumentException)?.message ?: "Verarbeitung fehlgeschlagen.",
                 technicalDetails = processing?.technicalDetails ?: error.stackTraceToString(),
                 failingField = processing?.failingField,
                 inputPreview = payload.combined.take(2000),

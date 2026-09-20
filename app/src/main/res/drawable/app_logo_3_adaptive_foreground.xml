@@ -1,8 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Built-in safe area: visible artwork radius 31.2dp in a 108dp layer, inside the 33dp safe circle. -->
     <item>
         <bitmap
-            android:gravity="center"
+            android:gravity="fill"
             android:src="@drawable/app_logo_3_foreground" />
     </item>
 </layer-list>

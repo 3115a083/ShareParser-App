@@ -9,6 +9,13 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.material3.Checkbox
+import cc.stkmn.shareparser.data.ActionChainMode
+import cc.stkmn.shareparser.engine.ActionChainRunner
+import cc.stkmn.shareparser.engine.SafeRegex
+import androidx.compose.runtime.produceState
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -292,6 +299,7 @@ internal fun ProfileEditorScreen(
             }
         }
         profile.actions.forEach { action ->
+            if (action is ProcessingAction.Chain) runCatching { ActionChainRunner.validate(action, profile.actions) }.exceptionOrNull()?.let { return it.message ?: "Ungültige Aktionskette." }
             actionTemplates(action).forEach { (field, template) ->
                 val unknown = TemplateEngine.variables(template) - available.map { it.lowercase() }.toSet()
                 if (unknown.isNotEmpty()) return "$field verwendet unbekannte Variable: ${unknown.joinToString()}"
@@ -613,12 +621,18 @@ internal fun ProfileEditorScreen(
         )
     }
 
-    val sampleCandidates = remember(sample) {
-        sample?.let {
-            GuidedRuleFactory.candidates(it)
-                .filter { candidate -> candidate.source != InputSource.SUBJECT }
-                .take(40)
-        }.orEmpty()
+    val previewExtractors = extractors.toList()
+    val actionPreviewValues by produceState<Map<String, String>>(emptyMap(), sample, previewExtractors, parseDirection) {
+        value = withContext(Dispatchers.Default) {
+            sample?.let { currentSample -> runCatching {
+                parser.extract(currentSample, Profile("preview", "preview", extractors = previewExtractors, parseDirection = parseDirection))
+            }.getOrNull() }.orEmpty()
+        }
+    }
+    val sampleCandidates by produceState<List<GuidedRuleFactory.Candidate>>(emptyList(), sample) {
+        value = withContext(Dispatchers.Default) {
+            sample?.let { GuidedRuleFactory.candidates(it).filter { candidate -> candidate.source != InputSource.SUBJECT }.take(40) }.orEmpty()
+        }
     }
     val recognitionIndex = 6 + if (highlightField != null) 1 else 0
     val sampleRecognitionCount = if (sample == null) 0 else {
@@ -638,21 +652,26 @@ internal fun ProfileEditorScreen(
         recognitionEndIndex
     }
     val actionsIndex = variablesIndex + 1 + extractors.size
-    val activeEditorSection by remember(
-        editorListState,
-        recognitionIndex,
-        exampleIndex,
-        variablesIndex,
-        actionsIndex,
-        sample
-    ) {
+    var navigationTarget by remember { mutableStateOf<String?>(null) }
+    var navigationPosition by remember { mutableStateOf<Pair<Int, Int>?>(null) }
+    var navigationJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
+    val activeEditorSection by remember(editorListState, exampleIndex, variablesIndex, actionsIndex, sample, navigationTarget, navigationPosition) {
         derivedStateOf {
-            val visible = editorListState.firstVisibleItemIndex
-            when {
-                visible >= actionsIndex -> "actions"
-                visible >= variablesIndex -> "variables"
-                sample != null && visible >= exampleIndex -> "example"
+            val position = editorListState.firstVisibleItemIndex to editorListState.firstVisibleItemScrollOffset
+            val selectedByClick = navigationTarget?.takeIf { navigationPosition == null || navigationPosition == position }
+            selectedByClick ?: when {
+                !editorListState.canScrollForward && editorListState.layoutInfo.visibleItemsInfo.any { it.index >= actionsIndex } -> "actions"
+                position.first >= actionsIndex -> "actions"
+                position.first >= (if (sample != null) exampleIndex else variablesIndex) -> "variables"
                 else -> "recognition"
+            }
+        }
+    }
+    LaunchedEffect(editorListState) {
+        editorListState.interactionSource.interactions.collect { interaction ->
+            if (interaction is androidx.compose.foundation.interaction.DragInteraction.Start) {
+                navigationJob?.cancel()
+                navigationTarget = null
             }
         }
     }
@@ -663,38 +682,24 @@ internal fun ProfileEditorScreen(
             tonalElevation = 3.dp,
             color = MaterialTheme.colorScheme.surfaceContainer
         ) {
-            LazyRow(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                item {
+            Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                listOf(
+                    Triple("recognition", "Erkennung", recognitionIndex),
+                    Triple("variables", "Variablen", if (sample != null) exampleIndex else variablesIndex),
+                    Triple("actions", "Aktionen", actionsIndex)
+                ).forEach { (key, label, index) ->
                     FilterChip(
-                        selected = activeEditorSection == "recognition",
-                        onClick = { navigationScope.launch { editorListState.animateScrollToItem(recognitionIndex) } },
-                        label = { Text("Profil erkennen") }
-                    )
-                }
-                if (sample != null) {
-                    item {
-                        FilterChip(
-                            selected = activeEditorSection == "example",
-                            onClick = { navigationScope.launch { editorListState.animateScrollToItem(exampleIndex) } },
-                            label = { Text("Variablen aus Beispiel") }
-                        )
-                    }
-                }
-                item {
-                    FilterChip(
-                        selected = activeEditorSection == "variables",
-                        onClick = { navigationScope.launch { editorListState.animateScrollToItem(variablesIndex) } },
-                        label = { Text("Variablen") }
-                    )
-                }
-                item {
-                    FilterChip(
-                        selected = activeEditorSection == "actions",
-                        onClick = { navigationScope.launch { editorListState.animateScrollToItem(actionsIndex) } },
-                        label = { Text("Aktionen") }
+                        modifier = Modifier.weight(1f), selected = activeEditorSection == key,
+                        onClick = {
+                            navigationJob?.cancel()
+                            navigationTarget = key
+                            navigationPosition = null
+                            navigationJob = navigationScope.launch {
+                                editorListState.animateScrollToItem(index)
+                                navigationPosition = editorListState.firstVisibleItemIndex to editorListState.firstVisibleItemScrollOffset
+                            }
+                        },
+                        label = { Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis) }
                     )
                 }
             }
@@ -793,13 +798,13 @@ internal fun ProfileEditorScreen(
 
         item {
             val activeAppMatcher = matchers.firstOrNull { it.variableKey == "source_package" }
-            val selectedSourceApps = activeAppMatcher?.let { matcher ->
-                sourceApps.filter { app ->
-                    runCatching {
-                        Regex(matcher.regex).matches(app.packageName)
-                    }.getOrDefault(false)
+            val selectedSourceApps by produceState<List<cc.stkmn.shareparser.ShareSourceApp>>(emptyList(), activeAppMatcher, sourceApps) {
+                value = withContext(Dispatchers.Default) {
+                    activeAppMatcher?.let { matcher -> sourceApps.filter { app -> runCatching {
+                        SafeRegex(matcher.regex).matches(app.packageName)
+                    }.getOrDefault(false) } }.orEmpty()
                 }
-            }.orEmpty()
+            }
             Card(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("Teilende App", fontWeight = FontWeight.SemiBold)
@@ -1388,6 +1393,7 @@ internal fun ProfileEditorScreen(
                         DropdownMenuItem(text = { Text("URL öffnen") }, onClick = { actions += defaultUrlAction(); addActionMenu = false })
                         DropdownMenuItem(text = { Text("Text oder Textdatei") }, onClick = { actions += defaultShareAction(); addActionMenu = false })
                         DropdownMenuItem(text = { Text("Ziel öffnen") }, onClick = { actions += defaultTargetAction(); addActionMenu = false })
+                        DropdownMenuItem(text = { Text("Aktionskette") }, onClick = { actions += ProcessingAction.Chain(UUID.randomUUID().toString(), "Aktionskette"); addActionMenu = false })
                         DropdownMenuItem(text = { Text("Webhook") }, onClick = { actions += defaultWebhookAction(); addActionMenu = false })
                     }
                 }
@@ -1400,19 +1406,6 @@ internal fun ProfileEditorScreen(
             )
         }
         val variables = listOf("subject", "text", "input", "source_app", "source_package", "file_name", "mime_type", "target", "target_type", "shared_address", "shared_web", "shared_phone", "shared_email") + extractors.map { it.key.lowercase() }.filter { it.isNotBlank() }
-        val actionPreviewValues = sample?.let { currentSample ->
-            runCatching {
-                parser.extract(
-                    currentSample,
-                    Profile(
-                        id = "preview",
-                        name = "preview",
-                        extractors = extractors.toList(),
-                        parseDirection = parseDirection
-                    )
-                )
-            }.getOrNull()
-        }.orEmpty()
         items(actions, key = { it.id }) { action ->
             val index = actions.indexOfFirst { it.id == action.id }
             ActionEditorCard(
@@ -1699,7 +1692,7 @@ private fun SelectionSourceCard(
     val clipboard = LocalClipboardManager.current
     val selected = selectedText(fixedText, value.selection)
     var expanded by remember(title) { mutableStateOf(false) }
-    val (visualTransformation, highlights) = rememberVariableHighlighting(source, extractors)
+    val (visualTransformation, highlights) = rememberVariableHighlighting(source, extractors, fixedText)
     Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -1762,19 +1755,15 @@ private fun ExtractorCard(
     var splitDialog by remember { mutableStateOf(false) }
     var regexHelp by remember(rule.id) { mutableStateOf(false) }
     var captureInfo by remember(rule.id) { mutableStateOf(false) }
-    val preview = remember(rule, sample, parseDirection, previewRules) {
-        sample?.let {
-            val safePreviewRules = previewRules.map { previewRule ->
-                if (previewRule.id == rule.id) rule.copy(required = false) else previewRule.copy(required = false)
+    val previewState by produceState<String?>(null, rule, sample, parseDirection, previewRules) {
+        value = withContext(Dispatchers.Default) {
+            sample?.let {
+                val rules = previewRules.map { old -> if (old.id == rule.id) rule.copy(required = false) else old.copy(required = false) }
+                runCatching { parser.extract(it, Profile("preview", "preview", extractors = rules, parseDirection = parseDirection))[rule.key] }.getOrNull()
             }
-            runCatching {
-                parser.extract(
-                    it,
-                    Profile("preview", "preview", extractors = safePreviewRules, parseDirection = parseDirection)
-                )[rule.key]
-            }.getOrNull()
         }
     }
+    val preview = previewState
     val border = if (highlighted) Modifier.border(2.dp, MaterialTheme.colorScheme.error, RoundedCornerShape(12.dp)) else Modifier
 
     if (splitDialog) {
@@ -2224,6 +2213,7 @@ private fun ActionEditorCard(
     onDelete: () -> Unit
 ) {
     var iconMenu by remember { mutableStateOf(false) }
+    var iconQuery by remember { mutableStateOf("") }
     var expanded by remember(action.id) { mutableStateOf(highlighted) }
     val border = if (highlighted) Modifier.border(2.dp, MaterialTheme.colorScheme.error, RoundedCornerShape(12.dp)) else Modifier
     Card(border.fillMaxWidth()) {
@@ -2350,7 +2340,8 @@ private fun ActionEditorCard(
                     maxLines = 2
                 )
                 DropdownMenu(expanded = iconMenu, onDismissRequest = { iconMenu = false }) {
-                    actionIcons.chunked(6).forEach { choices ->
+                    OutlinedTextField(iconQuery, { iconQuery = it }, label = { Text("Icons suchen") }, modifier = Modifier.padding(8.dp), singleLine = true)
+                    actionIcons.filter { it.label.contains(iconQuery, true) || it.id.contains(iconQuery, true) }.chunked(5).forEach { choices ->
                         Row(Modifier.padding(horizontal = 6.dp, vertical = 2.dp)) {
                             choices.forEach { choice ->
                                 IconButton(onClick = {
@@ -2402,6 +2393,11 @@ private fun ActionEditorCard(
                         }
                     }
                 }
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Checkbox(action.confirmBeforeAutoRun, { onChange(withConfirmation(action, it)) })
+                    Text("Vor automatischer Ausführung bestätigen", modifier = Modifier.weight(1f))
+                }
+                Text("Deaktivieren, um diese Aktion bei eindeutiger Zuordnung automatisch auszuführen.", style = MaterialTheme.typography.bodySmall)
                 Text("Auswahl-Anzeige", fontWeight = FontWeight.SemiBold)
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Switch(actionShowInOverlay(action), { onChange(withOverlayVisibility(action, it)) })
@@ -2418,6 +2414,7 @@ private fun ActionEditorCard(
                     style = MaterialTheme.typography.bodySmall
                 )
                 when (action) {
+                    is ProcessingAction.Chain -> ChainActionFields(action, allActions, onChange)
                     is ProcessingAction.Calendar -> CalendarActionFields(action, variables, onChange)
                     is ProcessingAction.Url -> UrlActionFields(action, variables, onChange)
                     is ProcessingAction.Share -> ShareActionFields(action, variables, previewValues, onChange)
@@ -2624,25 +2621,12 @@ private fun CalendarActionFields(
     TemplateField("Ort", action.locationTemplate, variables) { onChange(action.copy(locationTemplate = it)) }
     TemplateField("Beginn oder Zeitraum", action.startTemplate, variables, placeholder = "z. B. {{datum}} {{zeit}} oder morgen 12-14") { onChange(action.copy(startTemplate = it, startPattern = "")) }
     TemplateField("Ende, optional", action.endTemplate, variables, placeholder = "Nur nötig, wenn der Beginn keinen Zeitraum enthält") { onChange(action.copy(endTemplate = it, endPattern = "")) }
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.Top,
-        horizontalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        TemplateField(
-            "Dauer, optional",
-            action.durationTemplate,
-            variables,
-            placeholder = "z. B. 1,5h, 2h, 90 Minuten, eine Stunde",
-            modifier = Modifier.weight(1f)
-        ) { onChange(action.copy(durationTemplate = it)) }
-        Column(
-            modifier = Modifier.padding(top = 8.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Switch(action.allDay, { onChange(action.copy(allDay = it)) })
-            Text("Ganztägig", style = MaterialTheme.typography.bodySmall)
-        }
+    TemplateField("Dauer, optional", action.durationTemplate, variables,
+        placeholder = "z. B. 1,5h, 2h, 90 Minuten, eine Stunde", modifier = Modifier.fillMaxWidth()
+    ) { onChange(action.copy(durationTemplate = it)) }
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Checkbox(action.allDay, { onChange(action.copy(allDay = it)) })
+        Text("Ganztägig", modifier = Modifier.weight(1f))
     }
     CalendarPickerField(action = action, onChange = { onChange(it) })
 
@@ -3024,24 +3008,13 @@ private fun TemplateField(
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun EditorSectionHeader(
-    text: String,
-    modifier: Modifier = Modifier,
-    content: @Composable () -> Unit = {}
-) {
-    Column(
-        modifier.fillMaxWidth().padding(top = 18.dp, bottom = 14.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp)
-    ) {
+private fun EditorSectionHeader(text: String, modifier: Modifier = Modifier, content: @Composable () -> Unit = {}) {
+    Column(modifier.fillMaxWidth().padding(top = 18.dp, bottom = 14.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
         HorizontalDivider(thickness = 3.dp)
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                text,
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.weight(1f)
-            )
+        FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(text, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, maxLines = 1)
             content()
         }
     }
@@ -3075,6 +3048,7 @@ private fun actionTemplates(action: ProcessingAction): List<Pair<String, String>
         "Dateiname" to action.fileNameTemplate,
         "Unterordner" to action.relativePathTemplate
     )
+    is ProcessingAction.Chain -> emptyList()
     is ProcessingAction.Target -> listOf("Ziel" to action.targetTemplate)
     is ProcessingAction.Webhook -> listOf(
         "Webhook-URL" to action.urlTemplate,
@@ -3086,6 +3060,7 @@ private fun duplicateAction(action: ProcessingAction): ProcessingAction = when (
     is ProcessingAction.Calendar -> action.copy(id = UUID.randomUUID().toString(), friendlyName = action.friendlyName + " (Kopie)")
     is ProcessingAction.Url -> action.copy(id = UUID.randomUUID().toString(), friendlyName = action.friendlyName + " (Kopie)")
     is ProcessingAction.Share -> action.copy(id = UUID.randomUUID().toString(), friendlyName = action.friendlyName + " (Kopie)")
+    is ProcessingAction.Chain -> action.copy(id = UUID.randomUUID().toString(), friendlyName = action.friendlyName + " (Kopie)")
     is ProcessingAction.Target -> action.copy(id = UUID.randomUUID().toString(), friendlyName = action.friendlyName + " (Kopie)")
     is ProcessingAction.Webhook -> action.copy(id = UUID.randomUUID().toString(), friendlyName = action.friendlyName + " (Kopie)")
 }
@@ -3104,6 +3079,12 @@ private fun duplicateAsElse(action: ProcessingAction): ProcessingAction = when (
         elseOfActionId = action.id
     )
     is ProcessingAction.Share -> action.copy(
+        id = UUID.randomUUID().toString(),
+        friendlyName = action.friendlyName + " (Sonst)",
+        condition = null,
+        elseOfActionId = action.id
+    )
+    is ProcessingAction.Chain -> action.copy(
         id = UUID.randomUUID().toString(),
         friendlyName = action.friendlyName + " (Sonst)",
         condition = null,
@@ -3133,6 +3114,7 @@ private fun withFriendlyName(action: ProcessingAction, name: String): Processing
     is ProcessingAction.Calendar -> action.copy(friendlyName = name)
     is ProcessingAction.Url -> action.copy(friendlyName = name)
     is ProcessingAction.Share -> action.copy(friendlyName = name)
+    is ProcessingAction.Chain -> action.copy(friendlyName = name)
     is ProcessingAction.Target -> action.copy(friendlyName = name)
     is ProcessingAction.Webhook -> action.copy(friendlyName = name)
 }
@@ -3141,6 +3123,7 @@ private fun withIcon(action: ProcessingAction, icon: String): ProcessingAction =
     is ProcessingAction.Calendar -> action.copy(icon = icon)
     is ProcessingAction.Url -> action.copy(icon = icon)
     is ProcessingAction.Share -> action.copy(icon = icon)
+    is ProcessingAction.Chain -> action.copy(icon = icon)
     is ProcessingAction.Target -> action.copy(icon = icon)
     is ProcessingAction.Webhook -> action.copy(icon = icon)
 }
@@ -3149,6 +3132,7 @@ private fun withEditorDescription(action: ProcessingAction, description: String)
     is ProcessingAction.Calendar -> action.copy(editorDescription = description)
     is ProcessingAction.Url -> action.copy(editorDescription = description)
     is ProcessingAction.Share -> action.copy(editorDescription = description)
+    is ProcessingAction.Chain -> action.copy(editorDescription = description)
     is ProcessingAction.Target -> action.copy(editorDescription = description)
     is ProcessingAction.Webhook -> action.copy(editorDescription = description)
 }
@@ -3158,6 +3142,7 @@ private fun actionShowInOverlay(action: ProcessingAction): Boolean = when (actio
     is ProcessingAction.Calendar -> action.showInOverlay
     is ProcessingAction.Url -> action.showInOverlay
     is ProcessingAction.Share -> action.showInOverlay
+    is ProcessingAction.Chain -> action.showInOverlay
     is ProcessingAction.Target -> action.showInOverlay
     is ProcessingAction.Webhook -> action.showInOverlay
 }
@@ -3166,6 +3151,7 @@ private fun actionShowInNotification(action: ProcessingAction): Boolean = when (
     is ProcessingAction.Calendar -> action.showInNotification
     is ProcessingAction.Url -> action.showInNotification
     is ProcessingAction.Share -> action.showInNotification
+    is ProcessingAction.Chain -> action.showInNotification
     is ProcessingAction.Target -> action.showInNotification
     is ProcessingAction.Webhook -> action.showInNotification
 }
@@ -3174,6 +3160,7 @@ private fun withOverlayVisibility(action: ProcessingAction, visible: Boolean): P
     is ProcessingAction.Calendar -> action.copy(showInOverlay = visible)
     is ProcessingAction.Url -> action.copy(showInOverlay = visible)
     is ProcessingAction.Share -> action.copy(showInOverlay = visible)
+    is ProcessingAction.Chain -> action.copy(showInOverlay = visible)
     is ProcessingAction.Target -> action.copy(showInOverlay = visible)
     is ProcessingAction.Webhook -> action.copy(showInOverlay = visible)
 }
@@ -3182,6 +3169,7 @@ private fun withNotificationVisibility(action: ProcessingAction, visible: Boolea
     is ProcessingAction.Calendar -> action.copy(showInNotification = visible)
     is ProcessingAction.Url -> action.copy(showInNotification = visible)
     is ProcessingAction.Share -> action.copy(showInNotification = visible)
+    is ProcessingAction.Chain -> action.copy(showInNotification = visible)
     is ProcessingAction.Target -> action.copy(showInNotification = visible)
     is ProcessingAction.Webhook -> action.copy(showInNotification = visible)
 }
@@ -3190,6 +3178,7 @@ private fun actionHighlightPrefix(action: ProcessingAction): String = when (acti
     is ProcessingAction.Calendar -> "calendar"
     is ProcessingAction.Url -> "url"
     is ProcessingAction.Share -> "share"
+    is ProcessingAction.Chain -> "chain"
     is ProcessingAction.Target -> "target"
     is ProcessingAction.Webhook -> "webhook"
 }
@@ -3282,3 +3271,86 @@ private fun safeFileName(name: String): String = name
     .replace(Regex("[^a-zA-Z0-9._-]+"), "-")
     .trim('-')
     .ifBlank { "shareparser-profile" }
+
+private fun withConfirmation(action: ProcessingAction, value: Boolean): ProcessingAction = when (action) {
+    is ProcessingAction.Calendar -> action.copy(confirmBeforeAutoRun = value)
+    is ProcessingAction.Url -> action.copy(confirmBeforeAutoRun = value)
+    is ProcessingAction.Share -> action.copy(confirmBeforeAutoRun = value)
+    is ProcessingAction.Target -> action.copy(confirmBeforeAutoRun = value)
+    is ProcessingAction.Webhook -> action.copy(confirmBeforeAutoRun = value)
+    is ProcessingAction.Chain -> action.copy(confirmBeforeAutoRun = value)
+}
+
+@Composable
+private fun ChainActionFields(action: ProcessingAction.Chain, allActions: List<ProcessingAction>, onChange: (ProcessingAction) -> Unit) {
+    var adding by remember(action.id) { mutableStateOf(false) }
+    var seconds by remember(action.id) { mutableStateOf((action.delayMs / 1000.0).toString().removeSuffix(".0")) }
+    LaunchedEffect(action.delayMs) {
+        val currentMs = seconds.replace(',', '.').toDoubleOrNull()?.times(1000)?.toLong()
+        if (action.delayMs >= 0 && currentMs != action.delayMs) seconds = (action.delayMs / 1000.0).toString().removeSuffix(".0")
+    }
+    Text("Enthaltene Aktionen", fontWeight = FontWeight.SemiBold)
+    val issue = runCatching { ActionChainRunner.validate(action, allActions) }.exceptionOrNull()?.message
+    if (issue != null) Text(issue, color = MaterialTheme.colorScheme.error)
+    if (action.actionIds.isEmpty()) Text("Noch keine Aktionen ausgewählt.")
+    action.actionIds.forEachIndexed { index, id ->
+        val child = allActions.firstOrNull { it.id == id }
+        Card(Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(8.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(actionIcon(child?.icon.orEmpty()), null)
+                    Spacer(Modifier.width(8.dp))
+                    Text("${index + 1}. ${child?.friendlyName ?: "Fehlende Aktion"}", modifier = Modifier.weight(1f))
+                }
+                Row {
+                    IconButton(enabled = index > 0, onClick = {
+                        val ids = action.actionIds.toMutableList()
+                        java.util.Collections.swap(ids, index, index - 1)
+                        onChange(action.copy(actionIds = ids))
+                    }) { Icon(Icons.Outlined.ArrowUpward, "Nach oben") }
+                    IconButton(enabled = index < action.actionIds.lastIndex, onClick = {
+                        val ids = action.actionIds.toMutableList()
+                        java.util.Collections.swap(ids, index, index + 1)
+                        onChange(action.copy(actionIds = ids))
+                    }) { Icon(Icons.Outlined.ArrowDownward, "Nach unten") }
+                    IconButton(onClick = { onChange(action.copy(actionIds = action.actionIds.filterIndexed { i, _ -> i != index })) }) {
+                        Icon(Icons.Outlined.Delete, "Aus Kette entfernen")
+                    }
+                }
+            }
+        }
+    }
+    OutlinedButton(onClick = { adding = true }) { Icon(Icons.Outlined.Add, null); Text("Aktion hinzufügen") }
+    if (adding) AlertDialog(
+        onDismissRequest = { adding = false }, title = { Text("Aktion auswählen") },
+        text = {
+            val candidates = allActions.filter { ActionChainRunner.canAdd(action, it, allActions) }
+            LazyColumn {
+                if (candidates.isEmpty()) item { Text("Keine weiteren Aktionen verfügbar. Erstelle zuerst eine Aktion im Profil.") }
+                items(candidates, key = { it.id }) { child ->
+                    TextButton(onClick = { onChange(action.copy(actionIds = action.actionIds + child.id)); adding = false }) {
+                        Icon(actionIcon(child.icon), null); Spacer(Modifier.width(8.dp)); Text(child.friendlyName)
+                    }
+                }
+            }
+        }, confirmButton = { TextButton(onClick = { adding = false }) { Text("Schließen") } }
+    )
+    ActionChainMode.entries.forEach { mode ->
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            RadioButton(action.mode == mode, { onChange(action.copy(mode = mode)) })
+            Text(if (mode == ActionChainMode.SEQUENTIAL) "Nacheinander" else "Parallel")
+        }
+    }
+    if (action.mode == ActionChainMode.SEQUENTIAL) {
+        val parsed = seconds.replace(',', '.').toDoubleOrNull()
+        OutlinedTextField(value = seconds, onValueChange = { value ->
+            seconds = value
+            val valid = value.replace(',', '.').toDoubleOrNull()?.takeIf { it.isFinite() && it in 0.0..3600.0 }
+            onChange(action.copy(delayMs = valid?.let { (it * 1000).toLong() } ?: -1))
+        }, label = { Text("Verzögerung zwischen Aktionen (Sekunden)") },
+            supportingText = { Text("0 bis 3600 Sekunden. 0 bedeutet ohne Pause.") },
+            isError = parsed == null || !parsed.isFinite() || parsed !in 0.0..3600.0,
+            singleLine = true, modifier = Modifier.fillMaxWidth())
+    }
+    Text("Ein bewusster Start bestätigt die gesamte Kette. Bedingungen der enthaltenen Aktionen bleiben wirksam.", style = MaterialTheme.typography.bodySmall)
+}

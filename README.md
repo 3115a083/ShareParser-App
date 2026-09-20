@@ -29,7 +29,7 @@ Each profile contains three main parts:
 2. **Variables** extract and transform reusable values.
 3. **Actions** decide what ShareParser should do with the result.
 
-When multiple profiles match, ShareParser asks which one to use. If exactly one profile with exactly one action matches, that action can run directly.
+When multiple profiles match, ShareParser asks which one to use. If exactly one profile with exactly one selectable action matches, it can run directly only when its confirmation checkbox is disabled. Otherwise the action picker asks the user to start it.
 
 ### Editing mode
 
@@ -37,7 +37,7 @@ Opening a profile for editing activates editing mode. While that editor is open,
 
 Editor changes remain local until **Save profile** is used. Undo and redo are available directly in the editor top bar. If the user leaves the editor with unsaved changes, ShareParser asks whether to apply them, discard them or continue editing. Deleting a profile requires confirmation.
 
-The editor has a sticky section navigation row for profile recognition, variables from the example, variables and actions. It remains visible while scrolling and indicates the current section. Section titles keep their full width even when add-action controls are present. The example section is shown only when an example is available. Action cards are collapsed by default so large profiles remain manageable.
+The editor has three equally sized sticky navigation controls: recognition, variables (including extraction from an example), and actions. It remains visible while scrolling and indicates the current section. Section titles keep their full width even when add-action controls are present. The example section is shown only when an example is available. Action cards are collapsed by default so large profiles remain manageable.
 
 ## Visual extraction without Regex
 
@@ -198,7 +198,7 @@ The WebView accepts only HTTP(S). JavaScript, DOM storage, file/content access, 
 
 A profile can send an HTTP POST webhook. URL and body fields support the same variables as other actions.
 
-A webhook can either appear as a normal selectable action or fire automatically whenever its profile matches. Automatic webhooks are excluded from the action picker so they do not create duplicate choices. Empty webhook bodies can use a fallback body or stop with an error.
+A webhook can appear as a selectable action or use ALWAYS mode. ALWAYS sends automatically only with confirmation disabled. With confirmation enabled, it is offered in the action picker for this share. Automatically sent webhooks are excluded from the picker. Empty webhook bodies can use a fallback body or stop with an error.
 
 Automatic background webhooks use longer network timeouts and up to three bounded attempts. Only the final failure creates the user-facing failure notification, which links directly back into ShareParser.
 
@@ -269,7 +269,7 @@ ShareParser has no analytics, ads, trackers, Play Services dependency or periodi
 
 Permissions are feature-specific:
 
-- `INTERNET` for the optional in-app WebView
+- `INTERNET` for webhooks and the optional in-app WebView
 - `READ_CALENDAR` for calendar discovery
 - `WRITE_CALENDAR` only for binding target-calendar mode
 - `SYSTEM_ALERT_WINDOW` only for optional overlay selection
@@ -317,7 +317,7 @@ Save as `{{datum}}-{{Ort}}.md`.
 
 ## Profile sharing
 
-Profiles use a versioned JSON format. The current profile schema is version 13. Profiles can be copied, exported, shared and imported on another device. Unknown future fields are ignored where possible for forward compatibility.
+Profiles use a versioned JSON format. The current profile schema is version 14. Schemas 1 through 13 remain importable. Missing `confirmBeforeAutoRun` values default to `true`; disabling the checkbox restores the previous automatic behavior. Exports explicitly include defaults. Profiles can be copied, exported, shared and imported on another device. Unknown future fields are ignored where possible for forward compatibility.
 
 ## Android support and build
 
@@ -342,3 +342,26 @@ The project is designed to remain suitable for F-Droid: Apache-2.0 license, no p
 ## License
 
 Apache-2.0
+
+
+## Confirmation and action chains
+
+Every action has a **Vor automatischer Ausführung bestätigen** / **Confirm before automatic execution** checkbox, enabled for new actions and older actions without the field. Disable it to allow unattended execution for an unambiguous share. ALWAYS webhooks obey the same setting. Selecting a specific action in the app, overlay or notification confirms it without another dialog. Selecting only a profile does not confirm its actions.
+
+Add **Aktionskette** / **Action chain** in the profile's action menu. Select existing actions by name and icon, reorder them with up/down buttons, remove entries or add more actions. IDs remain internal. The icon picker includes search and additional start, transport, music and security icons.
+
+- **Sequential:** configured order, with an optional 0 to 3600 second delay between entries. Fractional seconds are supported. Pauses do not block the UI. A failed action stops the remaining sequence.
+- **Parallel:** children start asynchronously. Delay is ignored. Already started children finish before an error is reported.
+- A confirmed chain includes its children; there are no repeated child confirmations. A child automatically started on its own still uses its own confirmation setting.
+- Conditions and ELSE apply to chains and children. An empty chain is a no-op. Missing references, duplicate IDs/references, cycles and excessive nesting fail before any child side effects. Limits are 16 nested chains and 256 expanded steps. Invalid imported chains can be repaired in the editor.
+- External Android activities are launched, not controlled. A chain cannot wait for a user to complete another app's calendar editor or share dialog. Android can restrict later launches after ShareParser leaves the foreground. Chains are not durable scheduled jobs and stop if Android terminates the process.
+
+## Input and execution safeguards
+
+Content-provider reads run on bounded background workers with a 15-second waiting limit. Shared file reads accept only content URIs and retain the existing 4,000,000-character limit; inline text and HTML are limited too. Streams/cursors close when reads end or providers return. Providers that ignore interruption cannot create unlimited workers and do not retain the receiving Activity.
+
+User regex matching, extraction, replacements and highlighting run on bounded workers with a 750ms per-operation budget. Regex syntax remains available. Expensive patterns report a processing error or unavailable preview instead of blocking the UI. Native regex engines can ignore interruption; at most two regex workers can remain occupied. If both remain stuck, simplify the profile and restart the app. Timeouts never authorize ELSE or fallback actions.
+
+Webhook connect/read timeouts remain 10 seconds normally and 20/25 seconds for automatic retries. Redirects are rejected so POST bodies cannot silently reach another target; configure the final URL. Error-response reads are bounded to 1000 characters. Headers are stripped of CR/LF. Private/LAN targets remain supported. Temporary output files have separate per-execution directories to avoid collisions during parallel chains.
+
+Source package/app values remain matching hints, never authentication. Backup remains disabled. No broad storage permission, analytics, trackers, synchronization or signing material is added. WebView restrictions and immutable GitHub Actions pins remain. Logo 3 now scales its existing safe-area artwork to adaptive bounds consistently across launcher densities.

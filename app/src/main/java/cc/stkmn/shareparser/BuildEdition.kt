@@ -37,6 +37,7 @@ internal object BuildEdition {
                 action.fileNameTemplate,
                 action.relativePathTemplate
             ).any(::templateUsesFullInput)
+            is ProcessingAction.Chain -> false
             is ProcessingAction.Target -> templateUsesFullInput(action.targetTemplate)
             is ProcessingAction.Webhook -> listOf(
                 action.urlTemplate,
@@ -50,6 +51,7 @@ internal object BuildEdition {
         is ProcessingAction.Calendar -> action.condition
         is ProcessingAction.Url -> action.condition
         is ProcessingAction.Share -> action.condition
+        is ProcessingAction.Chain -> action.condition
         is ProcessingAction.Target -> action.condition
         is ProcessingAction.Webhook -> action.condition
     }

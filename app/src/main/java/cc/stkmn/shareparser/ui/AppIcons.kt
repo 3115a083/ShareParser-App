@@ -39,6 +39,23 @@ import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material.icons.outlined.Upload
 import androidx.compose.material.icons.outlined.Warning
 import androidx.compose.material.icons.outlined.Work
+import androidx.compose.material.icons.outlined.PlayArrow
+import androidx.compose.material.icons.outlined.Bolt
+import androidx.compose.material.icons.outlined.Cloud
+import androidx.compose.material.icons.outlined.Group
+import androidx.compose.material.icons.outlined.Directions
+import androidx.compose.material.icons.outlined.Flight
+import androidx.compose.material.icons.outlined.Train
+import androidx.compose.material.icons.outlined.Restaurant
+import androidx.compose.material.icons.outlined.ShoppingCart
+import androidx.compose.material.icons.outlined.CameraAlt
+import androidx.compose.material.icons.outlined.MusicNote
+import androidx.compose.material.icons.outlined.Lock
+import androidx.compose.material.icons.outlined.Key
+import androidx.compose.material.icons.outlined.Build
+import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material.icons.outlined.Public
+import androidx.compose.material.icons.outlined.PlaylistPlay
 import androidx.compose.ui.graphics.vector.ImageVector
 
 internal data class IconChoice(val id: String, val label: String, val vector: ImageVector)
@@ -81,7 +98,24 @@ internal val actionIcons = listOf(
     IconChoice("home", "Start", Icons.Outlined.Home),
     IconChoice("attach", "Anhang", Icons.Outlined.AttachFile),
     IconChoice("work", "Arbeit", Icons.Outlined.Work),
-    IconChoice("tune", "Verarbeiten", Icons.Outlined.Tune)
+    IconChoice("tune", "Verarbeiten", Icons.Outlined.Tune),
+    IconChoice("play", "Start", Icons.Outlined.PlayArrow),
+    IconChoice("bolt", "Blitz", Icons.Outlined.Bolt),
+    IconChoice("cloud", "Cloud", Icons.Outlined.Cloud),
+    IconChoice("group", "Gruppe", Icons.Outlined.Group),
+    IconChoice("directions", "Route", Icons.Outlined.Directions),
+    IconChoice("flight", "Flug", Icons.Outlined.Flight),
+    IconChoice("train", "Zug", Icons.Outlined.Train),
+    IconChoice("restaurant", "Restaurant", Icons.Outlined.Restaurant),
+    IconChoice("shopping", "Einkaufen", Icons.Outlined.ShoppingCart),
+    IconChoice("camera", "Kamera", Icons.Outlined.CameraAlt),
+    IconChoice("music", "Musik", Icons.Outlined.MusicNote),
+    IconChoice("lock", "Schloss", Icons.Outlined.Lock),
+    IconChoice("key", "Schlüssel", Icons.Outlined.Key),
+    IconChoice("build", "Werkzeug", Icons.Outlined.Build),
+    IconChoice("settings", "Einstellungen", Icons.Outlined.Settings),
+    IconChoice("public", "Weltweit", Icons.Outlined.Public),
+    IconChoice("playlist_play", "Aktionskette", Icons.Outlined.PlaylistPlay)
 )
 
 internal fun actionIcon(id: String): ImageVector =

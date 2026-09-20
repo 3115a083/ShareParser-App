@@ -33,11 +33,11 @@ class ParserEngine {
                                     add(RegexOption.MULTILINE)
                                     if (matcher.ignoreCase) add(RegexOption.IGNORE_CASE)
                                 }
-                                Regex(matcher.regex, options).containsMatchIn(source)
+                                SafeRegex(matcher.regex, options).containsMatchIn(source)
                             }
                         }
                         if (matcher.negate) !matchedValue else matchedValue
-                    }.getOrDefault(false)
+                    }.getOrElse { if (it is WorkLimitException) throw it else false }
                 }.let { results ->
                     var matchedResult = results.first()
                     for (index in 1 until results.size) {
@@ -87,7 +87,7 @@ class ParserEngine {
         profile.extractors.forEach { rule ->
             val source = extractionSource(payload, rule, values) ?: return@forEach
             runCatching { extractOne(source, rule, profile.parseDirection) }
-                .getOrNull()
+                .getOrElse { if (it is WorkLimitException) throw it else null }
                 ?.let { values[rule.key.lowercase()] = it }
         }
         return values
@@ -139,7 +139,7 @@ class ParserEngine {
 
     private fun extractOne(input: String, rule: ExtractorRule, direction: ParseDirection): String? {
         val regex = try {
-            Regex(rule.regex, setOf(RegexOption.MULTILINE))
+            SafeRegex(rule.regex, setOf(RegexOption.MULTILINE))
         } catch (e: Exception) {
             throw ProcessingException(
                 "Ungültiger regulärer Ausdruck für '${rule.key}'.",
@@ -150,7 +150,7 @@ class ParserEngine {
 
         val match = when (direction) {
             ParseDirection.TOP_DOWN -> regex.find(input)
-            ParseDirection.BOTTOM_UP -> regex.findAll(input).lastOrNull()
+            ParseDirection.BOTTOM_UP -> regex.lastMatch(input)
         } ?: return null
 
         if (rule.group !in match.groupValues.indices) {
@@ -184,8 +184,9 @@ class ParserEngine {
                     val options = if (transform.ignoreCase) setOf(RegexOption.IGNORE_CASE) else emptySet()
                     try {
                         val pattern = if (transform.literal) Regex.escape(transform.regex) else transform.regex
-                        Regex(pattern, options).replace(value, transform.replacement)
+                        SafeRegex(pattern, options).replace(value, transform.replacement)
                     } catch (e: Exception) {
+                        if (e is WorkLimitException) throw e
                         throw ProcessingException(
                             "Ersetzen-Baustein für '$key' ist ungültig.",
                             key,
@@ -198,7 +199,7 @@ class ParserEngine {
     }
 }
 
-class ProcessingException(
+open class ProcessingException(
     val userMessage: String,
     val failingField: String? = null,
     val technicalDetails: String

@@ -11,6 +11,7 @@ object ActionConditionEvaluator {
         is ProcessingAction.Calendar -> action.condition
         is ProcessingAction.Url -> action.condition
         is ProcessingAction.Share -> action.condition
+        is ProcessingAction.Chain -> action.condition
         is ProcessingAction.Target -> action.condition
         is ProcessingAction.Webhook -> action.condition
     }
@@ -19,6 +20,7 @@ object ActionConditionEvaluator {
         is ProcessingAction.Calendar -> action.elseOfActionId
         is ProcessingAction.Url -> action.elseOfActionId
         is ProcessingAction.Share -> action.elseOfActionId
+        is ProcessingAction.Chain -> action.elseOfActionId
         is ProcessingAction.Target -> action.elseOfActionId
         is ProcessingAction.Webhook -> action.elseOfActionId
     }
@@ -46,10 +48,7 @@ object ActionConditionEvaluator {
             val base = when (clause.mode) {
                 ActionConditionMode.EMPTY -> value.isBlank()
                 ActionConditionMode.NOT_EMPTY -> value.isNotBlank()
-                ActionConditionMode.REGEX -> runCatching {
-                    Regex(clause.regex, setOf(RegexOption.IGNORE_CASE, RegexOption.MULTILINE))
-                        .containsMatchIn(value)
-                }.getOrDefault(false)
+                ActionConditionMode.REGEX -> SafeRegex(clause.regex, setOf(RegexOption.IGNORE_CASE, RegexOption.MULTILINE)).containsMatchIn(value)
             }
             if (clause.negate) !base else base
         }
@@ -67,6 +66,7 @@ object ActionConditionEvaluator {
         is ProcessingAction.Calendar -> action.copy(condition = value)
         is ProcessingAction.Url -> action.copy(condition = value)
         is ProcessingAction.Share -> action.copy(condition = value)
+        is ProcessingAction.Chain -> action.copy(condition = value)
         is ProcessingAction.Target -> action.copy(condition = value)
         is ProcessingAction.Webhook -> action.copy(condition = value)
     }
@@ -75,6 +75,7 @@ object ActionConditionEvaluator {
         is ProcessingAction.Calendar -> action.copy(elseOfActionId = actionId)
         is ProcessingAction.Url -> action.copy(elseOfActionId = actionId)
         is ProcessingAction.Share -> action.copy(elseOfActionId = actionId)
+        is ProcessingAction.Chain -> action.copy(elseOfActionId = actionId)
         is ProcessingAction.Target -> action.copy(elseOfActionId = actionId)
         is ProcessingAction.Webhook -> action.copy(elseOfActionId = actionId)
     }

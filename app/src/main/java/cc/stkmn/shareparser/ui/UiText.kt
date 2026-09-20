@@ -18,6 +18,24 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.TextUnit
 
 private val exactEnglish = mapOf(
+    "Aktionskette" to "Action chain",
+    "Nacheinander" to "Sequential",
+    "Parallel" to "Parallel",
+    "Enthaltene Aktionen" to "Included actions",
+    "Aktion hinzufügen" to "Add action",
+    "Aus Kette entfernen" to "Remove from chain",
+    "Noch keine Aktionen ausgewählt." to "No actions selected yet.",
+    "Fehlende Aktion" to "Missing action",
+    "Icons suchen" to "Search icons",
+    "Erkennung" to "Recognition",
+    "Verarbeitung läuft…" to "Processing…",
+    "Vor automatischer Ausführung bestätigen" to "Confirm before automatic execution",
+    "Deaktivieren, um diese Aktion bei eindeutiger Zuordnung automatisch auszuführen." to "Disable to run this action automatically when it is the only available choice.",
+    "Verzögerung zwischen Aktionen (Sekunden)" to "Delay between actions (seconds)",
+    "0 bis 3600 Sekunden. 0 bedeutet ohne Pause." to "0 to 3600 seconds. Use 0 for no delay.",
+    "Ein bewusster Start bestätigt die gesamte Kette. Bedingungen der enthaltenen Aktionen bleiben wirksam." to "Starting the chain confirms all its actions. Conditions on included actions still apply.",
+    "Keine weiteren Aktionen verfügbar. Erstelle zuerst eine Aktion im Profil." to "No other actions available. First create an action in the profile.",
+
     "Profile" to "Profiles",
     "Importieren" to "Import",
     "Einstellungen" to "Settings",

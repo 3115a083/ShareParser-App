@@ -2,6 +2,11 @@ package cc.stkmn.shareparser.ui
 
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.produceState
+import androidx.compose.runtime.getValue
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import cc.stkmn.shareparser.engine.SafeRegex
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
@@ -20,7 +25,8 @@ internal data class VariableHighlight(
 @Composable
 internal fun rememberVariableHighlighting(
     source: InputSource,
-    extractors: List<ExtractorRule>
+    extractors: List<ExtractorRule>,
+    sourceText: String
 ): Pair<VisualTransformation, List<VariableHighlight>> {
     val palette = listOf(
         MaterialTheme.colorScheme.primaryContainer,
@@ -34,18 +40,19 @@ internal fun rememberVariableHighlighting(
     }
     val byKey = highlights.associateBy { it.key }
 
+    val ranges by produceState<Map<String, List<MatchResult>>>(emptyMap(), relevant, sourceText) {
+        value = withContext(Dispatchers.Default) {
+            relevant.associate { rule -> rule.id to runCatching {
+                SafeRegex(rule.regex, setOf(RegexOption.MULTILINE)).findAll(sourceText)
+            }.getOrDefault(emptyList()) }
+        }
+    }
     val transformation = VisualTransformation { text ->
         val builder = AnnotatedString.Builder(text)
         val occupied = mutableListOf<IntRange>()
         relevant.forEach { rule ->
             val color = byKey[rule.key]?.color ?: return@forEach
-            val matches = runCatching {
-                Regex(rule.regex, setOf(RegexOption.MULTILINE))
-                    .findAll(text.text)
-                    .take(200)
-                    .toList()
-            }.getOrDefault(emptyList())
-
+            val matches = if (text.text == sourceText) ranges[rule.id].orEmpty() else emptyList()
             matches.forEach { match ->
                 val group = if (rule.group in 0 until match.groups.size) match.groups[rule.group] else null
                 if (group == null) return@forEach

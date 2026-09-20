@@ -6,7 +6,7 @@ import java.util.UUID
 
 @Serializable
 data class ProfileBundle(
-    val schemaVersion: Int = 13,
+    val schemaVersion: Int = 14,
     val profile: Profile
 )
 
@@ -91,6 +91,7 @@ data class ActionCondition(val clauses: List<ActionConditionClause> = emptyList(
 @Serializable enum class AppearanceMode { SYSTEM, LIGHT, DARK }
 @Serializable enum class ColorPalette { MATERIAL_YOU, OCEAN, PLUM, SLATE, AMBER, FOREST, ROSE, TEAL, INDIGO }
 @Serializable enum class EmptyValuePolicy { FALLBACK, ERROR }
+@Serializable enum class ActionChainMode { SEQUENTIAL, PARALLEL }
 @Serializable enum class WebhookMode { ON_SELECTION, ALWAYS }
 @Serializable enum class ShareSelectionMode { APP, OVERLAY, NOTIFICATION }
 @Serializable enum class TextFileMode { SHARE, OPEN, SAVE }
@@ -122,6 +123,23 @@ sealed class ProcessingAction {
     abstract val friendlyName: String
     abstract val icon: String
     abstract val editorDescription: String
+    abstract val confirmBeforeAutoRun: Boolean
+
+    @Serializable @SerialName("chain")
+    data class Chain(
+        override val id: String,
+        override val friendlyName: String,
+        override val icon: String = "playlist_play",
+        override val editorDescription: String = "",
+        override val confirmBeforeAutoRun: Boolean = true,
+        val condition: ActionCondition? = null,
+        val elseOfActionId: String = "",
+        val showInOverlay: Boolean = true,
+        val showInNotification: Boolean = true,
+        val actionIds: List<String> = emptyList(),
+        val mode: ActionChainMode = ActionChainMode.SEQUENTIAL,
+        val delayMs: Long = 0
+    ) : ProcessingAction()
 
     @Serializable @SerialName("calendar")
     data class Calendar(
@@ -129,6 +147,7 @@ sealed class ProcessingAction {
         override val friendlyName: String,
         override val icon: String = "event",
         override val editorDescription: String = "",
+        override val confirmBeforeAutoRun: Boolean = true,
         val condition: ActionCondition? = null,
         val elseOfActionId: String = "",
         val showInOverlay: Boolean = true,
@@ -153,6 +172,7 @@ sealed class ProcessingAction {
         override val friendlyName: String,
         override val icon: String = "link",
         override val editorDescription: String = "",
+        override val confirmBeforeAutoRun: Boolean = true,
         val condition: ActionCondition? = null,
         val elseOfActionId: String = "",
         val showInOverlay: Boolean = true,
@@ -167,6 +187,7 @@ sealed class ProcessingAction {
         override val friendlyName: String,
         override val icon: String = "share",
         override val editorDescription: String = "",
+        override val confirmBeforeAutoRun: Boolean = true,
         val condition: ActionCondition? = null,
         val elseOfActionId: String = "",
         val showInOverlay: Boolean = true,
@@ -190,6 +211,7 @@ sealed class ProcessingAction {
         override val friendlyName: String,
         override val icon: String = "open_in_new",
         override val editorDescription: String = "",
+        override val confirmBeforeAutoRun: Boolean = true,
         val condition: ActionCondition? = null,
         val elseOfActionId: String = "",
         val showInOverlay: Boolean = true,
@@ -204,6 +226,7 @@ sealed class ProcessingAction {
         override val friendlyName: String,
         override val icon: String = "send",
         override val editorDescription: String = "",
+        override val confirmBeforeAutoRun: Boolean = true,
         val condition: ActionCondition? = null,
         val elseOfActionId: String = "",
         val showInOverlay: Boolean = true,

@@ -1,5 +1,9 @@
 package cc.stkmn.shareparser.ui
 
+import androidx.compose.runtime.produceState
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import cc.stkmn.shareparser.engine.ActionRunPolicy
 import android.Manifest
 import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -233,43 +237,25 @@ internal fun SharedScreen(
 ) {
     val context = LocalContext.current
     val parser = remember { ParserEngine() }
-    val matches = remember(payload, profiles) { parser.matchingProfiles(payload, profiles) }
-    var selected by remember(payload, profiles) { mutableStateOf<Profile?>(matches.singleOrNull()) }
+    var processingError by remember(payload) { mutableStateOf<String?>(null) }
+    var matchingComplete by remember(payload) { mutableStateOf(false) }
+    val matches by produceState<List<Profile>>(emptyList(), payload, profiles) {
+        val result = withContext(Dispatchers.Default) { runCatching { parser.matchingProfiles(payload, profiles) } }
+        processingError = result.exceptionOrNull()?.message
+        value = result.getOrDefault(emptyList())
+        matchingComplete = true
+    }
+    var selected by remember(payload, profiles, matches) { mutableStateOf<Profile?>(matches.singleOrNull()) }
     var showActionPicker by remember { mutableStateOf(false) }
     var showExtraPicker by remember { mutableStateOf(false) }
     var sharedTextExpanded by remember(payload) { mutableStateOf(false) }
     var pendingCalendarExecution by remember { mutableStateOf<Pair<Profile, ProcessingAction.Calendar>?>(null) }
 
-    val extraction = remember(payload, selected) {
-        selected?.let { profile -> runCatching { parser.extract(payload, profile) } }
+    val extraction by produceState<Result<Map<String, String>>?>(null, payload, selected) {
+        value = null
+        value = withContext(Dispatchers.Default) { selected?.let { profile -> runCatching { parser.extract(payload, profile) } } }
     }
-
-    fun executeNow(profile: Profile, action: ProcessingAction) {
-        if (action is ProcessingAction.Webhook) {
-            ShareCoordinator(context).execute(payload, profile, action)
-            return
-        }
-        try {
-            val extracted = parser.extract(payload, profile)
-            val result = ActionExecutor(context, repository.settings()).execute(action, extracted)
-            WarningNotifier.show(context, result.warnings)
-        } catch (e: Exception) {
-            val processing = e as? ProcessingException
-            val report = FailureReport(
-                id = UUID.randomUUID().toString(),
-                profileId = profile.id,
-                profileName = profile.name,
-                actionId = action.id,
-                message = processing?.userMessage ?: "Verarbeitung fehlgeschlagen.",
-                technicalDetails = processing?.technicalDetails ?: (e.message ?: e.toString()),
-                failingField = processing?.failingField,
-                inputPreview = payload.combined.take(2000),
-                createdAtEpochMs = System.currentTimeMillis()
-            )
-            repository.saveFailure(report)
-            FailureNotifier.show(context, report)
-        }
-    }
+    fun executeNow(profile: Profile, action: ProcessingAction) { ShareCoordinator(context).execute(payload, profile, action) }
 
     val calendarPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
         val pending = pendingCalendarExecution
@@ -290,13 +276,22 @@ internal fun SharedScreen(
     }
 
     val selectedValues = extraction?.getOrNull().orEmpty()
-    val selectableActions = selected?.actions
-        ?.filterNot { it is ProcessingAction.Webhook && it.mode == WebhookMode.ALWAYS }
-        ?.filter { action -> ActionConditionEvaluator.isAvailable(action, selected!!.actions, selectedValues) }
-        .orEmpty()
-    val extraChoices = remember(payload, repository.settings()) {
-        ShareCoordinator(context).choices(payload, cc.stkmn.shareparser.data.ShareSelectionMode.APP)
-            .filter(ShareCoordinator::isExtraChoice)
+    val selectableActions by produceState<List<ProcessingAction>>(emptyList(), selected, extraction) {
+        value = emptyList()
+        val values = extraction?.getOrNull()
+        if (values != null) {
+            val result = withContext(Dispatchers.Default) { runCatching {
+                selected?.let { profile -> profile.actions.filter(ActionRunPolicy::isSelectable)
+                    .filter { ActionConditionEvaluator.isAvailable(it, profile.actions, values) } }.orEmpty()
+            } }
+            processingError = result.exceptionOrNull()?.message
+            value = result.getOrDefault(emptyList())
+        }
+    }
+    val extraChoices by produceState<List<ShareCoordinator.Choice>>(emptyList(), payload, repository.settings()) {
+        value = withContext(Dispatchers.Default) {
+            runCatching { ShareCoordinator(context).choices(payload).filter(ShareCoordinator::isExtraChoice) }.getOrDefault(emptyList())
+        }
     }
 
     LaunchedEffect(selected?.id, selectableActions.size) {
@@ -408,7 +403,9 @@ internal fun SharedScreen(
             }
         }
 
-        if (matches.isEmpty()) {
+        if (processingError != null) item { Text(processingError.orEmpty(), color = MaterialTheme.colorScheme.error) }
+        if (!matchingComplete) item { Text("Verarbeitung läuft…") }
+        if (matches.isEmpty() && matchingComplete && processingError == null) {
             item {
                 Card(Modifier.fillMaxWidth()) {
                     Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {

@@ -1,6 +1,10 @@
 package cc.stkmn.shareparser
 
 import android.content.Intent
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import cc.stkmn.shareparser.data.PendingShareStore
@@ -11,6 +15,13 @@ import cc.stkmn.shareparser.share.ShareCoordinator
 class ActionDispatchActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        lifecycleScope.launch {
+            try { handleSelection() }
+            catch (e: kotlinx.coroutines.CancellationException) { throw e }
+            catch (e: Exception) { cc.stkmn.shareparser.notify.UserNotice.showLong(this@ActionDispatchActivity, e.message.orEmpty()); finish() }
+        }
+    }
+    private suspend fun handleSelection() {
         val pendingId = intent.getStringExtra(EXTRA_PENDING_ID).orEmpty()
         val profileId = intent.getStringExtra(EXTRA_PROFILE_ID).orEmpty()
         val actionId = intent.getStringExtra(EXTRA_ACTION_ID).orEmpty()
@@ -20,21 +31,16 @@ class ActionDispatchActivity : ComponentActivity() {
             if (actionId == ShareCoordinator.SELECT_PROFILE_ACTION_ID) {
                 val pending = PendingShareStore(this).get(pendingId)
                 val choices = pending?.let {
-                    coordinator.choicesForProfile(it.payload, profileId, ShareSelectionMode.NOTIFICATION)
+                    withContext(Dispatchers.Default) { coordinator.choicesForProfile(it.payload, profileId, ShareSelectionMode.NOTIFICATION) }
                 }.orEmpty()
                 when {
-                    choices.size == 1 -> coordinator.executePending(
-                        pendingId,
-                        choices.first().profileId,
-                        choices.first().actionId
-                    )
                     choices.isNotEmpty() -> {
                         if (!ShareSelectionNotifier.show(this, pendingId, choices)) openPicker(pendingId)
                     }
                     else -> openPicker(pendingId)
                 }
             } else {
-                coordinator.executePending(pendingId, profileId, actionId)
+                coordinator.executePendingAwait(pendingId, profileId, actionId)
             }
         }
         finish()

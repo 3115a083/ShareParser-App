@@ -1,6 +1,12 @@
 package cc.stkmn.shareparser
 
 import android.content.Intent
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import cc.stkmn.shareparser.engine.BoundedWork
 import android.os.Bundle
 import android.provider.Settings
 import androidx.activity.ComponentActivity
@@ -14,6 +20,8 @@ import cc.stkmn.shareparser.share.ShareOverlayService
 import cc.stkmn.shareparser.share.SharePayloadFactory
 
 class ShareReceiverActivity : ComponentActivity() {
+    private var handling: Job? = null
+    companion object { private val inputWork = BoundedWork("ShareParser-content", timeoutMs = 15_000) }
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         AppLocale.apply(this, ProfileRepository(this).settings().appLanguage)
@@ -27,7 +35,20 @@ class ShareReceiverActivity : ComponentActivity() {
     }
 
     private fun handle(incoming: Intent) {
-        val payload = SharePayloadFactory.from(this, incoming)
+        handling?.cancel()
+        handling = lifecycleScope.launch {
+            try { handleShare(incoming) }
+            catch (e: kotlinx.coroutines.CancellationException) { throw e }
+            catch (e: Exception) {
+                cc.stkmn.shareparser.notify.UserNotice.showLong(this@ShareReceiverActivity, e.message ?: "Geteilter Inhalt konnte nicht gelesen werden.")
+                finish()
+            }
+        }
+    }
+    private suspend fun handleShare(incoming: Intent) {
+        val sourceHints = SharePayloadFactory.sourceHints(this)
+        val appContext = applicationContext
+        val payload = withContext(Dispatchers.IO) { inputWork.run { SharePayloadFactory.from(appContext, incoming, sourceHints) } }
         if (payload == null) {
             finish()
             return
@@ -35,25 +56,25 @@ class ShareReceiverActivity : ComponentActivity() {
 
         val pendingStore = PendingShareStore(this)
         if (EditorModeStore(this).activeProfileId() != null) {
-            val pending = pendingStore.put(payload)
+            val pending = withContext(Dispatchers.IO) { pendingStore.put(payload) }
             openApp(pending.id)
             finish()
             return
         }
 
         val coordinator = ShareCoordinator(this)
-        val matches = coordinator.matchingProfiles(payload)
+        val matches = withContext(Dispatchers.Default) { coordinator.matchingProfiles(payload) }
         coordinator.executeAlwaysWebhooks(payload, matches)
         val settings = ProfileRepository(this).settings()
-        val allChoices = coordinator.choices(payload, ShareSelectionMode.APP)
-        val choices = coordinator.choices(payload, settings.shareSelectionMode)
+        val allChoices = withContext(Dispatchers.Default) { coordinator.choices(payload, ShareSelectionMode.APP) }
+        val choices = withContext(Dispatchers.Default) { coordinator.choices(payload, settings.shareSelectionMode) }
 
         if (matches.size > 1) {
-            val pending = pendingStore.put(payload)
+            val pending = withContext(Dispatchers.IO) { pendingStore.put(payload) }
             when (settings.shareSelectionMode) {
                 ShareSelectionMode.APP -> openApp(pending.id)
                 ShareSelectionMode.NOTIFICATION -> {
-                    val profiles = coordinator.profileChoices(payload)
+                    val profiles = withContext(Dispatchers.Default) { coordinator.profileChoices(payload) }
                     if (!ShareSelectionNotifier.show(this, pending.id, profiles)) openApp(pending.id)
                 }
                 ShareSelectionMode.OVERLAY -> {
@@ -76,14 +97,15 @@ class ShareReceiverActivity : ComponentActivity() {
             return
         }
 
-        if (choices.size == 1 && !ShareCoordinator.isExtraChoice(choices.first())) {
+        if (allChoices.size == 1 && choices.size == 1 && !ShareCoordinator.isExtraChoice(choices.first()) &&
+            coordinator.mayRunAutomatically(choices.first().profileId, choices.first().actionId)) {
             val choice = choices.first()
-            coordinator.execute(payload, choice.profileId, choice.actionId)
+            coordinator.executeAwait(payload, choice.profileId, choice.actionId)
             finish()
             return
         }
 
-        val pending = pendingStore.put(payload)
+        val pending = withContext(Dispatchers.IO) { pendingStore.put(payload) }
         if (choices.isEmpty()) {
             openApp(pending.id)
             finish()

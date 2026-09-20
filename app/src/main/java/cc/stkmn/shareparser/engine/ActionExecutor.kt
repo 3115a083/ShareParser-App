@@ -40,6 +40,7 @@ class ActionExecutor(context: Context, private val settings: AppSettings = AppSe
     data class ExecutionResult(val warnings: List<String> = emptyList())
 
     fun execute(action: ProcessingAction, values: Map<String, String>): ExecutionResult = when (action) {
+        is ProcessingAction.Chain -> throw ProcessingException("Aktionsketten benötigen das zugehörige Profil.", "chain", "Use ActionChainRunner")
         is ProcessingAction.Calendar -> openCalendar(action, values)
         is ProcessingAction.Url -> openUrl(action, values)
         is ProcessingAction.Share -> shareText(action, values)
@@ -527,6 +528,7 @@ class ActionExecutor(context: Context, private val settings: AppSettings = AppSe
                 requestMethod = "POST"
                 connectTimeout = if (backgroundMode) 20_000 else 10_000
                 readTimeout = if (backgroundMode) 25_000 else 10_000
+                instanceFollowRedirects = false
                 doOutput = true
                 val safeContentType = action.contentType
                     .replace("\r", "")
@@ -546,7 +548,7 @@ class ActionExecutor(context: Context, private val settings: AppSettings = AppSe
             connection.outputStream.bufferedWriter(Charsets.UTF_8).use { it.write(body) }
             val code = connection.responseCode
             if (code !in 200..299) {
-                val response = runCatching { (connection.errorStream ?: connection.inputStream)?.bufferedReader()?.use { it.readText().take(1000) } }.getOrNull().orEmpty()
+                val response = runCatching { (connection.errorStream ?: connection.inputStream)?.bufferedReader()?.use { val buffer = CharArray(1000); val count = it.read(buffer); if (count > 0) String(buffer, 0, count) else "" } }.getOrNull().orEmpty()
                 throw ProcessingException("Der Webhook wurde vom Server abgelehnt (HTTP $code).", "webhook", "HTTP $code ${connection.responseMessage.orEmpty()}\n$response")
             }
         } catch (e: ProcessingException) {
@@ -601,7 +603,7 @@ class ActionExecutor(context: Context, private val settings: AppSettings = AppSe
     }
 
     private fun writeTemporaryFile(fileName: String, text: String): File {
-        val directory = File(appContext.cacheDir, "shared").apply { mkdirs() }
+        val directory = File(File(appContext.cacheDir, "shared"), java.util.UUID.randomUUID().toString()).apply { mkdirs() }
         val file = File(directory, fileName)
         runCatching { file.writeText(text) }.getOrElse {
             throw ProcessingException(

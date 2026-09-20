@@ -2,6 +2,7 @@ package cc.stkmn.shareparser.share
 
 import android.app.Activity
 import android.content.Intent
+import android.content.Context
 import android.net.Uri
 import android.provider.OpenableColumns
 import android.text.Spanned
@@ -17,7 +18,9 @@ object SharePayloadFactory {
         "txt", "text", "md", "markdown", "html", "htm", "xhtml", "json", "xml", "csv", "tsv", "log", "ics", "yaml", "yml"
     )
 
-    fun from(activity: Activity, intent: Intent): SharedPayload? {
+    data class SourceHints(val referrer: Uri? = null, val callingPackage: String? = null, val callingActivityPackage: String? = null)
+    fun sourceHints(activity: Activity): SourceHints = SourceHints(runCatching { activity.referrer }.getOrNull(), activity.callingPackage, activity.callingActivity?.packageName)
+    fun from(context: Context, intent: Intent, hints: SourceHints = SourceHints()): SharedPayload? {
         if (intent.action == Intent.ACTION_VIEW) {
             val uri = intent.data ?: return null
             val scheme = uri.scheme?.lowercase().orEmpty()
@@ -29,10 +32,10 @@ object SharePayloadFactory {
                 else -> return null
             }
             val value = uri.toString()
-            val sourcePackage = resolveSourcePackage(activity, intent, null)
+            val sourcePackage = resolveSourcePackage(context, intent, null, hints)
             val sourceApp = if (sourcePackage.isBlank()) "" else runCatching {
-                val info = activity.packageManager.getApplicationInfo(sourcePackage, 0)
-                activity.packageManager.getApplicationLabel(info).toString()
+                val info = context.packageManager.getApplicationInfo(sourcePackage, 0)
+                context.packageManager.getApplicationLabel(info).toString()
             }.getOrDefault(sourcePackage)
             return SharedPayload(
                 text = value,
@@ -46,17 +49,16 @@ object SharePayloadFactory {
         }
         if (intent.action != Intent.ACTION_SEND) return null
 
-        val streamUri = streamUri(intent)
-        val fileName = streamUri?.let { displayName(activity, it) }.orEmpty()
-        val mimeType = intent.type ?: streamUri?.let { activity.contentResolver.getType(it) } ?: "text/plain"
+        val streamUri = streamUri(intent)?.takeIf { it.scheme.equals("content", true) }
+        val fileName = streamUri?.let { displayName(context, it) }.orEmpty().take(255)
+        val mimeType = intent.type ?: streamUri?.let { runCatching { context.contentResolver.getType(it) }.getOrNull() } ?: "text/plain"
         val streamText = streamUri
             ?.takeIf { isSupportedTextPayload(mimeType, fileName) }
-            ?.let { readSharedText(activity, it) }
+            ?.let { readSharedText(context, it) }
             .orEmpty()
         val inlineValue = intent.getCharSequenceExtra(Intent.EXTRA_TEXT)
-        val htmlText = intent.getStringExtra(Intent.EXTRA_HTML_TEXT).orEmpty()
-        val inlineText = inlineValue?.toString()
-            ?: htmlText
+        val htmlText = intent.getStringExtra(Intent.EXTRA_HTML_TEXT).orEmpty().take(MAX_SHARED_TEXT_CHARS)
+        val inlineText = (inlineValue?.toString() ?: htmlText).take(MAX_SHARED_TEXT_CHARS)
         val text = streamText.ifBlank { inlineText }
         val linkTargets = buildList {
             if (inlineValue is Spanned) {
@@ -69,13 +71,13 @@ object SharePayloadFactory {
                 .mapNotNull { it.groups[1]?.value?.trim()?.takeIf(String::isNotBlank) }
                 .forEach(::add)
         }.distinct()
-        val subject = intent.getCharSequenceExtra(Intent.EXTRA_SUBJECT)?.toString().orEmpty()
+        val subject = intent.getCharSequenceExtra(Intent.EXTRA_SUBJECT)?.toString().orEmpty().take(MAX_SHARED_TEXT_CHARS)
         if (text.isBlank() && subject.isBlank()) return null
 
-        val sourcePackage = resolveSourcePackage(activity, intent, streamUri)
+        val sourcePackage = resolveSourcePackage(context, intent, streamUri, hints)
         val sourceApp = if (sourcePackage.isBlank()) "" else runCatching {
-            val info = activity.packageManager.getApplicationInfo(sourcePackage, 0)
-            activity.packageManager.getApplicationLabel(info).toString()
+            val info = context.packageManager.getApplicationInfo(sourcePackage, 0)
+            context.packageManager.getApplicationLabel(info).toString()
         }.getOrDefault(sourcePackage)
 
         return SharedPayload(
@@ -98,7 +100,7 @@ object SharePayloadFactory {
     private fun referrerUri(intent: Intent): Uri? = intent.getParcelableExtra(Intent.EXTRA_REFERRER)
 
     @Suppress("DEPRECATION")
-    private fun resolveSourcePackage(activity: Activity, intent: Intent, streamUri: Uri?): String {
+    private fun resolveSourcePackage(context: Context, intent: Intent, streamUri: Uri?, hints: SourceHints): String {
         val candidates = linkedSetOf<String>()
 
         fun addPackageLike(value: String?) {
@@ -116,15 +118,15 @@ object SharePayloadFactory {
             authorityPackageCandidates(uri.authority).forEach(candidates::add)
         }
 
-        addUri(activity.referrer)
+        addUri(hints.referrer)
         addUri(referrerUri(intent))
         addPackageLike(intent.getStringExtra(Intent.EXTRA_REFERRER_NAME))
-        addPackageLike(activity.callingActivity?.packageName)
-        addPackageLike(activity.callingPackage)
+        addPackageLike(hints.callingActivityPackage)
+        addPackageLike(hints.callingPackage)
         addPackageLike(intent.getStringExtra(EXTRA_SOURCE_PACKAGE))
         addUri(streamUri)
 
-        intent.extras?.keySet()?.forEach { key ->
+        intent.extras?.keySet()?.take(64)?.forEach { key ->
             when (val value = intent.extras?.get(key)) {
                 is String -> if (key != Intent.EXTRA_TEXT && key != Intent.EXTRA_HTML_TEXT && key != Intent.EXTRA_SUBJECT) addPackageLike(value)
                 is Uri -> addUri(value)
@@ -134,9 +136,9 @@ object SharePayloadFactory {
         return candidates
             .asSequence()
             .flatMap { packageAndParents(it).asSequence() }
-            .filter { it != activity.packageName && it !in ignoredSourcePackages }
+            .filter { it != context.packageName && it !in ignoredSourcePackages }
             .firstOrNull { candidate ->
-                runCatching { activity.packageManager.getApplicationInfo(candidate, 0) }.isSuccess
+                runCatching { context.packageManager.getApplicationInfo(candidate, 0) }.isSuccess
             }
             .orEmpty()
     }
@@ -174,12 +176,13 @@ object SharePayloadFactory {
         return extension in supportedTextExtensions
     }
 
-    private fun readSharedText(activity: Activity, uri: Uri): String = runCatching {
-        activity.contentResolver.openInputStream(uri)?.use { input ->
+    private fun readSharedText(context: Context, uri: Uri): String = runCatching {
+        context.contentResolver.openInputStream(uri)?.use { input ->
             InputStreamReader(input, Charsets.UTF_8).use { reader ->
                 val buffer = CharArray(8192)
                 val result = StringBuilder()
                 while (result.length < MAX_SHARED_TEXT_CHARS) {
+                    if (Thread.currentThread().isInterrupted) throw InterruptedException()
                     val remaining = MAX_SHARED_TEXT_CHARS - result.length
                     val count = reader.read(buffer, 0, minOf(buffer.size, remaining))
                     if (count <= 0) break
@@ -190,8 +193,8 @@ object SharePayloadFactory {
         }.orEmpty()
     }.getOrDefault("")
 
-    private fun displayName(activity: Activity, uri: Uri): String = runCatching {
-        activity.contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { cursor ->
+    private fun displayName(context: Context, uri: Uri): String = runCatching {
+        context.contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { cursor ->
             if (cursor.moveToFirst()) cursor.getString(0).orEmpty() else ""
         }.orEmpty()
     }.getOrDefault("")

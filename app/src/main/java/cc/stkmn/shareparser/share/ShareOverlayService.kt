@@ -1,6 +1,13 @@
 package cc.stkmn.shareparser.share
 
 import android.app.Service
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.withContext
 import android.content.Intent
 import android.graphics.Color
 import android.graphics.PixelFormat
@@ -25,6 +32,8 @@ import cc.stkmn.shareparser.data.PendingShareStore
 import cc.stkmn.shareparser.data.ShareSelectionMode
 
 class ShareOverlayService : Service() {
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+    private var loading: Job? = null
     private val handler = Handler(Looper.getMainLooper())
     private var overlay: View? = null
     private var windowManager: WindowManager? = null
@@ -48,15 +57,23 @@ class ShareOverlayService : Service() {
     }
 
     private fun show(id: String) {
+        loading?.cancel()
+        loading = scope.launch {
+            try { showChoices(id) }
+            catch (e: kotlinx.coroutines.CancellationException) { throw e }
+            catch (e: Exception) { cc.stkmn.shareparser.notify.UserNotice.showLong(this@ShareOverlayService, e.message.orEmpty()); stopSelf() }
+        }
+    }
+    private suspend fun showChoices(id: String) {
         removeOverlayOnly()
         val pending = PendingShareStore(this).get(id) ?: run {
             stopSelf()
             return
         }
         val coordinator = ShareCoordinator(this)
-        val matches = coordinator.matchingProfiles(pending.payload)
+        val matches = withContext(Dispatchers.Default) { coordinator.matchingProfiles(pending.payload) }
         val profileSelection = selectedProfileId == null && matches.size > 1
-        val choices = when {
+        val choices = withContext(Dispatchers.Default) { when {
             profileSelection -> coordinator.profileChoices(pending.payload)
             selectedProfileId != null -> coordinator.choicesForProfile(
                 pending.payload,
@@ -64,6 +81,7 @@ class ShareOverlayService : Service() {
                 ShareSelectionMode.OVERLAY
             )
             else -> coordinator.choices(pending.payload, ShareSelectionMode.OVERLAY)
+        }
         }
         if (choices.isEmpty()) {
             stopSelf()
@@ -237,6 +255,7 @@ class ShareOverlayService : Service() {
     }
 
     override fun onDestroy() {
+        scope.cancel()
         removeOverlayOnly()
         handler.removeCallbacksAndMessages(null)
         super.onDestroy()
