@@ -1442,6 +1442,8 @@ internal fun ProfileEditorScreen(
             )
         }
 
+        item { ProfileChecksPanel(buildProfile(), sample, existing != null) }
+
         item { HorizontalDivider() }
         item {
             Row(verticalAlignment = Alignment.CenterVertically) {

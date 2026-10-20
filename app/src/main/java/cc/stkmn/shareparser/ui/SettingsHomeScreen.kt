@@ -293,29 +293,17 @@ internal fun SettingsHomeScreen(
                             updateChecking = true
                             updateStatus = null
                             scope.launch {
-                                val result = withContext(Dispatchers.IO) {
-                                    runCatching {
-                                        val connection = URL("https://api.github.com/repos/3115a083/ShareParser-App/releases/latest")
-                                            .openConnection() as HttpURLConnection
-                                        connection.connectTimeout = 6_000
-                                        connection.readTimeout = 6_000
-                                        connection.setRequestProperty("Accept", "application/vnd.github+json")
-                                        connection.setRequestProperty("User-Agent", "ShareParser/$versionName")
-                                        connection.inputStream.bufferedReader().use { it.readText() }
-                                    }.mapCatching { body ->
-                                        Regex("\\\"tag_name\\\"\\s*:\\s*\\\"([^\\\"]+)\\\"")
-                                            .find(body)?.groupValues?.get(1)
-                                            ?: error("Keine Release-Version gefunden")
-                                    }
-                                }
-                                updateChecking = false
-                                updateStatus = result.fold(
-                                    onSuccess = { latest ->
-                                        if (isNewerVersion(latest, versionName)) "Update verfügbar: $latest"
+                                try {
+                                    val latest = cc.stkmn.shareparser.update.ReleaseUpdateClient().latestTag(versionName)
+                                    updateStatus = if (isNewerVersion(latest, versionName)) "Update verfügbar: $latest"
                                         else "ShareParser ist aktuell."
-                                    },
-                                    onFailure = { "Update-Prüfung fehlgeschlagen." }
-                                )
+                                } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                                    throw cancelled
+                                } catch (_: Exception) {
+                                    updateStatus = "Update-Prüfung fehlgeschlagen."
+                                } finally {
+                                    updateChecking = false
+                                }
                             }
                         }
                     ) {

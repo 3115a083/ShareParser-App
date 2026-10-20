@@ -36,6 +36,7 @@ class ProfileRepository(context: Context) {
 
     fun delete(id: String) {
         writeAtomic(file, json.encodeToString(profiles().filterNot { it.id == id }))
+        ProfileExampleStore(appContext).delete(id)
     }
 
     fun create(name: String): Profile = Profile(id = UUID.randomUUID().toString(), name = name)
