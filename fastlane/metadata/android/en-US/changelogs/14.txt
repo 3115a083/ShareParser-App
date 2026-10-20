@@ -1,0 +1,5 @@
+• Complete Material 3 redesign with compact cards and clearer visual hierarchy
+• System, light and dark modes plus Material You, Ocean, Plum, Slate and Amber palettes
+• Reworked profile, settings, share and failure screens for small Android displays
+• Improved adaptive launcher icons with a safe area and Android 13 themed-icon support
+• Copy actions for technical values, clearer error states and more robust background webhooks

@@ -7,10 +7,12 @@ import java.io.File
 import java.util.UUID
 
 class ProfileRepository(context: Context) {
+    companion object { private val writeLock = Any() }
     private val appContext = context.applicationContext
 
     private val json = Json {
         prettyPrint = true
+        encodeDefaults = true
         ignoreUnknownKeys = true
         classDiscriminator = "type"
     }
@@ -34,6 +36,7 @@ class ProfileRepository(context: Context) {
 
     fun delete(id: String) {
         writeAtomic(file, json.encodeToString(profiles().filterNot { it.id == id }))
+        ProfileExampleStore(appContext).delete(id)
     }
 
     fun create(name: String): Profile = Profile(id = UUID.randomUUID().toString(), name = name)
@@ -42,7 +45,7 @@ class ProfileRepository(context: Context) {
 
     fun decodeBundle(text: String, assignNewId: Boolean = false): Profile {
         val bundle = json.decodeFromString<ProfileBundle>(text)
-        require(bundle.schemaVersion in 1..7) { "Unsupported profile schema ${bundle.schemaVersion}" }
+        require(bundle.schemaVersion in 1..14) { "Unsupported profile schema ${bundle.schemaVersion}" }
         return if (assignNewId) bundle.profile.copy(id = UUID.randomUUID().toString()) else bundle.profile
     }
 
@@ -64,7 +67,7 @@ class ProfileRepository(context: Context) {
         if (!failureFile.exists()) null else json.decodeFromString<FailureReport>(failureFile.readText())
     }.getOrNull()
 
-    private fun writeAtomic(target: File, content: String) {
+    private fun writeAtomic(target: File, content: String): Unit = synchronized(writeLock) {
         val temp = File(target.parentFile, target.name + ".tmp")
         temp.writeText(content)
         if (!temp.renameTo(target)) {

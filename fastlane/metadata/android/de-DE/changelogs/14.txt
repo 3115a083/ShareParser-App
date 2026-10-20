@@ -1,0 +1,5 @@
+• Komplettes Material-3-Redesign mit kompakteren Cards und klarer visueller Hierarchie
+• System-, Hell- und Dunkelmodus sowie Material You, Ozean, Pflaume, Schiefer und Bernstein
+• Überarbeitete Profil-, Einstellungs-, Teilen- und Fehleransichten für kleine Android-Bildschirme
+• Verbesserte adaptive Launcher-Icons mit Safe-Area und Android-13-Themed-Icon-Unterstützung
+• Technische Werte mit Kopieraktion, klarere Fehlerzustände und robustere Hintergrund-Webhooks

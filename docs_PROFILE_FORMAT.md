@@ -1,6 +1,6 @@
 # ShareParser profile format
 
-Profiles are plain JSON wrapped in a versioned `ProfileBundle`. Current schema version: **2**.
+Profiles are plain JSON wrapped in a versioned `ProfileBundle`. Current schema version: **14**. Schemas 1 through 14 are accepted; the older example below remains valid.
 
 Built-in values available to every action:
 
@@ -56,3 +56,24 @@ Templates can use `{{name}}` and modifiers such as `{{name|url}}`, `{{name|trim}
 ```
 
 Profiles are intentionally human-readable and contain no executable code. The advanced mode edits this JSON directly.
+
+
+## Schema 14 additions
+
+All action variants have `confirmBeforeAutoRun: Boolean = true`. Missing fields in old profiles use this safe default; explicit `false` restores automatic behavior. Exports include default fields explicitly.
+
+New discriminator `"chain"` uses the same ID, friendly name, icon, editor description, condition, ELSE reference and visibility fields as other actions.
+
+| Field | Default | Meaning |
+| --- | --- | --- |
+| `actionIds` | `[]` | Ordered stable action IDs in this profile |
+| `mode` | `"SEQUENTIAL"` | `"SEQUENTIAL"` or `"PARALLEL"` |
+| `delayMs` | `0` | Sequential delay in milliseconds, 0 to 3600000; ignored in parallel mode |
+
+References are selected visually. Duplicates get a new root ID and retain child references. Duplicate as ELSE links to the source action. Runtime validates the reachable graph before side effects: missing references, cycles, duplicate references/IDs, more than 16 nested chains or 256 expanded steps are rejected. Root confirmation covers children, whose conditions still apply.
+
+Example, assuming `open-link` and `share-text` already exist:
+
+```json
+{"type":"chain","id":"follow-up","friendlyName":"Follow up","icon":"playlist_play","confirmBeforeAutoRun":true,"actionIds":["open-link","share-text"],"mode":"SEQUENTIAL","delayMs":1500}
+```

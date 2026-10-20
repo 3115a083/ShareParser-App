@@ -18,6 +18,12 @@ object GuidedRuleFactory {
         "(?i)(?:\\b(?:am|an der|auf der|unter den|zum|zur)\\s+)?[\\p{L}][\\p{L}.'’/-]*(?:straße|strasse|str\\.?|weg|allee|platz|gasse|ring|ufer|chaussee|damm|steig|stieg|pfad|promenade)\\s+\\d{1,5}[a-zA-Z]?(?:\\s*[-/]\\s*\\d{1,5}[a-zA-Z]?)?"
     )
     private val postalCity = Regex("(?<!\\d)\\d{5}\\s+[\\p{L}][\\p{L} .'-]{1,50}(?!\\d)")
+    private val webUrl = Regex("(?i)\\b(?:https?://|www\\.)[^\\s<>\"']+")
+    private val mailTo = Regex("(?i)\\bmailto:[^\\s<>\"']+")
+    private val telLink = Regex("(?i)\\btel:[+0-9()./ -]{5,}")
+    private val plainEmail = Regex("(?i)(?<![\\w.+-])[A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z]{2,}(?![\\w.-])")
+    private val plainPhone = Regex("(?<!\\w)(?:\\+?[0-9][0-9 ()/.-]{5,}[0-9])(?!\\w)")
+    private val hrefTarget = Regex("(?i)href\\s*=\\s*[\"'](https?://[^\"']+|mailto:[^\"']+|tel:[^\"']+)[\"']")
 
     fun candidates(payload: SharedPayload): List<Candidate> = buildList {
         if (payload.subject.isNotBlank()) {
@@ -30,6 +36,30 @@ object GuidedRuleFactory {
                     suggestedKey = "subject"
                 )
             )
+        }
+        payload.linkTargets.forEach { target ->
+            val trimmed = target.trim()
+            if (trimmed.isNotBlank()) {
+                val label = when {
+                    trimmed.startsWith("mailto:", true) -> "E-Mail-Link"
+                    trimmed.startsWith("tel:", true) -> "Telefon-Link"
+                    else -> "Web-Link"
+                }
+                val key = when {
+                    trimmed.startsWith("mailto:", true) -> "email"
+                    trimmed.startsWith("tel:", true) -> "telefon"
+                    else -> "link"
+                }
+                add(
+                    Candidate(
+                        label = label,
+                        value = trimmed,
+                        source = InputSource.LINKS,
+                        sourceLine = trimmed,
+                        suggestedKey = key
+                    )
+                )
+            }
         }
         payload.text.lineSequence()
             .map { it.trim() }
@@ -77,8 +107,42 @@ object GuidedRuleFactory {
                         )
                     }
                 }
-            }
-    }.distinctBy { Triple(it.source, it.sourceLine, it.value) }
+
+                webUrl.findAll(line).forEach { match ->
+                    add(Candidate("Web-Link", match.value.trimEnd('.', ',', ';'), InputSource.TEXT, line, "link"))
+                }
+                mailTo.findAll(line).forEach { match ->
+                    add(Candidate("E-Mail-Link", match.value, InputSource.TEXT, line, "email"))
+                }
+                telLink.findAll(line).forEach { match ->
+                    add(Candidate("Telefon-Link", match.value.trim(), InputSource.TEXT, line, "telefon"))
+                }
+                plainEmail.findAll(line).forEach { match ->
+                    add(Candidate("E-Mail-Adresse", match.value, InputSource.TEXT, line, "email"))
+                }
+                plainPhone.findAll(line).forEach { match ->
+                    val phone = match.value.trim()
+                    if (phone.count(Char::isDigit) >= 6) {
+                        add(Candidate("Telefonnummer", phone, InputSource.TEXT, line, "telefon"))
+                    }
+                }
+                hrefTarget.findAll(line).forEach { match ->
+                    val target = match.groups[1]?.value.orEmpty()
+                    if (target.isNotBlank()) {
+                        val label = when {
+                            target.startsWith("mailto:", true) -> "E-Mail-Link"
+                            target.startsWith("tel:", true) -> "Telefon-Link"
+                            else -> "Web-Link"
+                        }
+                        val key = when {
+                            target.startsWith("mailto:", true) -> "email"
+                            target.startsWith("tel:", true) -> "telefon"
+                            else -> "link"
+                        }
+                        add(Candidate(label, target, InputSource.TEXT, line, key))
+                    }
+                }            }
+    }.distinctBy { listOf(it.source, it.sourceLine, it.value, it.label) }
 
     fun extractor(candidate: Candidate, key: String, required: Boolean = false): ExtractorRule {
         val normalizedKey = sanitizeKey(key.ifBlank { candidate.suggestedKey }).ifBlank { candidate.suggestedKey }
@@ -88,7 +152,42 @@ object GuidedRuleFactory {
                 regex = "(?s)^\\s*(.+?)\\s*$",
                 required = required,
                 source = InputSource.SUBJECT,
-                sampleLabel = candidate.label
+                sampleLabel = candidate.value.take(80)
+            )
+        }
+
+        if (candidate.source == InputSource.LINKS) {
+            val regex = when {
+                candidate.value.startsWith("mailto:", true) -> "(?im)^\\s*(mailto:[^\\r\\n]+?)\\s*$"
+                candidate.value.startsWith("tel:", true) -> "(?im)^\\s*(tel:[^\\r\\n]+?)\\s*$"
+                else -> "(?im)^\\s*((?:https?://|www\\.)[^\\s]+?)\\s*$"
+            }
+            return ExtractorRule(
+                key = normalizedKey,
+                regex = regex,
+                required = required,
+                source = InputSource.LINKS,
+                sampleLabel = candidate.value.take(80)
+            )
+        }
+
+        val semanticRegex = when (candidate.label) {
+            "E-Mail-Adresse" -> "(?i)([A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z]{2,})"
+            "E-Mail-Link" -> "(?i)(mailto:[^\\s<>\"']+)"
+            "Telefonnummer" -> "(\\+?[0-9][0-9 ()/.-]{5,}[0-9])"
+            "Telefon-Link" -> "(?i)(tel:[+0-9()./ -]{5,})"
+            "Web-Link" -> "(?i)((?:https?://|www\\.)[^\\s<>\"']+)"
+            "Adresse" -> "(?i)((?:\\b(?:am|an der|auf der|unter den|zum|zur)\\s+)?[\\p{L}][\\p{L}.'’/-]*(?:straße|strasse|str\\.?|weg|allee|platz|gasse|ring|ufer|chaussee|damm|steig|stieg|pfad|promenade)\\s+\\d{1,5}[a-zA-Z]?(?:\\s*[-/]\\s*\\d{1,5}[a-zA-Z]?)?)"
+            "PLZ und Ort" -> "((?<!\\d)\\d{5}\\s+[\\p{L}][\\p{L} .'-]{1,50}(?!\\d))"
+            else -> null
+        }
+        if (semanticRegex != null) {
+            return ExtractorRule(
+                key = normalizedKey,
+                regex = semanticRegex,
+                required = required,
+                source = candidate.source,
+                sampleLabel = candidate.value.take(80)
             )
         }
 
@@ -101,7 +200,7 @@ object GuidedRuleFactory {
                 key = normalizedKey,
                 source = candidate.source,
                 required = required
-            ).copy(sampleLabel = candidate.label)
+            ).copy(sampleLabel = candidate.value.take(80))
         }
 
         val split = splitLabelAndValue(candidate.sourceLine)
@@ -113,16 +212,16 @@ object GuidedRuleFactory {
                 regex = "(?m)^\\s*$label\\s*$separator\\s*(.+?)\\s*$",
                 required = required,
                 source = InputSource.TEXT,
-                sampleLabel = split.first
+                sampleLabel = candidate.value.take(80)
             )
         } else {
-            val literal = Regex.escape(candidate.sourceLine)
+            val structural = structuralPattern(candidate.value)
             ExtractorRule(
                 key = normalizedKey,
-                regex = "(?m)^\\s*($literal)\\s*$",
+                regex = "(?m)^\\s*($structural)\\s*$",
                 required = required,
                 source = InputSource.TEXT,
-                sampleLabel = candidate.label
+                sampleLabel = candidate.value.take(80)
             )
         }
     }
@@ -145,8 +244,9 @@ object GuidedRuleFactory {
         val suffix = sourceText.substring(end, lineEnd)
         val selected = sourceText.substring(start, end)
 
+        val horizontalSpace = "[\\t\\p{Zs}]*"
         val regex = if (prefix.isBlank() && suffix.isBlank()) {
-            "(?m)^\\s*(.+?)\\s*$"
+            "(?m)^${horizontalSpace}(.+?)${horizontalSpace}$"
         } else {
             "(?m)^${flexibleLiteral(prefix)}(.+?)${flexibleLiteral(suffix)}$"
         }
@@ -205,9 +305,37 @@ object GuidedRuleFactory {
         // Mail and HTML content often contains Unicode separator characters such
         // as EN SPACE (U+2002) or non-breaking spaces. Treat all separators as
         // interchangeable whitespace so rules learned from one mail remain reusable.
-        return value.split(Regex("[\\s\\p{Z}]+"))
+        return value.split(Regex("[\\t\\p{Zs}]+"))
             .filter { it.isNotEmpty() }
-            .joinToString("[\\s\\p{Z}]+") { Regex.escape(it) }
+            .joinToString("[\\t\\p{Zs}]+") { Regex.escape(it) }
+    }
+
+    private fun structuralPattern(value: String): String {
+        if (value.isBlank()) return ".+?"
+        val out = StringBuilder()
+        var index = 0
+        while (index < value.length) {
+            val ch = value[index]
+            when {
+                ch.isLetter() -> {
+                    while (index < value.length && value[index].isLetter()) index++
+                    out.append("\\p{L}+")
+                }
+                ch.isDigit() -> {
+                    while (index < value.length && value[index].isDigit()) index++
+                    out.append("\\d+")
+                }
+                ch.isWhitespace() -> {
+                    while (index < value.length && value[index].isWhitespace()) index++
+                    out.append("\\s+")
+                }
+                else -> {
+                    out.append(Regex.escape(ch.toString()))
+                    index++
+                }
+            }
+        }
+        return out.toString().ifBlank { ".+?" }
     }
 
     private fun suggestedKey(label: String, index: Int): String {
@@ -223,6 +351,11 @@ object GuidedRuleFactory {
 
     fun sanitizeKey(value: String): String = value
         .trim()
-        .replace(Regex("[^a-zA-Z0-9_.-]+"), "_")
+        .lowercase()
+        .replace("ä", "ae")
+        .replace("ö", "oe")
+        .replace("ü", "ue")
+        .replace("ß", "ss")
+        .replace(Regex("[^a-z0-9_.-]+"), "_")
         .trim('_')
 }

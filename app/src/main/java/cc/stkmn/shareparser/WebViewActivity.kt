@@ -5,6 +5,7 @@ import android.os.Bundle
 import android.view.ViewGroup
 import android.webkit.CookieManager
 import android.webkit.RenderProcessGoneDetail
+import android.webkit.WebResourceRequest
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
@@ -18,8 +19,7 @@ class WebViewActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val url = intent.getStringExtra(EXTRA_URL).orEmpty()
-        val uri = runCatching { Uri.parse(url) }.getOrNull()
-        if (uri?.scheme !in setOf("http", "https") || uri?.host.isNullOrBlank()) {
+        if (!isAllowedWebUri(runCatching { Uri.parse(url) }.getOrNull())) {
             safeToast("Die Web-Adresse ist ungültig.")
             finish()
             return
@@ -35,11 +35,22 @@ class WebViewActivity : ComponentActivity() {
                 settings.mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
                 settings.safeBrowsingEnabled = true
                 webViewClient = object : WebViewClient() {
+                    override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
+                        val target = request?.url
+                        if (isAllowedWebUri(target)) return false
+                        safeToast("Diese Weiterleitung wurde aus Sicherheitsgründen blockiert.")
+                        return true
+                    }
+
+                    @Suppress("DEPRECATION")
+                    override fun shouldOverrideUrlLoading(view: WebView?, url: String?): Boolean {
+                        val target = runCatching { Uri.parse(url.orEmpty()) }.getOrNull()
+                        if (isAllowedWebUri(target)) return false
+                        safeToast("Diese Weiterleitung wurde aus Sicherheitsgründen blockiert.")
+                        return true
+                    }
+
                     override fun onRenderProcessGone(view: WebView?, detail: RenderProcessGoneDetail?): Boolean {
-                        // If the Chromium renderer dies and this callback returns false,
-                        // Android terminates the app process. Samsung devices can surface
-                        // this as "app closed because it has a bug". Clean up and close
-                        // only the in-app browser instead.
                         runCatching { (view?.parent as? ViewGroup)?.removeView(view) }
                         runCatching { view?.destroy() }
                         if (webView === view) webView = null
@@ -67,6 +78,11 @@ class WebViewActivity : ComponentActivity() {
             val current = webView
             if (current?.canGoBack() == true) current.goBack() else finish()
         }
+    }
+
+    private fun isAllowedWebUri(uri: Uri?): Boolean {
+        val scheme = uri?.scheme?.lowercase()
+        return scheme in setOf("http", "https") && !uri?.host.isNullOrBlank() && uri?.userInfo.isNullOrBlank()
     }
 
     private fun safeToast(message: String) {

@@ -12,6 +12,7 @@ import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
+import cc.stkmn.shareparser.AppLocale
 import cc.stkmn.shareparser.MainActivity
 import cc.stkmn.shareparser.R
 import cc.stkmn.shareparser.data.FailureReport
@@ -42,13 +43,14 @@ object FailureNotifier {
             )
             val notification = NotificationCompat.Builder(context.applicationContext, CHANNEL)
                 .setSmallIcon(R.drawable.ic_notification)
-                .setContentTitle("ShareParser: Verarbeitung fehlgeschlagen")
+                .setContentTitle(AppLocale.text("ShareParser: Verarbeitung fehlgeschlagen", "ShareParser: Processing failed"))
                 .setContentText(report.message)
                 .setPriority(NotificationCompat.PRIORITY_LOW)
                 .setSilent(true)
                 .setAutoCancel(true)
                 .setTimeoutAfter(20_000)
                 .setContentIntent(pending)
+                .addAction(R.drawable.ic_notification, AppLocale.text("Öffnen", "Open"), pending)
                 .build()
 
             NotificationManagerCompat.from(context.applicationContext).notify(report.id.hashCode(), notification)
@@ -62,10 +64,10 @@ object FailureNotifier {
                 manager.createNotificationChannel(
                     NotificationChannel(
                         CHANNEL,
-                        "Verarbeitungsfehler",
+                        AppLocale.text("Verarbeitungsfehler", "Processing errors"),
                         NotificationManager.IMPORTANCE_LOW
                     ).apply {
-                        description = "Stumme, kurzzeitige Fehlerhinweise"
+                        description = AppLocale.text("Stumme, kurzzeitige Fehlerhinweise", "Silent short-lived processing error notices")
                         setSound(null, null)
                         enableVibration(false)
                     }

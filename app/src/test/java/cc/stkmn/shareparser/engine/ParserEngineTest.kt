@@ -3,7 +3,9 @@ package cc.stkmn.shareparser.engine
 import cc.stkmn.shareparser.data.CaseMode
 import cc.stkmn.shareparser.data.ExtractorRule
 import cc.stkmn.shareparser.data.InputSource
+import cc.stkmn.shareparser.data.MatcherJoin
 import cc.stkmn.shareparser.data.MatcherRule
+import cc.stkmn.shareparser.data.MatcherValueMode
 import cc.stkmn.shareparser.data.ParseDirection
 import cc.stkmn.shareparser.data.Profile
 import cc.stkmn.shareparser.data.SharedPayload
@@ -18,7 +20,7 @@ class ParserEngineTest {
     @Test
     fun extractsRegexGroup() {
         val profile = Profile("1", "Mail", extractors = listOf(ExtractorRule("mailSubject", "(?m)^Subject: (.+)$", required = true)))
-        assertEquals("Train 42", engine.extract("Subject: Train 42\nBody", profile)["mailSubject"])
+        assertEquals("Train 42", engine.extract("Subject: Train 42\nBody", profile)["mailsubject"])
     }
 
     @Test
@@ -154,8 +156,8 @@ class ParserEngineTest {
         )
 
         val values = engine.extract("PLZ_ort: 59000 Lünen", profile)
-        assertEquals("59000", values["PLZ"])
-        assertEquals("Lünen", values["Ort"])
+        assertEquals("59000", values["plz"])
+        assertEquals("Lünen", values["ort"])
     }
 
     @Test
@@ -175,4 +177,78 @@ class ParserEngineTest {
         )
         assertEquals(listOf("Markdown"), engine.matchingProfiles(payload, listOf(profile)).map { it.name })
     }
+
+    @Test
+    fun matcherCanUseOrFromSecondCriterion() {
+        val profile = Profile(
+            "1",
+            "Either",
+            matchers = listOf(
+                MatcherRule(regex = "Alpha"),
+                MatcherRule(regex = "Beta", join = MatcherJoin.OR)
+            )
+        )
+        assertTrue(engine.matchingProfiles("Beta", listOf(profile)).isNotEmpty())
+    }
+
+    @Test
+    fun variableMatcherCanCheckEmptyAndNotEmpty() {
+        val extractor = ExtractorRule("postal", "PLZ: ([0-9]+)")
+        val emptyProfile = Profile(
+            "empty",
+            "Empty",
+            extractors = listOf(extractor),
+            matchers = listOf(
+                MatcherRule(
+                    regex = "",
+                    variableKey = "postal",
+                    valueMode = MatcherValueMode.EMPTY
+                )
+            )
+        )
+        val presentProfile = Profile(
+            "present",
+            "Present",
+            extractors = listOf(extractor),
+            matchers = listOf(
+                MatcherRule(
+                    regex = "",
+                    variableKey = "postal",
+                    valueMode = MatcherValueMode.NOT_EMPTY
+                )
+            )
+        )
+
+        assertEquals(listOf("Empty"), engine.matchingProfiles("Keine PLZ", listOf(emptyProfile)).map { it.name })
+        assertEquals(listOf("Present"), engine.matchingProfiles("PLZ: 59000", listOf(presentProfile)).map { it.name })
+    }
+
+
+    @Test
+    fun sourceAppCriterionCanBeNegated() {
+        val profile = Profile(
+            "negated",
+            "Not FairEmail",
+            matchers = listOf(
+                MatcherRule(
+                    regex = Regex.escape("eu.faircode.email"),
+                    variableKey = "source_package",
+                    negate = true
+                )
+            )
+        )
+        assertTrue(
+            engine.matchingProfiles(
+                SharedPayload(text = "Termin", sourcePackage = "com.example.other"),
+                listOf(profile)
+            ).isNotEmpty()
+        )
+        assertTrue(
+            engine.matchingProfiles(
+                SharedPayload(text = "Termin", sourcePackage = "eu.faircode.email"),
+                listOf(profile)
+            ).isEmpty()
+        )
+    }
+
 }
